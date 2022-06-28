@@ -72,3 +72,14 @@ type Plan struct {
 type Model struct {
 	Plans Plans `json:"plans"`
 }
+
+type Phase struct {
+	Org       string    `json:"org"`
+	Plan      string    `json:"plan"`
+	Scheduled time.Time `json:"scheduled"`
+	Effective time.Time `json:"effective"`
+}
+
+type Schedule struct {
+	Phases []*Phase `json:"phases"`
+}

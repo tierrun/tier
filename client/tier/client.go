@@ -115,20 +115,8 @@ func (c *Client) PullModel(ctx context.Context) (*apitype.Model, error) {
 	return fetchOK[*apitype.Model](ctx, c, "GET", "/api/v1/pull", nil)
 }
 
-type Phase struct {
-	Domain    string    `json:"domain"`
-	Org       string    `json:"org"`
-	Plan      string    `json:"plan"`
-	Scheduled time.Time `json:"scheduled"`
-	Effective time.Time `json:"effective"`
-}
-
-type Schedule struct {
-	Phases []*Phase `json:"phases"`
-}
-
-func (c *Client) LookupSchedule(ctx context.Context, org string) (*Schedule, error) {
-	return fetchOK[*Schedule](ctx, c, "GET", "/api/v1/schedule?org="+org, nil)
+func (c *Client) LookupSchedule(ctx context.Context, org string) (*apitype.Schedule, error) {
+	return fetchOK[*apitype.Schedule](ctx, c, "GET", "/api/v1/schedule?org="+org, nil)
 }
 
 type Reservation struct {
@@ -155,7 +143,7 @@ func (rsv *Reservation) Refund() error {
 }
 
 func (c *Client) ReserveN(ctx context.Context, now time.Time, org, feature string, n int) (*Reservation, error) {
-	_, err := c.UpdateCount(ctx, &apitype.UpdateCount{
+	use, err := c.UpdateCount(ctx, &apitype.UpdateCount{
 		CounterID: "",
 		Now:       now.UTC(),
 		Org:       org,
@@ -167,7 +155,8 @@ func (c *Client) ReserveN(ctx context.Context, now time.Time, org, feature strin
 		return nil, err
 	}
 	rsv := &Reservation{
-		done: false,
+		used:  use.Used,
+		limit: use.Limit,
 		refund: func() error {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
