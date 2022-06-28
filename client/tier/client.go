@@ -1,4 +1,4 @@
-package tier
+package tier // import "tier.run/client/tier"
 
 import (
 	"context"

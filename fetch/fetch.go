@@ -1,4 +1,4 @@
-package fetch
+package fetch // import "tier.run/fetch"
 
 import (
 	"bytes"
