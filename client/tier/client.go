@@ -130,8 +130,12 @@ func (rsv *Reservation) OK() bool {
 	return rsv.used < rsv.limit
 }
 
-func (rsv *Reservation) Commit() {
+// Commit causes any subsequent calls to Refund to do nothing.
+//
+// It never returns an error.
+func (rsv *Reservation) Commit() error {
 	rsv.done = true
+	return nil
 }
 
 func (rsv *Reservation) Refund() error {
