@@ -90,8 +90,8 @@ func (c *Client) WhoAmI(ctx context.Context) (string, error) {
 // StripeOptions returns the options required for use with the stripe.js for
 // receiving payment information for an org. The returned type serializes to
 // json in such a way that it is ready for use with stripe.js in the browser.
-func (c *Client) StripeOptions(ctx context.Context, org string, opts ...any) (apitype.StripeOptions, error) {
-	return fetchOK[apitype.StripeOptions](ctx, c, "POST", "/api/v1/stripe/options", map[string]any{
+func (c *Client) StripeOptions(ctx context.Context, org string, opts ...any) (*apitype.StripeOptions, error) {
+	return fetchOK[*apitype.StripeOptions](ctx, c, "POST", "/api/v1/stripe/options", map[string]any{
 		"org": org,
 	}, opts...)
 }
