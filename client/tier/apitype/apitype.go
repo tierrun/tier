@@ -55,13 +55,6 @@ type Feature struct {
 	Tiers     []*Tier `json:"tiers"`
 }
 
-func (f Feature) Limit() int {
-	if len(f.Tiers) == 0 {
-		return 0
-	}
-	return f.Tiers[len(f.Tiers)-1].Upto
-}
-
 type Plans map[string]*Plan
 
 type Plan struct {
@@ -82,4 +75,13 @@ type Phase struct {
 
 type Schedule struct {
 	Phases []*Phase `json:"phases"`
+}
+
+type Check struct {
+	Org     string `json:"org"`
+	Feature string `json:"feature"`
+}
+
+type CheckResponse struct {
+	Status string `json:"code"`
 }

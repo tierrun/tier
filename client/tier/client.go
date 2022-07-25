@@ -119,81 +119,36 @@ func (c *Client) LookupSchedule(ctx context.Context, org string) (*apitype.Sched
 	return fetchOK[*apitype.Schedule](ctx, c, "GET", "/api/v1/schedule?org="+org, nil)
 }
 
-type Reservation struct {
-	used   int
-	limit  int
-	done   bool
-	refund func() error
-}
-
-func (rsv *Reservation) OK() bool {
-	return rsv.used < rsv.limit
-}
-
-// Commit causes any subsequent calls to Refund to do nothing.
-//
-// It never returns an error.
-func (rsv *Reservation) Commit() error {
-	rsv.done = true
-	return nil
-}
-
-func (rsv *Reservation) Refund() error {
-	if rsv.done {
-		return nil
-	}
-	rsv.done = true
-	return rsv.refund()
-}
-
-func (c *Client) ReserveN(ctx context.Context, now time.Time, org, feature string, n int) (*Reservation, error) {
-	use, err := c.UpdateCount(ctx, &apitype.UpdateCount{
-		CounterID: "",
-		Now:       now.UTC(),
-		Org:       org,
-		Feature:   feature,
-		Op:        "incr",
-		P:         n,
+func (c *Client) Report(ctx context.Context, now time.Time, org, feature string, n int) error {
+	return c.UpdateCount(ctx, &apitype.UpdateCount{
+		Now:     now.UTC(),
+		Org:     org,
+		Feature: feature,
+		Op:      "incr",
+		P:       n,
 	})
-	if err != nil {
-		return nil, err
-	}
-	rsv := &Reservation{
-		used:  use.Used,
-		limit: use.Limit,
-		refund: func() error {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			return c.Refund(ctx, now, org, feature, n)
-		},
-	}
-	return rsv, err
 }
 
 func (c *Client) Refund(ctx context.Context, now time.Time, org, feature string, n int) error {
-	_, err := c.UpdateCount(ctx, &apitype.UpdateCount{
-		CounterID: "",
-		Now:       now,
-		Org:       org,
-		Feature:   feature,
-		Op:        "decr",
-		N:         n,
+	return c.UpdateCount(ctx, &apitype.UpdateCount{
+		Now:     now,
+		Org:     org,
+		Feature: feature,
+		Op:      "decr",
+		N:       n,
 	})
+}
+
+func (c *Client) UpdateCount(ctx context.Context, up *apitype.UpdateCount) error {
+	_, err := fetchOK[struct{}](ctx, c, "POST", "/api/v1/reserve", up)
 	return err
 }
 
-func (c *Client) UpdateCount(ctx context.Context, up *apitype.UpdateCount) (*apitype.UpdateResponse, error) {
-	return fetchOK[*apitype.UpdateResponse](ctx, c, "POST", "/api/v1/reserve", up)
-}
-
-func (c *Client) Cannot(ctx context.Context, org, feature string) bool {
-	// TODO(bmizerany): log err?
-	rsv, err := c.ReserveN(ctx, time.Now(), org, feature, 0)
-	if err != nil {
-		// TODO(bmizerany): let them through if there is an error? make configurable?
-		return false
-	}
-	return !rsv.OK()
+func (c *Client) Check(ctx context.Context, org, feature string, def bool) (*apitype.CheckResponse, error) {
+	return fetchOK[*apitype.CheckResponse](ctx, c, "GET", "/api/v1/check", apitype.Check{
+		Org:     org,
+		Feature: feature,
+	})
 }
 
 func fetchOK[T any](ctx context.Context, c *Client, method, path string, body any, opts ...any) (T, error) {
