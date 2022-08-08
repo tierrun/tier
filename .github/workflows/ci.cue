@@ -16,6 +16,7 @@ jobs: {
 			}
 		}, {
 			name: "Go Test"
+			env: STRIPE_KEY: "${{ secrets.STRIPE_KEY }}"
 			run: """
 				go test -count=1 -v ./...
 				"""
