@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"sync"
@@ -139,7 +138,7 @@ func Unmarshal[S string | []byte](b S) (schema.Model, error) {
 }
 
 func Decode(r io.Reader) (schema.Model, error) {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return schema.Model{}, err
 	}
@@ -228,17 +227,6 @@ func (c *Client) pushFeature(ctx context.Context, planID string, fp *schema.Feat
 
 func ptr[T any](v T) *T {
 	return &v
-}
-
-func sliceOfPtrs[T any](vv []T) []*T {
-	if len(vv) == 0 {
-		return nil
-	}
-	out := make([]*T, len(vv))
-	for i, v := range vv {
-		out[i] = &v
-	}
-	return out
 }
 
 func listParams(ctx context.Context) stripe.ListParams {
