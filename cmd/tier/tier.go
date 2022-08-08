@@ -96,7 +96,3 @@ func tc() *pricing.Client {
 	}
 	return tierClient
 }
-
-func writeEdge(w io.Writer, a, b string) {
-	fmt.Fprintf(w, "%s %s\n", a, b)
-}
