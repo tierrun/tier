@@ -54,6 +54,7 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 		Product:   ptr(MakeID(planID)),
 		Currency:  ptr(v.Currency),
 		LookupKey: ptr(MakeID(planID, v.ID)),
+		Nickname:  ptr(v.ID),
 
 		BillingScheme: ptr("per_unit"),
 		UnitAmount:    ptr(v.Base),

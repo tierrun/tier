@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/stripe/stripe-go/v72"
@@ -43,6 +44,12 @@ func FromEnv() (*Client, error) {
 		return nil, errors.New("STRIPE_KEY must be set")
 	}
 	return &Client{StripeKey: stripeKey}, nil
+}
+
+// Live reports if the key being used is a live key. It considers any key that
+// is not a test key to be "live" out of an abundance of caution.
+func (c *Client) Live() bool {
+	return !strings.HasPrefix(c.StripeKey, "sk_test_")
 }
 
 func (c *Client) init() {
@@ -145,7 +152,16 @@ func Decode(r io.Reader) (schema.Model, error) {
 	return Unmarshal(b)
 }
 
-type ReportFunc func(plan, feature string, err error)
+type PushEvent struct {
+	Provider          string // (e.g. "stripe")
+	Plan              string
+	PlanProviderID    string
+	Feature           string
+	FeatureProviderID string
+	Err               error
+}
+
+type ReportFunc func(*PushEvent)
 
 func (c *Client) PushJSON(ctx context.Context, r io.Reader, f ReportFunc) error {
 	c.init()
@@ -175,7 +191,12 @@ func (c *Client) PushPlan(ctx context.Context, p *schema.Plan, f ReportFunc) err
 	}
 
 	err := c.pushPlan(ctx, p.ID, p.Title)
-	f(p.ID, "", err)
+	f(&PushEvent{
+		Provider:       "stripe",
+		Plan:           p.ID,
+		PlanProviderID: convert.MakeID(p.ID),
+		Err:            err,
+	})
 	if err != nil && !errors.Is(err, ErrPlanExists) {
 		return err
 	}
@@ -183,9 +204,17 @@ func (c *Client) PushPlan(ctx context.Context, p *schema.Plan, f ReportFunc) err
 	pg := &egroup{sem: c.sem}
 	for _, fp := range p.Features {
 		fp := fp
+		fp.Plan = p.ID
 		pg.Go(func() error {
 			err := c.pushFeature(ctx, p.ID, fp)
-			f(p.ID, fp.ID, err)
+			f(&PushEvent{
+				Provider:          "stripe",
+				Plan:              p.ID,
+				PlanProviderID:    convert.MakeID(p.ID),
+				Feature:           fp.ID,
+				FeatureProviderID: convert.MakeID(p.ID, fp.ID),
+				Err:               err,
+			})
 			if err != nil && !errors.Is(err, ErrFeatureExists) {
 				return err
 			}

@@ -245,12 +245,17 @@ func TestToStripePriceParams(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.fp.ID, func(t *testing.T) {
 			fp := Expand(tt.fp)
-			got, err := ToPriceParams(ctx, "plan:test@0", fp)
+			const plan = "plan:test@0"
+			got, err := ToPriceParams(ctx, plan, fp)
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			want := tt.want
+			want.Nickname = ptr(tt.fp.ID)
+			want.LookupKey = ptr(MakeID(plan, tt.fp.ID))
 			diff.Test(t, t.Errorf, got, tt.want,
-				diff.ZeroFields[stripe.PriceParams]("Params", "Product", "LookupKey"))
+				diff.ZeroFields[stripe.PriceParams]("Params", "Product"))
 		})
 	}
 }
