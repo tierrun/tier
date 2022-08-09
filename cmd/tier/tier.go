@@ -121,7 +121,7 @@ func tc() *pricing.Client {
 			return tierClient
 		}
 		if errors.Is(err, pricing.ErrKeyNotSet) {
-			key, err := getKey(false) // TODO(bmizerany): allow live
+			key, err := getKey()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "tier: There was an error looking up your Stripe API Key: %v\n", err)
 				fmt.Fprintf(os.Stderr, "tier: Please run `tier connect` to connect your Stripe account\n")

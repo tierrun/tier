@@ -7,7 +7,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/zalando/go-keyring"
+	"github.com/99designs/keyring"
+	"github.com/tierrun/tierx/pricing"
 )
 
 func connect() error {
@@ -50,23 +51,29 @@ please visit:
 	return nil
 }
 
-const keyringService = "tier.stripe.key"
-
-func setKey(data []byte) error {
-	key := string(data)
-	if !strings.HasPrefix(string(key), "sk_") {
-		return errors.New("invalid key: key must start with (\"sk_\") prefix")
+func setKey(key []byte) error {
+	if !pricing.IsValidKey(string(key)) {
+		return errors.New("invalid key: key must start with (\"sk_\") or (\"rk_\") prefix")
 	}
-	if strings.HasPrefix(key, "sk_live_") {
-		return keyring.Set(keyringService, "live", key)
-	}
-	return keyring.Set(keyringService, "test", key)
+	return ring().Set(keyring.Item{Data: key})
 }
 
-func getKey(live bool) (string, error) {
-	if live {
-		return keyring.Get(keyringService, "live")
-	} else {
-		return keyring.Get(keyringService, "test")
+func getKey() (string, error) {
+	i, err := ring().Get("")
+	if err != nil {
+		return "", err
 	}
+	return string(i.Data), nil
+}
+
+func ring() keyring.Keyring {
+	const keyringService = "tier.stripe.key"
+
+	kr, err := keyring.Open(keyring.Config{
+		ServiceName: keyringService,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return kr
 }
