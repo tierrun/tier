@@ -97,6 +97,8 @@ func tier(cmd string, args []string) error {
 		fmt.Printf("%s\n", out)
 
 		return nil
+	case "connect":
+		return connect()
 	default:
 		return errUsage
 	}
@@ -114,11 +116,20 @@ var tierClient *pricing.Client
 func tc() *pricing.Client {
 	if tierClient == nil {
 		c, err := pricing.FromEnv()
+		if err == nil {
+			tierClient = c
+			return tierClient
+		}
+		if errors.Is(err, pricing.ErrKeyNotSet) {
+			key, err := getKey(false) // TODO(bmizerany): allow live
+			if err != nil {
+				log.Fatalf("failed to get key from secret manager: %v", err)
+			}
+			return &pricing.Client{StripeKey: key}
+		}
 		if err != nil {
 			log.Fatalf("tier: %v", err)
 		}
-		// c.Logf = log.Printf // TODO: check for -v flag
-		tierClient = c
 	}
 	return tierClient
 }
