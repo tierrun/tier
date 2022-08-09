@@ -96,6 +96,7 @@ type Feature struct {
 	ProviderID string    `json:"-"`
 	ID         string    `json:"-"`
 	Plan       string    `json:"-"`
+	Link       string    `json:"link,omitempty"`
 	Base       int64     `json:"base,omitempty"`
 	Mode       Mode      `json:"mode,omitempty"`
 	Aggregate  Aggregate `json:"aggregate,omitempty"`

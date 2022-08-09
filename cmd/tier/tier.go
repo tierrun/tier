@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 
 	"github.com/tierrun/tierx/pricing"
@@ -31,6 +32,11 @@ func main() {
 	}
 }
 
+var dashURL = map[bool]string{
+	true:  "https://dashboard.stripe.com",
+	false: "https://dashboard.stripe.com/test",
+}
+
 func tier(cmd string, args []string) error {
 	ctx := context.Background()
 	switch cmd {
@@ -48,16 +54,36 @@ func tier(cmd string, args []string) error {
 		}
 		defer f.Close()
 
-		return tc().PushJSON(ctx, f, func(plan, feature string, err error) {
-			if feature == "" {
+		if err := tc().PushJSON(ctx, f, func(e *pricing.PushEvent) {
+			if e.Feature == "" {
 				return // no need to report plan creation
 			}
-			status := "created"
-			if errors.Is(err, pricing.ErrFeatureExists) {
-				status = "exists"
+			status := "ok"
+
+			reason := "created"
+			if e.Err != nil {
+				status = "failed"
+				reason = e.Err.Error()
 			}
-			fmt.Printf("%s %s %s\n", plan, feature, status)
-		})
+			if errors.Is(e.Err, pricing.ErrFeatureExists) {
+				reason = "already exists"
+			}
+
+			link, err := url.JoinPath(dashURL[tc().Live()], "products", e.PlanProviderID)
+			if err != nil {
+				reason = fmt.Sprintf("failed to create link: %v", err)
+			}
+			fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t[%s]\n",
+				status,
+				e.Plan,
+				e.Feature,
+				link,
+				reason,
+			)
+		}); err != nil {
+			return errors.New("pushed failed")
+		}
+		return nil
 	case "pull":
 		m, err := tc().Pull(ctx)
 		if err != nil {

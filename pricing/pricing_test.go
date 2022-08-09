@@ -3,12 +3,12 @@ package pricing
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/kr/pretty"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/tierrun/tierx/pricing/schema"
 	"golang.org/x/sync/errgroup"
@@ -152,8 +152,8 @@ func TestPush(t *testing.T) {
 			t.Parallel()
 			tc := newTester(t)
 			r := strings.NewReader(tt.in)
-			report := func(plan, feature string, err error) {
-				t.Logf("result: %s %s %v", plan, feature, err)
+			report := func(e *PushEvent) {
+				t.Logf("result: %s %s %v", e.Plan, e.Feature, e.Err)
 			}
 			if err := tc.PushJSON(context.Background(), r, report); !errors.Is(err, tt.wantErr) {
 				t.Errorf("err = %v, want %v", err, tt.wantErr)
@@ -182,7 +182,7 @@ func TestPushExistingPlanAndFeatures(t *testing.T) {
 	var got recorder
 	checkPush := func(want error, pj string) {
 		t.Helper()
-		err := tc.PushJSON(ctx, strings.NewReader(pj), got.Report)
+		err := tc.PushJSON(ctx, strings.NewReader(pj), got.report)
 		if !errors.Is(err, want) {
 			t.Errorf("err = %v, want %v", err, want)
 		}
@@ -194,28 +194,42 @@ func TestPushExistingPlanAndFeatures(t *testing.T) {
 	checkPush(nil, `{"plans": {"plan:test@0": {"features": {"feature:xxxx": {}}}}}`)
 
 	want := recorder{
-		"plan:test@0 - created",
-		"plan:test@0 feature:test created",
-		"plan:test@0 - plan already exists",
-		"plan:test@0 feature:test feature already exists",
-		"plan:test@0 - plan already exists",
-		"plan:test@0 feature:test feature already exists",
-		"plan:test@0 - plan already exists",
-		"plan:test@0 feature:xxxx created",
+		{"stripe", "plan:test@0", "tier_plan_test_0", "", "", nil},
+		{"stripe", "plan:test@0", "tier_plan_test_0", "feature:test", "tier_plan_test_0__feature_test", nil},
+		{"stripe", "plan:test@0", "tier_plan_test_0", "", "", ErrPlanExists},
+		{"stripe", "plan:test@0", "tier_plan_test_0", "feature:test", "tier_plan_test_0__feature_test", ErrFeatureExists},
+		{"stripe", "plan:test@0", "tier_plan_test_0", "", "", ErrPlanExists},
+		{"stripe", "plan:test@0", "tier_plan_test_0", "feature:test", "tier_plan_test_0__feature_test", ErrFeatureExists},
+		{"stripe", "plan:test@0", "tier_plan_test_0", "", "", ErrPlanExists},
+		{"stripe", "plan:test@0", "tier_plan_test_0", "feature:xxxx", "tier_plan_test_0__feature_xxxx", nil},
 	}
+
+	t.Logf("got: %# v", pretty.Formatter(got))
 
 	diff.Test(t, t.Errorf, got, want)
 }
 
-type recorder []string
+func TestIsLive(t *testing.T) {
+	cases := []struct {
+		key  string
+		live bool
+	}{
+		{"", true},
+		{"sk_test_123", false},
+		{"sk_live_123", true},
+		{"sk_foo_123", true},
+	}
 
-func (r *recorder) Report(plan, feature string, err error) {
-	if feature == "" {
-		feature = "-"
+	for _, tt := range cases {
+		tc := &Client{StripeKey: tt.key}
+		if got := tc.Live(); got != tt.live {
+			t.Errorf("[%q]: c.Live() = %v, want %v", tt.key, got, tt.live)
+		}
 	}
-	errStr := "created"
-	if err != nil {
-		errStr = err.Error()
-	}
-	*r = append(*r, fmt.Sprintf("%s %s %s", plan, feature, errStr))
+}
+
+type recorder []*PushEvent
+
+func (r *recorder) report(e *PushEvent) {
+	*r = append(*r, e)
 }
