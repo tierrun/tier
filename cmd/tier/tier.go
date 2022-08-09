@@ -14,7 +14,16 @@ import (
 	"github.com/tierrun/tierx/pricing"
 )
 
-var errUsage = errors.New("usage: tier <push|pull> [<args>]")
+var (
+	stdin  io.Reader = os.Stdin
+	stdout io.Writer = os.Stdout
+	stderr io.Writer = os.Stderr
+)
+
+var (
+	errUsage      = errors.New("usage: tier <connect|push|connect> [<args>]")
+	errPushFailed = errors.New("push failed")
+)
 
 func main() {
 	log.SetFlags(0)
@@ -55,6 +64,7 @@ func tier(cmd string, args []string) error {
 		defer f.Close()
 
 		if err := tc().PushJSON(ctx, f, func(e *pricing.PushEvent) {
+			fmt.Fprintf(stdout, "%v\n", e)
 			if e.Feature == "" {
 				return // no need to report plan creation
 			}
@@ -73,7 +83,7 @@ func tier(cmd string, args []string) error {
 			if err != nil {
 				reason = fmt.Sprintf("failed to create link: %v", err)
 			}
-			fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t[%s]\n",
+			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t[%s]\n",
 				status,
 				e.Plan,
 				e.Feature,
@@ -81,7 +91,10 @@ func tier(cmd string, args []string) error {
 				reason,
 			)
 		}); err != nil {
-			return errors.New("pushed failed")
+			if errors.As(err, &pricing.DecodeError{}) {
+				return err
+			}
+			return errPushFailed
 		}
 		return nil
 	case "pull":
@@ -94,7 +107,7 @@ func tier(cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s\n", out)
+		fmt.Fprintf(stdout, "%s\n", out)
 
 		return nil
 	case "connect":
@@ -106,7 +119,7 @@ func tier(cmd string, args []string) error {
 
 func fileOrStdin(fname string) (io.ReadCloser, error) {
 	if fname == "" || fname == "-" {
-		return io.NopCloser(os.Stdin), nil
+		return io.NopCloser(stdin), nil
 	}
 	return os.Open(fname)
 }
@@ -123,8 +136,8 @@ func tc() *pricing.Client {
 		if errors.Is(err, pricing.ErrKeyNotSet) {
 			key, err := getKey()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "tier: There was an error looking up your Stripe API Key: %v\n", err)
-				fmt.Fprintf(os.Stderr, "tier: Please run `tier connect` to connect your Stripe account\n")
+				fmt.Fprintf(stderr, "tier: There was an error looking up your Stripe API Key: %v\n", err)
+				fmt.Fprintf(stderr, "tier: Please run `tier connect` to connect your Stripe account\n")
 				os.Exit(1)
 			}
 			return &pricing.Client{StripeKey: key}

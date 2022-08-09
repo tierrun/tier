@@ -159,19 +159,32 @@ type Stringish interface {
 	string | []byte
 }
 
-func Unmarshal[S string | []byte](b S) (schema.Model, error) {
+type DecodeError struct {
+	err error
+}
+
+func (e DecodeError) Error() string { return e.err.Error() }
+func (e DecodeError) Unwrap() error { return e.err }
+
+func Unmarshal[S string | []byte](b S) (m schema.Model, err error) {
+	defer func() {
+		if err != nil {
+			err = DecodeError{err}
+		}
+	}()
+
 	data, err := hujson.Standardize([]byte(b))
 	if err != nil {
 		return schema.Model{}, err
 	}
 
-	var m schema.Model
+	var out schema.Model
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
-	if err := d.Decode(&m); err != nil {
+	if err := d.Decode(&out); err != nil {
 		return schema.Model{}, err
 	}
-	return m, nil
+	return out, nil
 }
 
 func Decode(r io.Reader) (schema.Model, error) {
