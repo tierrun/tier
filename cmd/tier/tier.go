@@ -123,7 +123,9 @@ func tc() *pricing.Client {
 		if errors.Is(err, pricing.ErrKeyNotSet) {
 			key, err := getKey(false) // TODO(bmizerany): allow live
 			if err != nil {
-				log.Fatalf("failed to get key from secret manager: %v", err)
+				fmt.Fprintf(os.Stderr, "tier: There was an error looking up your Stripe API Key: %v\n", err)
+				fmt.Fprintf(os.Stderr, "tier: Please run `tier connect` to connect your Stripe account\n")
+				os.Exit(1)
 			}
 			return &pricing.Client{StripeKey: key}
 		}
