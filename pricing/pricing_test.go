@@ -33,7 +33,7 @@ func newTester(t *testing.T) *Client {
 		t.Fatal(err)
 	}
 
-	if !strings.HasPrefix(tc.StripeKey, "sk_test_") {
+	if IsLiveKey(tc.StripeKey) {
 		panic("stripe key must be a test key")
 	}
 
@@ -214,10 +214,12 @@ func TestIsLive(t *testing.T) {
 		key  string
 		live bool
 	}{
-		{"", true},
+		{"", false},
 		{"sk_test_123", false},
 		{"sk_live_123", true},
 		{"sk_foo_123", true},
+		{"rk_test_123", false},
+		{"rk_123", true},
 	}
 
 	for _, tt := range cases {

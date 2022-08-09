@@ -22,6 +22,7 @@ import (
 
 // Errors
 var (
+	ErrKeyNotSet     = errors.New("STRIPE_API_KEY not set")
 	ErrPlanExists    = errors.New("plan already exists")
 	ErrFeatureExists = errors.New("feature already exists")
 )
@@ -39,18 +40,47 @@ type Client struct {
 }
 
 func FromEnv() (*Client, error) {
-	stripeKey := os.Getenv("STRIPE_KEY")
+	stripeKey := os.Getenv("STRIPE_API_KEY")
 	if stripeKey == "" {
-		return nil, errors.New("STRIPE_KEY must be set")
+		return nil, ErrKeyNotSet
 	}
 	return &Client{StripeKey: stripeKey}, nil
 }
 
-// Live reports if the key being used is a live key. It considers any key that
-// is not a test key to be "live" out of an abundance of caution.
-func (c *Client) Live() bool {
-	return !strings.HasPrefix(c.StripeKey, "sk_test_")
+func UnsafeStripeClient(c *Client) *client.API {
+	c.init()
+	return c.sc
 }
+
+var (
+	keyPrefixes     = append([]string{"sk_", "rk_"})
+	testKeyPrefixes = append([]string{"sk_test", "rk_test"})
+)
+
+func IsValidKey(key string) bool {
+	for _, prefix := range keyPrefixes {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsLiveKey reports if the key being used is a live key. It considers any key
+// that is not a test key to be "live" out of an abundance of caution.
+func IsLiveKey(key string) bool {
+	if !IsValidKey(key) {
+		return false
+	}
+	for _, prefix := range testKeyPrefixes {
+		if strings.HasPrefix(key, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Client) Live() bool { return IsLiveKey(c.StripeKey) }
 
 func (c *Client) init() {
 	c.initOnce.Do(func() {
