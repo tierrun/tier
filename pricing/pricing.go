@@ -22,7 +22,7 @@ import (
 
 // Errors
 var (
-	ErrKeyNotSet     = errors.New("STRIPE_KEY not set")
+	ErrKeyNotSet     = errors.New("STRIPE_API_KEY not set")
 	ErrPlanExists    = errors.New("plan already exists")
 	ErrFeatureExists = errors.New("feature already exists")
 )
@@ -40,7 +40,7 @@ type Client struct {
 }
 
 func FromEnv() (*Client, error) {
-	stripeKey := os.Getenv("STRIPE_KEY")
+	stripeKey := os.Getenv("STRIPE_API_KEY")
 	if stripeKey == "" {
 		return nil, ErrKeyNotSet
 	}
