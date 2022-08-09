@@ -11,7 +11,7 @@ Let's do this.
 
 
 ```sh
-; go run github.com/tierrun/tierx/tierx/cmd/tier@main
+; go run github.com/tierrun/tierx/cmd/tier@main
 ```
 
 NOTE: push defaults to STDIN if no file is specified.
