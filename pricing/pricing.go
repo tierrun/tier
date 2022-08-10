@@ -27,6 +27,8 @@ var (
 	ErrFeatureExists = errors.New("feature already exists")
 )
 
+var MakeID = convert.MakeID
+
 type Client struct {
 	StripeKey string
 
