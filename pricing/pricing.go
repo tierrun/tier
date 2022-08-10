@@ -156,6 +156,23 @@ func (c *Client) FetchFeatures(ctx context.Context, ids ...string) ([]schema.Fea
 	return fps, nil
 }
 
+type UserInfo struct {
+	// TODO: add fields
+}
+
+func (c *Client) WhoAmI(ctx context.Context) (UserInfo, error) {
+	c.init()
+	_, err := c.sc.Account.Get()
+	if err != nil {
+		var e *stripe.Error
+		if errors.As(err, &e) {
+			return UserInfo{}, errors.New(e.Msg)
+		}
+		return UserInfo{}, err
+	}
+	return UserInfo{}, nil
+}
+
 type Stringish interface {
 	string | []byte
 }
