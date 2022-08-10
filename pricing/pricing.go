@@ -132,7 +132,6 @@ func (c *Client) FetchFeatures(ctx context.Context, ids ...string) ([]schema.Fea
 		if err != nil {
 			return nil, err
 		}
-
 		fps = append(fps, schema.FeaturePlan{
 			PlanID:  f.Plan,
 			Feature: f,
