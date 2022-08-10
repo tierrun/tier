@@ -103,6 +103,8 @@ type Feature struct {
 	Interval   Interval  `json:"interval,omitempty"`
 	Currency   string    `json:"currency,omitempty"`
 	Tiers      []Tier    `json:"tiers,omitempty"`
+
+	Err error `json:"-"`
 }
 
 type Tier struct {

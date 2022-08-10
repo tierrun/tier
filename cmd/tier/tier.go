@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/tierrun/tierx/pricing"
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -101,6 +102,17 @@ func tier(cmd string, args []string) error {
 		m, err := tc().Pull(ctx)
 		if err != nil {
 			return err
+		}
+
+		for i, p := range m.Plans {
+			if p.ID == "" {
+				m.Plans = slices.Delete(m.Plans, i, i+1)
+			}
+			for j, f := range p.Features {
+				if f.Err != nil {
+					p.Features = slices.Delete(p.Features, j, j+1)
+				}
+			}
 		}
 
 		out, err := json.MarshalIndent(m, "", "     ")

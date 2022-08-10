@@ -12,6 +12,7 @@ import (
 	"github.com/tierrun/tierx/values"
 	"golang.org/x/exp/slices"
 	"kr.dev/errorfmt"
+	"tailscale.com/util/multierr"
 )
 
 var (
@@ -127,30 +128,30 @@ func fromPriceInterval(v stripe.PriceRecurringInterval) (schema.Interval, error)
 }
 
 func ToFeature(p *stripe.Price) (*schema.Feature, error) {
-	plan, err := getMeta(p, "tier.plan")
-	if err != nil {
-		return nil, err
-	}
-
-	feature, err := getMeta(p, "tier.feature")
-	if err != nil {
-		return nil, err
-	}
-
 	v := &schema.Feature{
 		ProviderID: p.ID,
-		ID:         feature,
-		Plan:       plan,
 		Base:       p.UnitAmount,
 		Mode:       schema.Mode(p.TiersMode),
 		Currency:   string(p.Currency),
 		Tiers:      nil,
 	}
 
+	var errs []error
+	var err error
+	v.Plan, err = getMeta(p, "tier.plan")
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	v.ID, err = getMeta(p, "tier.feature")
+	if err != nil {
+		errs = append(errs, err)
+	}
+
 	if p.Recurring != nil {
 		s, err := fromPriceInterval(p.Recurring.Interval)
 		if err != nil {
-			return nil, err
+			errs = append(errs, err)
 		}
 		v.Interval = s
 		v.Aggregate = schema.Aggregate(p.Recurring.AggregateUsage)
@@ -158,7 +159,7 @@ func ToFeature(p *stripe.Price) (*schema.Feature, error) {
 
 	limit, err := getLimit(p)
 	if err != nil {
-		return nil, err
+		errs = append(errs, err)
 	}
 
 	for i, t := range p.Tiers {
@@ -172,6 +173,8 @@ func ToFeature(p *stripe.Price) (*schema.Feature, error) {
 			Base:  t.FlatAmount,
 		})
 	}
+
+	v.Err = multierr.New(errs...)
 
 	return v, nil
 }
