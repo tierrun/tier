@@ -1,0 +1,67 @@
+# borrowed from tailscale/.github/workflows (modified to remove slack notifications)
+
+name: static-analysis
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Run gofmt (goimports)
+      run: go run golang.org/x/tools/cmd/goimports -d --format-only .
+
+  vet:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Run go vet
+      run: go vet ./...
+
+  staticcheck:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64]
+        include:
+          - goos: windows
+            goarch: 386
+
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+
+    - name: Check out code
+      uses: actions/checkout@v3
+
+    - name: Install staticcheck
+      run: "GOBIN=~/.local/bin go install honnef.co/go/tools/cmd/staticcheck"
+
+    - name: Print staticcheck version
+      run: "staticcheck -version"
+
+    - name: "Run staticcheck (${{ matrix.goos }}/${{ matrix.goarch }})"
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: "staticcheck -- $(go list ./... | grep -v tempfork)"
