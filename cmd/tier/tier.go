@@ -122,11 +122,22 @@ func tier(cmd string, args []string) error {
 
 		filterNonTierPlans(m.Plans)
 
-		out, err := json.MarshalIndent(m, "", "     ")
-		if err != nil {
-			return err
+		for _, p := range m.Plans {
+			link, err := url.JoinPath(dashURL[tc().Live()], "products", pricing.MakeID(p.ID))
+			if err != nil {
+				return err
+			}
+			for _, f := range p.Features {
+				fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%d\t%s\n",
+					f.Plan,
+					f.ID,
+					f.Mode,
+					f.Aggregate,
+					f.Base,
+					link,
+				)
+			}
 		}
-		fmt.Fprintf(stdout, "%s\n", out)
 
 		return nil
 	case "connect":
