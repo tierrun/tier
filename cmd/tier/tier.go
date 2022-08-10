@@ -23,7 +23,7 @@ var (
 )
 
 var (
-	errUsage      = errors.New("usage: tier <connect|push|connect> [<args>]")
+	errUsage      = errors.New("usage: tier <connect|push|pull|connect> [<args>]")
 	errPushFailed = errors.New("push failed")
 )
 
