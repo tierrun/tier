@@ -12,7 +12,7 @@ require (
 	golang.org/x/tools v0.1.12
 	kr.dev/diff v0.2.1-0.20220605072704-63b4f29d6f39
 	kr.dev/errorfmt v0.1.1
-	tailscale.com v1.28.0
+	tailscale.com v1.22.2
 )
 
 require (
@@ -22,6 +22,7 @@ require (
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
+	honnef.co/go/tools v0.3.3 // indirect
 )
 
 require (
