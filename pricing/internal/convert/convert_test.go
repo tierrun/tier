@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/stripe/stripe-go/v72"
-	"github.com/tierrun/tierx/pricing/schema"
 	"kr.dev/diff"
+	"tier.run/pricing/schema"
 )
 
 func TestToStripePriceParamsMetadata(t *testing.T) {

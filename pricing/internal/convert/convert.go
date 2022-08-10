@@ -8,11 +8,11 @@ import (
 	"unicode"
 
 	"github.com/stripe/stripe-go/v72"
-	"github.com/tierrun/tierx/pricing/schema"
-	"github.com/tierrun/tierx/values"
 	"golang.org/x/exp/slices"
 	"kr.dev/errorfmt"
 	"tailscale.com/util/multierr"
+	"tier.run/pricing/schema"
+	"tier.run/values"
 )
 
 var (

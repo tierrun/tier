@@ -10,9 +10,9 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/stripe/stripe-go/v72"
-	"github.com/tierrun/tierx/pricing/schema"
 	"golang.org/x/sync/errgroup"
 	"kr.dev/diff"
+	"tier.run/pricing/schema"
 )
 
 var cleanup errgroup.Group

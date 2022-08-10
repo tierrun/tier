@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tierrun/tierx/pricing"
+	"tier.run/pricing"
 )
 
 func setStdin(t *testing.T, r io.Reader) {

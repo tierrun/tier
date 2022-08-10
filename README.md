@@ -3,7 +3,7 @@ Let's do this.
 ## Setup
 
 ```sh
-; go env -w GOPRIVATE="github.com/tierrun"
+; go env -w GOPRIVATE="tier.run"
 ```
 
 
@@ -11,7 +11,7 @@ Let's do this.
 
 
 ```sh
-; go run github.com/tierrun/tierx/cmd/tier@main
+; go run tier.run/cmd/tier@<git tree-ish>
 ```
 
 NOTE: push defaults to STDIN if no file is specified.
