@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/tierrun/tierx/pricing"
+	"github.com/tierrun/tierx/pricing/schema"
 	"golang.org/x/exp/slices"
 )
 
@@ -104,16 +105,22 @@ func tier(cmd string, args []string) error {
 			return err
 		}
 
-		for i, p := range m.Plans {
-			if p.ID == "" {
-				m.Plans = slices.Delete(m.Plans, i, i+1)
-			}
-			for j, f := range p.Features {
-				if f.Err != nil {
-					p.Features = slices.Delete(p.Features, j, j+1)
-				}
-			}
+		filterNonTierPlans(m.Plans)
+
+		out, err := json.MarshalIndent(m, "", "     ")
+		if err != nil {
+			return err
 		}
+		fmt.Fprintf(stdout, "%s\n", out)
+
+		return nil
+	case "ls":
+		m, err := tc().Pull(ctx)
+		if err != nil {
+			return err
+		}
+
+		filterNonTierPlans(m.Plans)
 
 		out, err := json.MarshalIndent(m, "", "     ")
 		if err != nil {
@@ -159,4 +166,18 @@ func tc() *pricing.Client {
 		}
 	}
 	return tierClient
+}
+
+func filterNonTierPlans(plans schema.Plans) schema.Plans {
+	for i, p := range plans {
+		if p.ID == "" {
+			plans = slices.Delete(plans, i, i+1)
+		}
+		for j, f := range p.Features {
+			if f.Err != nil {
+				p.Features = slices.Delete(p.Features, j, j+1)
+			}
+		}
+	}
+	return plans
 }
