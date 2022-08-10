@@ -21,14 +21,14 @@ Stripe API key: `)
 
 	defer fmt.Println()
 
-	key, err := term.ReadPassword(0)
+	apiKey, err := term.ReadPassword(0)
 	if err != nil {
 		return err
 	}
 
 	fmt.Print(strings.Repeat("*", 40))
 
-	if err := setKey(key); err != nil {
+	if err := setKey(apiKey); err != nil {
 		return err
 	}
 
@@ -51,15 +51,25 @@ please visit:
 	return nil
 }
 
-func setKey(key []byte) error {
-	if !pricing.IsValidKey(string(key)) {
+const (
+	keyringLabel     = "Tier Credentials"
+	keyringService   = "Tier Credentials"
+	keyringStripeKey = "stripe.cli.tier.run"
+)
+
+func setKey(apiKey []byte) error {
+	if !pricing.IsValidKey(string(apiKey)) {
 		return errors.New("invalid key: key must start with (\"sk_\") or (\"rk_\") prefix")
 	}
-	return ring().Set(keyring.Item{Data: key})
+	return ring().Set(keyring.Item{
+		Label: keyringLabel,
+		Key:   keyringStripeKey,
+		Data:  apiKey,
+	})
 }
 
 func getKey() (string, error) {
-	i, err := ring().Get("")
+	i, err := ring().Get(keyringStripeKey)
 	if err != nil {
 		return "", err
 	}
@@ -67,8 +77,6 @@ func getKey() (string, error) {
 }
 
 func ring() keyring.Keyring {
-	const keyringService = "tier.stripe.key"
-
 	kr, err := keyring.Open(keyring.Config{
 		ServiceName: keyringService,
 	})
