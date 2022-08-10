@@ -55,8 +55,8 @@ func UnsafeStripeClient(c *Client) *client.API {
 }
 
 var (
-	keyPrefixes     = append([]string{"sk_", "rk_"})
-	testKeyPrefixes = append([]string{"sk_test", "rk_test"})
+	keyPrefixes     = []string{"sk_", "rk_"}
+	testKeyPrefixes = []string{"sk_test", "rk_test"}
 )
 
 func IsValidKey(key string) bool {
