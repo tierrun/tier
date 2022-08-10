@@ -65,7 +65,6 @@ func tier(cmd string, args []string) error {
 		defer f.Close()
 
 		if err := tc().PushJSON(ctx, f, func(e *pricing.PushEvent) {
-			fmt.Fprintf(stdout, "%v\n", e)
 			if e.Feature == "" {
 				return // no need to report plan creation
 			}
