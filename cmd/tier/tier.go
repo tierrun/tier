@@ -11,9 +11,9 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/tierrun/tierx/pricing"
-	"github.com/tierrun/tierx/pricing/schema"
 	"golang.org/x/exp/slices"
+	"tier.run/pricing"
+	"tier.run/pricing/schema"
 )
 
 var (

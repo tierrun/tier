@@ -14,10 +14,10 @@ import (
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/tailscale/hujson"
-	"github.com/tierrun/tierx/pricing/internal/convert"
-	"github.com/tierrun/tierx/pricing/schema"
 	"golang.org/x/exp/slices"
 	"tailscale.com/util/multierr"
+	"tier.run/pricing/internal/convert"
+	"tier.run/pricing/schema"
 )
 
 // Errors

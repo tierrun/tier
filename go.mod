@@ -1,4 +1,4 @@
-module github.com/tierrun/tierx
+module tier.run
 
 go 1.19
 

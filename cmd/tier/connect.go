@@ -9,7 +9,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/99designs/keyring"
-	"github.com/tierrun/tierx/pricing"
+	"tier.run/pricing"
 )
 
 func connect() error {
