@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,6 +30,11 @@ Stripe API key: `)
 	fmt.Print(strings.Repeat("*", 40))
 
 	if err := setKey(apiKey); err != nil {
+		return err
+	}
+
+	_, err = tc().WhoAmI(context.Background())
+	if err != nil {
 		return err
 	}
 
