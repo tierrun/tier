@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/muesli/termenv"
 	"golang.org/x/exp/slices"
 	"tier.run/pricing"
 	"tier.run/pricing/schema"
@@ -65,32 +66,38 @@ func tier(cmd string, args []string) error {
 		}
 		defer f.Close()
 
+		p := termenv.ColorProfile()
+
 		if err := tc().PushJSON(ctx, f, func(e *pricing.PushEvent) {
 			if e.Feature == "" {
 				return // no need to report plan creation
 			}
 			status := "ok"
-
 			reason := "created"
+
+			link, err := url.JoinPath(dashURL[tc().Live()], "products", e.PlanProviderID)
+			if err != nil {
+				panic(err)
+			}
+
+			s := termenv.String("xxx").Foreground(p.Color("28"))
 			if e.Err != nil {
+				s = s.Foreground(p.Color("196"))
 				status = "failed"
 				reason = e.Err.Error()
 			}
 			if errors.Is(e.Err, pricing.ErrFeatureExists) {
+				s = s.Foreground(p.Color("57"))
 				reason = "already exists"
 			}
 
-			link, err := url.JoinPath(dashURL[tc().Live()], "products", e.PlanProviderID)
-			if err != nil {
-				reason = fmt.Sprintf("failed to create link: %v", err)
-			}
-			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t[%s]\n",
+			fmt.Fprintln(stdout, s.Styled(fmt.Sprintf("%s\t%s\t%s\t%s\t[%s]",
 				status,
 				e.Plan,
 				e.Feature,
 				link,
 				reason,
-			)
+			)))
 		}); err != nil {
 			if errors.As(err, &pricing.DecodeError{}) {
 				return err
