@@ -169,7 +169,8 @@ func tc() *pricing.Client {
 				fmt.Fprintf(stderr, "tier: Please run `tier connect` to connect your Stripe account\n")
 				os.Exit(1)
 			}
-			return &pricing.Client{StripeKey: key}
+			tierClient = &pricing.Client{StripeKey: key}
+			return tierClient
 		}
 		if err != nil {
 			log.Fatalf("tier: %v", err)
