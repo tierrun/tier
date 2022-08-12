@@ -3,6 +3,7 @@ module tier.run
 go 1.19
 
 require (
+	blake.io/pages v0.0.0-20220811222404-e4a36ad6426a
 	github.com/kr/pretty v0.3.0
 	github.com/stripe/stripe-go/v72 v72.122.0
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
@@ -19,10 +20,14 @@ require (
 require (
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/BurntSushi/toml v0.4.1 // indirect
+	github.com/alecthomas/chroma v0.9.4 // indirect
+	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/dvsekhvalnov/jose2go v1.5.0 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
+	github.com/yuin/goldmark v1.4.13 // indirect
+	github.com/yuin/goldmark-highlighting v0.0.0-20210516132338-9216f9c5aa01 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220218215828-6cf2b201936e // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 )
