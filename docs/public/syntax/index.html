@@ -1,49 +1,89 @@
-<h1 id="pricing-model-definitions">Pricing Model Definitions</h1>
-<p>Tier helps manage pricing models, prices, features, and more with the Pricing
-Model Syntax.</p>
+<!DOCTYPE html>
+<html>
+<head>
+	
+	<title>tier.run</title>
+	
+</head>
+
+<body>
+	<div class="container">
+		<h1 id="pricing-model-definitions">Pricing Model Definitions</h1>
+<p>Tier helps manage pricing plans, features, their prices, and how price may
+evolve as your customers consume your products.</p>
+<p>The plans, features, and prices are expressed in a single &quot;human JSON&quot; definition file.</p>
 <h2 id="introduction">Introduction</h2>
 <p>Tier pricing model definitions are expressed as a single “<a href="https://github.com/tailscale/hujson">human
-JSON</a>” definition file. HuJSON is a
+JSON</a>” Pricing JSON file. HuJSON is a
 superset of <a href="https://www.json.org/json-en.html">JSON</a> that allows comments and
-trailing commas. This makes ACL files easy to maintain while staying
-read/writable by both humans and machines.</p>
+trailing commas. This makes Pricing JSON files easy to maintain while
+staying read/writable by both humans and machines.</p>
+<p>A pricing model has a single section <code>plans</code> that contains a list of plans you want to sell, have sold, or are currently selling to customers.</p>
 <h2 id="plans">Plans</h2>
-<p>The plans section lets you define plans for later adding to customer schedules
-using your billing backend.</p>
+<p>A billing plan re</p>
 <h3 id="plan-identifiers">Plan Identifiers</h3>
-<p>Plan identifiers are unique ids that specify a plan at a specific version.</p>
-<p>A plan identifier looks like <code>plan:free@1</code>.</p>
+<p>Every billing plan that a user might be signed up for is identified with a string starting with 'plan:', and containing a @. The part before the @ is the &quot;name&quot;. The part after the @ is the &quot;version&quot;.</p>
+<pre><code>plan:free@2
+plan:pro@13
+plan:enterprise@custom-for-acme-signed-2022-05-13
+plan:pro@trial-23
+plan:basic@beta-user-discount-25
+</code></pre>
+<p>You can define as many versions of as many plans as you want in your pricing model. However, you may not change a given version of a plan, so to make changes you will create a new version of it. This makes it possible to experiment safely with pricing changes, and only update existing customers' plans when it makes sense for your application.</p>
+<p>Think of your set of plans as an append-only set of the various ways you package your application and bill your customers.</p>
+<p>Each plan contains these sections:</p>
+<ul>
+<li><code>title</code>: A human-friendly title for the plan.</li>
+<li><code>base</code>: A positive <em>starting</em> price (in cents) to be billed per interval</li>
+<li><code>interval</code>: The interval to bill this plan at.</li>
+<li><code>features</code>: The list of features (entitlements) this plan includes, and any specific pricing and billing rules for them.</li>
+<li>`</li>
+</ul>
 <p>A plan definition looks like:</p>
 <pre tabindex="0" style="color:#f8f8f2;background-color:#272822">{
 	<span style="color:#f92672">&#34;plans&#34;</span>: {
 		<span style="color:#f92672">&#34;plan:free@0&#34;</span>: {
 			<span style="color:#f92672">&#34;title&#34;</span>: <span style="color:#e6db74">&#34;Todo (Free)&#34;</span>, <span style="color:#75715e">// human-friendly title
 </span><span style="color:#75715e"></span>
-			<span style="color:#75715e">// Customers subscribed to this plan have access to 5
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// lists. Each of the 5 lists are free.
-</span><span style="color:#75715e"></span>			<span style="color:#f92672">&#34;features:todo:lists&#34;</span>: {
-				<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">5</span>}],
+			<span style="color:#f92672">&#34;features&#34;</span>: {
+				<span style="color:#75715e">// Customers subscribed to this plan have access to 5
+</span><span style="color:#75715e"></span>				<span style="color:#75715e">// lists. Each of the 5 lists are free.
+</span><span style="color:#75715e"></span>				<span style="color:#f92672">&#34;feature:todo:lists&#34;</span>: {
+					<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">5</span>}],
+				},
 			},
 		},
 
 		<span style="color:#75715e">// later it is decided the free plan should allow customers to
 </span><span style="color:#75715e"></span>		<span style="color:#75715e">// invite one friend.
 </span><span style="color:#75715e"></span>		<span style="color:#f92672">&#34;plan:free@1&#34;</span>: {
-			<span style="color:#75715e">// Customers subscribed to this plan have access to 5
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// lists. Each of the 5 lists are free.
-</span><span style="color:#75715e"></span>			<span style="color:#f92672">&#34;features:todo:lists&#34;</span>: {
-				<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">5</span>}],
-			},
-			<span style="color:#f92672">&#34;features:invites&#34;</span>: {
-				<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">1</span>}],
+			<span style="color:#f92672">&#34;title&#34;</span>: <span style="color:#e6db74">&#34;Todo (Free)&#34;</span>,
+			<span style="color:#f92672">&#34;features&#34;</span>: {
+				<span style="color:#f92672">&#34;feature:todo:lists&#34;</span>: {
+					<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">5</span>}],
+				},
+				<span style="color:#f92672">&#34;feature:invites&#34;</span>: {
+					<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">1</span>}],
+				},
 			},
 		},
 
 		<span style="color:#f92672">&#34;plan:pro@0&#34;</span>: {
-			<span style="color:#75715e">// customers
-</span><span style="color:#75715e"></span>			<span style="color:#75715e">// ...
-</span><span style="color:#75715e"></span>		},
+			<span style="color:#f92672">&#34;features&#34;</span>: {
+				<span style="color:#f92672">&#34;feature:support:email&#34;</span>: {},
+				<span style="color:#f92672">&#34;feature:todo:lists&#34;</span>: {
+					<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">5</span>}],
+				},
+				<span style="color:#f92672">&#34;feature:invites&#34;</span>: {
+					<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">1</span>}],
+				},
+			},
+		},
 	},
 }
 
 </pre>
+	</div>
+</body>
+
+</html>
