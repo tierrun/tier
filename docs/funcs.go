@@ -6,7 +6,6 @@ package main
 import (
 	"html/template"
 
-	_ "blake.io/pages" // for surviving a go mod tidy
 	"github.com/tailscale/hujson"
 	"tier.run/pricing"
 )
