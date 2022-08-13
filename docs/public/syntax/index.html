@@ -1,24 +1,54 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-	
 	<title>tier.run</title>
 	
+
+	
+	<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+	<script>
+		
+		tailwind.config = {
+			theme: {
+				extend: {
+					colors: {
+						tr_amber: '#ff7e00',
+						tr_cerulean: '#07b9de',
+						tr_wintersky: '#f460e6',
+						tr_purple: '#f460e6',
+						tr_colbalt: '#303080'
+					}
+				}
+			}
+		}
+	</script>
 </head>
 
 <body>
 	<div class="container">
-		<h1 id="pricing-model-definitions">Pricing Model Definitions</h1>
+		<div class="mx-auto">
+			<div class="prose lg:prose-xl mx-auto">
+				<h1 class="text-6xl border-b-4 pb-2 border-b-tr_wintersky">Tier</h1>
+				<h1 id="pricing-models">Pricing models</h1>
 <p>Tier helps manage pricing plans, features, their prices, and how price may
 evolve as your customers consume your products.</p>
-<p>The plans, features, and prices are expressed in a single &quot;human JSON&quot; definition file.</p>
-<h2 id="introduction">Introduction</h2>
-<p>Tier pricing model definitions are expressed as a single “<a href="https://github.com/tailscale/hujson">human
-JSON</a>” Pricing JSON file. HuJSON is a
-superset of <a href="https://www.json.org/json-en.html">JSON</a> that allows comments and
-trailing commas. This makes Pricing JSON files easy to maintain while
-staying read/writable by both humans and machines.</p>
-<p>A pricing model has a single section <code>plans</code> that contains a list of plans you want to sell, have sold, or are currently selling to customers.</p>
+<h2 id="pricing-model-syntax">Pricing model syntax</h2>
+<p>Pricing models plans, features, and prices are expressed in a single &quot;human JSON&quot; definition file.</p>
+<p><span class="text-xs"><em>TODO: touch on HuJSON</em> (nod to tailscale)</span></p>
+<p>The pricing model file has a single top-level section: <code>plans</code>.</p>
+<p>Each plan is identified by a unique field in the <code>plans</code> section. This
+identifier starts with <code>plan:</code> and contains a <code>name@version</code>. The name does not
+need to be unique, but the version must be unique per name. The name must
+contain only alphanumeric characters or the underscore (<code>_</code>). The version must
+be only alphanumeric characters.</p>
+<p>Example plan identifiers:</p>
+<pre><code>plan:free@0
+plan:pro@99
+plan:pro:acme@11
+plan:welcome@9kk3j393DAF236
+</code></pre>
+<p>contains the optional field <code>title</code>, and the section <code>features</code>.</p>
 <h2 id="plans">Plans</h2>
 <p>A billing plan re</p>
 <h3 id="plan-identifiers">Plan Identifiers</h3>
@@ -83,6 +113,8 @@ plan:basic@beta-user-discount-25
 }
 
 </pre>
+			</div>
+		</div>
 	</div>
 </body>
 

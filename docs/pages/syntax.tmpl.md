@@ -1,20 +1,37 @@
-# Pricing Model Definitions
+# Pricing models
 
 Tier helps manage pricing plans, features, their prices, and how price may
 evolve as your customers consume your products.
 
-The plans, features, and prices are expressed in a single "human JSON" definition file.
+## Pricing model syntax
+
+Pricing models plans, features, and prices are expressed in a single "human JSON" definition file.
+
+<span class="text-xs">_TODO: touch on HuJSON_ (nod to tailscale)</span>
 
 
-## Introduction
+The pricing model file has a single top-level section: `plans`.
 
-Tier pricing model definitions are expressed as a single “[human
-JSON](https://github.com/tailscale/hujson)” Pricing JSON file. HuJSON is a
-superset of [JSON](https://www.json.org/json-en.html) that allows comments and
-trailing commas. This makes Pricing JSON files easy to maintain while
-staying read/writable by both humans and machines.
+Each plan is identified by a unique field in the `plans` section. This
+identifier starts with `plan:` and contains a `name@version`. The name does not
+need to be unique, but the version must be unique per name. The name must
+contain only alphanumeric characters or the underscore (`_`). The version must
+be only alphanumeric characters.
 
-A pricing model has a single section `plans` that contains a list of plans you want to sell, have sold, or are currently selling to customers.
+Example plan identifiers:
+
+```
+plan:free@0
+plan:pro@99
+plan:pro:acme@11
+plan:welcome@9kk3j393DAF236
+```
+
+
+
+
+ contains the optional field `title`, and the section `features`.
+
 
 ## Plans
 

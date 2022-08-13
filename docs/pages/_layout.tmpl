@@ -1,14 +1,38 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-	{{block "goimports" .}}{{end}}
 	<title>{{block "title" .}}tier.run{{end}}</title>
 	{{block "head" .}}{{end}}
+
+	<!-- tailwindcss -->
+	<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+	<script>
+		// https://coolors.co/303080-f460e6-f93278-07b9de-ff7e00
+		tailwind.config = {
+			theme: {
+				extend: {
+					colors: {
+						tr_amber: '#ff7e00',
+						tr_cerulean: '#07b9de',
+						tr_wintersky: '#f460e6',
+						tr_purple: '#f460e6',
+						tr_colbalt: '#303080'
+					}
+				}
+			}
+		}
+	</script>
 </head>
 
 <body>
 	<div class="container">
-		{{block "content" .}}{{end}}
+		<div class="mx-auto">
+			<div class="prose lg:prose-xl mx-auto">
+				<h1 class="text-6xl border-b-4 pb-2 border-b-tr_wintersky">Tier</h1>
+				{{block "content" .}}Not Found{{end}}
+			</div>
+		</div>
 	</div>
 </body>
 
