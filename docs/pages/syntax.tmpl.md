@@ -1,112 +1,127 @@
-# Pricing models
+# Pricing JSON
 
-Tier helps manage pricing plans, features, their prices, and how price may
-evolve as your customers consume your products.
+Pricing models are expressed as a single "human JSON" file. HuJSON is a superset
+of JSON that allows comments and trailing commas.
 
-## Pricing model syntax
+The pricing model file contains the following sections related to pricing and packaging:
 
-Pricing models plans, features, and prices are expressed in a single "human JSON" definition file.
+* `plans`, the pricing plans themselves.
+* `plans.[PlanID].features`, the features included in a plan, along with the pricing for the feature relative to the
+plan it is in.
 
-<span class="text-xs">_TODO: touch on HuJSON_ (nod to tailscale)</span>
-
-
-The pricing model file has a single top-level section: `plans`.
-
-Each plan is identified by a unique field in the `plans` section. This
-identifier starts with `plan:` and contains a `name@version`. The name does not
-need to be unique, but the version must be unique per name. The name must
-contain only alphanumeric characters or the underscore (`_`). The version must
-be only alphanumeric characters.
-
-Example plan identifiers:
-
-```
-plan:free@0
-plan:pro@99
-plan:pro:acme@11
-plan:welcome@9kk3j393DAF236
-```
-
-
-
-
- contains the optional field `title`, and the section `features`.
-
-
-## Plans
-
-A billing plan re
-
-### Plan Identifiers
-
-Every billing plan that a user might be signed up for is identified with a string starting with 'plan:', and containing a @. The part before the @ is the "name". The part after the @ is the "version".
-
-```
-plan:free@2
-plan:pro@13
-plan:enterprise@custom-for-acme-signed-2022-05-13
-plan:pro@trial-23
-plan:basic@beta-user-discount-25
-```
-
-You can define as many versions of as many plans as you want in your pricing model. However, you may not change a given version of a plan, so to make changes you will create a new version of it. This makes it possible to experiment safely with pricing changes, and only update existing customers' plans when it makes sense for your application.
-
-Think of your set of plans as an append-only set of the various ways you package your application and bill your customers.
-
-
-
-Each plan contains these sections:
-
-- `title`: A human-friendly title for the plan.
-- `base`: A positive _starting_ price (in cents) to be billed per interval
-- `interval`: The interval to bill this plan at.
-- `features`: The list of features (entitlements) this plan includes, and any specific pricing and billing rules for them.
-- `
-
-
-A plan definition looks like:
+An example pricing model file looks like:
 
 ```json
 {{ model `{
         "plans": {
                 "plan:free@0": {
-                        "title": "Todo (Free)", // human-friendly title
-
-                        "features": {
-                                // Customers subscribed to this plan have access to 5
-                                // lists. Each of the 5 lists are free.
-                                "feature:todo:lists": {
-                                        "tiers": [{"upto": 5}],
-                                },
-                        },
-
-                },
-
-                // later it is decided the free plan should allow customers to
-                // invite one friend.
-                "plan:free@1": {
                         "title": "Todo (Free)",
                         "features": {
                                 "feature:todo:lists": {
                                         "tiers": [{"upto": 5}],
                                 },
-                                "feature:invites": {
-                                        "tiers": [{"upto": 1}],
-                                },
                         },
                 },
 
                 "plan:pro@0": {
+                        "title": "Todo (Pro)",
                         "features": {
-                                "feature:support:email": {},
-                                "feature:todo:lists": {
-                                        "tiers": [{"upto": 5}],
+                                "feature:support:email": {
+                                "base": 9900, // $99.00
                                 },
-                                "feature:invites": {
-                                        "tiers": [{"upto": 1}],
+                                "feature:todo:lists": {
+                                        "tiers": [{"upto": 100}],
                                 },
                         },
                 }
         }
+}`
+}}
+```
+
+## Plans
+
+> TODO
+
+## Features
+
+The features section under a plan is a map of features keyed on a
+[FeatureID](#featureid). Each feature if a HuJSON object grants access to a
+feature.
+
+An example of a feature looks like:
+
+```json
+{{ hujson `{
+        // Customers subscribed to a plan containing this
+        // feature can have up to 10 todo lists in the
+        // their account at any time.
+        "feature:todo:lists": {
+                "aggregate": "last",
+                "tiers": [{"upto": 10, "base": 900}],
+        },
 }` }}
 ```
+
+<!-- 
+			interval:  *"@monthly" | "@yearly" | "@weekly" | "@daily"
+			currency:  *"usd" | string
+			base:      *0 | (int & >=0)
+			aggregate: *"sum" | "max" | "min" | "last"
+
+			mode: *"graduated" | "volume"
+
+			// The `tiers` section lets you define pricing that
+			// varies based on consumption. 
+			tiers: [...{
+-->
+
+### Interval
+
+| Value                | Meaning                        |
+| -------------------- | ------------------------------ |
+| `@daily`             | The feature is bills each day  |
+| `@monthly` (default) | The feature bills each month   |
+| `@yearly`            | The feature bills each year    |
+| `@quarterly`         | The feature bills each quarter |
+
+### Currency
+
+The `currency` field specifies the currency the features prices are in. The default currency is `usd`.
+
+### Base
+
+The `base` field is a positive integer that specifies the base price for
+features without tiers.  It is an error to specify both the `base` field and a
+non-empty tiers
+
+### Aggregate
+
+The `aggregate` field specifies the function used to determine the usage multiplier for calculating the total price at billing time.
+
+TODO: more words
+
+| Value            | Meaning                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `sum`  (default) | Multiply total usage by the sum of all values reported during the period                                                             |
+| `max`            | Multiply total usage by the largest value reported during the period                                                                 |
+| `min`            | Multiply total usage by the smallest value reported during the period                                                                |
+| `recent`         | Multiply total usage by the last value seen during the current period. If no usage was reported during the period, then `0` is used. |
+| `perpetual`      | Multiply total usage by the last value seen, across all periods.                                                                     |
+
+#### Mode
+
+The `mode` field specifies how to determine a bill using `tiers`.
+
+| Value                 | Meaning                                           |
+| --------------------- | ------------------------------------------------- |
+| `graduated` (default) | Per unit pricing changes in _ranges_ over usage   |
+| `volume`              | Per unit pricing changes for all units over usage |
+
+For a more detailed explanation of graduated vs volume-based pricing, head to
+[Graduated vs. Volume Based Pricing](/TODO)
+
+
+### Tiers
+
+TODO-

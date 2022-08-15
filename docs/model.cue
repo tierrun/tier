@@ -18,7 +18,7 @@
 		// pricing pages.
 		title: *"" | string
 
-		// 
+		// TODO: this should expand to a base feature
 		base: int & >=0
 
 		// features defines the features that are available for
@@ -32,7 +32,7 @@
 			interval:  *"@monthly" | "@yearly" | "@weekly" | "@daily"
 			currency:  *"usd" | string
 			base:      *0 | (int & >=0)
-			aggregate: *"sum" | "max" | "min" | "last"
+			aggregate: *"sum" | "max" | "min" | "recent" | "perpetual"
 
 			mode: *"graduated" | "volume"
 

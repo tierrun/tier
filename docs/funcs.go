@@ -24,5 +24,12 @@ var (
 			}
 			return template.HTML(b), nil
 		},
+		"hujson": func(s string) (template.HTML, error) {
+			b, err := hujson.Format([]byte(s))
+			if err != nil {
+				return "", err
+			}
+			return template.HTML(b), nil
+		},
 	}
 )
