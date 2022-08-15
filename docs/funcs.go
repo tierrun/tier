@@ -5,6 +5,7 @@ package main
 
 import (
 	"html/template"
+	"time"
 
 	"github.com/tailscale/hujson"
 	"tier.run/pricing"
@@ -31,5 +32,8 @@ var (
 			}
 			return template.HTML(b), nil
 		},
+
+		// For getting time-of-build
+		"now": time.Now,
 	}
 )
