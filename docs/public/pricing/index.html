@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>tier.run</title>
+	
+
+	
+	
+	<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+	<script>
+		
+		tailwind.config = {
+			theme: {
+				extend: {
+					colors: {
+						tr_amber: '#ff7e00',
+						tr_cerulean: '#07b9de',
+						tr_wintersky: '#f460e6',
+						tr_purple: '#f460e6',
+						tr_colbalt: '#303080'
+					}
+				}
+			}
+		}
+	</script>
+	
+</head>
+
+<body>
+	<div class="">
+		<div class="grid grid-flow-auto grid-cols-[1fr,3fr] mx-auto p-6">
+			<aside class="h-screen sticky top-0 pt-2">
+				No TOC!
+			</aside>
+			<main class="prose lg:prose-xl">
+				<h1 class="text-6xl border-b-4 pb-2 border-b-tr_wintersky">Tier</h1>
+				<h1 id="pricing-models">Pricing Models</h1>
+<ul>
+<li><a href="#pricing-models">Pricing Models</a>
+<ul>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#pricing-syntax">Pricing syntax</a>
+<ul>
+<li><a href="#plans">Plans</a></li>
+</ul>
+</li>
+<li><a href="#pricing-samples">Pricing samples</a></li>
+<li><a href="#scheduling-plans">Scheduling plans</a></li>
+<li><a href="#mappings">Mappings</a>
+<ul>
+<li><a href="#plans-1">Plans</a></li>
+<li><a href="#features">Features</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>Tier supports <a href="/TODO">PriceOps Pricing Models</a> using the <code>pricing.json</code> schema. Use
+Pricing Models to define plan, feature, and pricing relationships for <em>pushing</em>
+to a target billing engine.</p>
+<h2 id="introduction">Introduction</h2>
+<p>Tier Pricing Models are expressed as an <em>infinite</em> “human JSON” file referred to
+as <code>pricing.json</code>, which can be viewed as the whole file, or slices of the file.
+HuJSON is a superset of JSON that allows comments and trailing commas. The
+<em>infinite</em> nature of a <code>pricing.json</code> allows for working with the whole file, or a slice
+of the file at a time. This makes <code>pricing.json</code>files easy to maintain while
+staying read/writable by both humans and machines.</p>
+<p>TODO: address how to deal with large pricing.json. For simple cases, you can
+edit the policy file by hand in the admin panel. Organizations with more complex
+needs can use the API to automatically update rules from software.</p>
+<h2 id="pricing-syntax">Pricing syntax</h2>
+<p>The default pricing model is an empty one without any plans, features, or
+prices. If <code>tier pull</code> is run on a fresh Stripe account, this is what the output
+will be:</p>
+<pre tabindex="0" style="color:#f8f8f2;background-color:#272822">{
+	<span style="color:#f92672">&#34;plans&#34;</span>: {},
+}
+</pre><h3 id="plans">Plans</h3>
+<p>define a proper plan name</p>
+<ul>
+<li>provide the prefix <code>plan:</code></li>
+<li>provide a name after the prefix that contains only <code>[\w\d_]+</code>,</li>
+<li>provide a version after the name that starts with <code>@</code> followed by alphanumeric charters only.</li>
+</ul>
+<p>Each plan name must start with the prefix <code>plan:</code>,</p>
+<p>Plans describe and define a collection of one or more entitlements
+called &quot;features&quot;.  The minimal plan contains <em>only</em> a uniquely identifiable
+key. A minimal plan looks like:</p>
+<pre tabindex="0" style="color:#f8f8f2;background-color:#272822">{
+	<span style="color:#f92672">&#34;plans&#34;</span>: {
+		<span style="color:#f92672">&#34;plan:empty@0&#34;</span>: {},
+	},
+}
+</pre><p>The minimal doesn't allow the user to do anything and is referred to as the
+<em>cancel plan</em>, because it denys access to all features.</p>
+<h2 id="pricing-samples">Pricing samples</h2>
+<ul>
+<li>wws: develop simple plans</li>
+<li>wws: create tailored plans, entitlements, and limits for large customer</li>
+<li>wws: develop complex, incentive-based plans</li>
+<li>wws: rapidly tweak and test new pricing plans with limited sets of customers</li>
+<li>wws: introduce new pricing models without inadvertently disrupting existing customers billing expectations. (stripe prevents this already, but we should still talk about it)</li>
+</ul>
+<h2 id="scheduling-plans">Scheduling plans</h2>
+<hr />
+<h2 id="mappings">Mappings</h2>
+<h3 id="plans-1">Plans</h3>
+<table>
+<thead>
+<tr>
+<th>Tier Plan</th>
+<th>Stripe Product Field</th>
+<th>Transform (if any)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>plans[PlanID]</code></td>
+<td><code>product.id</code></td>
+<td>makeID(PlanID)</td>
+</tr>
+<tr>
+<td><code>plans[PlanID]</code></td>
+<td><code>product.metadata[&quot;tier.plan&quot;]</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>plans[PlanID].title</code> OR <code>PlanID</code></td>
+<td><code>product.title</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>&quot;service&quot;</code></td>
+<td><code>product.type</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="features">Features</h3>
+<p>For each feature in a plan, an equivalent price is created in Stripe, each with its own price ID.</p>
+<table>
+<thead>
+<tr>
+<th>Tier Feature</th>
+<th>Stipe Price Field</th>
+<th>Transform</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>-</td>
+<td><code>makeID(join(PlanID, &quot;__&quot;, FeatureID))</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td><code>plans[PlanID].features[PlanID].title</code> OR <code>PlanID</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>price.type</code></td>
+<td><code>&quot;service&quot;</code></td>
+<td>Currently, only services are supported</td>
+</tr>
+</tbody>
+</table>
+<p>&lt;--</p>
+<ul>
+<li>
+<p>open pricing.json</p>
+</li>
+<li>
+<p>add plan:free@0 (without title)</p>
+</li>
+<li>
+<p>add feature:base (without title)</p>
+</li>
+<li>
+<p>add</p>
+</li>
+<li>
+<p>you have created a new pricing model, pushed it to Stripe, verified it mapped correctly, added it to a customers schedule, and verified it worked</p>
+</li>
+<li>
+<p>push your completed pricing model</p>
+</li>
+</ul>
+<p>--&gt;</p>
+
+			</main>
+		</div>
+	</div>
+</body>
+
+</html>

@@ -1,25 +1,30 @@
-#PlanID:    =~"^plan:[a-zA-Z0-9_:]+@[a-zA-Z0-9]+$"
-#FeatureID: =~"^feature:[a-zA-Z0-9_:]+$"
+#PlanName:    =~"^plan:[a-zA-Z0-9_:]+@[a-zA-Z0-9]+$"
+#FeatureName: =~"^feature:[a-zA-Z0-9_:]+$"
+
+// OPI is an optional positive integer which defaults to 0. Unlike a unit, OPI
+// has a default, and cannot exceed 9223372036854775807.
+#OPI: *0 | int64 & >=0
 
 #Model: {
 	// plans are the plans offered for your service. Each plan is
-	// identified by a PlanID. A valid PlanID has the prefix ("plan:"), a
+	// identified by a PlanName. A valid PlanName has the prefix ("plan:"), a
 	// name, and a version prefixed with ("@").
 	//
-	// Examples of valid PlanIDs are:
+	// Examples of a valid PlanName are:
 	//
 	//  - plan:free@0
 	//  - plan:pro@1a4cX
 	//  - plan:custom@ccc
-	plans: [#PlanID]: {
-		// title is an optional human-readable title for the plan. In
-		// providers such as Stripe, this will be used as the product
-		// name displayed to the customer in their invoices, or on
-		// pricing pages.
+	plans: [#PlanName]: {
+		// title is an optional human-friendly title for the plan. It
+		// replaces the PlanName in the UI, invoices, etc.
+		//
+		// Unlike the plan id, it is not a requirement for the title
+		// to be unique across plans.
 		title: *"" | string
 
 		// TODO: this should expand to a base feature
-		base: int & >=0
+		base: #OPI
 
 		// features defines the features that are available for
 		// customers subscribed to this plan. Each feature defines their
@@ -27,11 +32,11 @@
 		//
 		// Feature names must be prefixed with ("feature:") followed by
 		// alphanumeric characters, or underscores, or colons.
-		features: [#FeatureID]: {
-			// interval
-			interval:  *"@monthly" | "@yearly" | "@weekly" | "@daily"
-			currency:  *"usd" | string
-			base:      *0 | (int & >=0)
+		features: [#FeatureName]: {
+			interval: *"@monthly" | "@yearly" | "@weekly" | "@daily"
+			currency: *"usd" | string
+
+			base:      #OPI
 			aggregate: *"sum" | "max" | "min" | "recent" | "perpetual"
 
 			mode: *"graduated" | "volume"
@@ -39,9 +44,9 @@
 			// The `tiers` section lets you define pricing that
 			// varies based on consumption. 
 			tiers: [...{
-				base:  *0 | (int & >=0)
-				price: *0 | (int & >=0)
-				upto:  *0 | (int & >=0)
+				base:  #OPI
+				price: #OPI
+				upto:  #OPI
 			}]
 		}
 	}

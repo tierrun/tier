@@ -6,6 +6,7 @@
 	{{block "head" .}}{{end}}
 
 	<!-- tailwindcss -->
+	<!-- TODO: replace slow (but fast for prototyping) CDN tailwind with generated -->
 	<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
 	<script>
 		// https://coolors.co/303080-f460e6-f93278-07b9de-ff7e00
@@ -23,15 +24,19 @@
 			}
 		}
 	</script>
+	<!-- end tailwindcss -->
 </head>
 
 <body>
-	<div class="container">
-		<div class="mx-auto">
-			<div class="prose lg:prose-xl mx-auto">
+	<div class="">
+		<div class="grid grid-flow-auto grid-cols-[1fr,3fr] mx-auto p-6">
+			<aside class="h-screen sticky top-0 pt-2">
+				{{ block "toc" . }}No TOC!{{ end }}
+			</aside>
+			<main class="prose lg:prose-xl">
 				<h1 class="text-6xl border-b-4 pb-2 border-b-tr_wintersky">Tier</h1>
 				{{block "content" .}}Not Found{{end}}
-			</div>
+			</main>
 		</div>
 	</div>
 </body>

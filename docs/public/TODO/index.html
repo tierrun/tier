@@ -6,6 +6,7 @@
 	
 
 	
+	
 	<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
 	<script>
 		
@@ -23,17 +24,21 @@
 			}
 		}
 	</script>
+	
 </head>
 
 <body>
-	<div class="container">
-		<div class="mx-auto">
-			<div class="prose lg:prose-xl mx-auto">
+	<div class="">
+		<div class="grid grid-flow-auto grid-cols-[1fr,3fr] mx-auto p-6">
+			<aside class="h-screen sticky top-0 pt-2">
+				No TOC!
+			</aside>
+			<main class="prose lg:prose-xl">
 				<h1 class="text-6xl border-b-4 pb-2 border-b-tr_wintersky">Tier</h1>
 				<h1 id="todotier-write-these-docs">TODO(Tier): Write These Docs.</h1>
 <p>Sorry! We're working on this.</p>
 
-			</div>
+			</main>
 		</div>
 	</div>
 </body>
