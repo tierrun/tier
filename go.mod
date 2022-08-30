@@ -3,7 +3,7 @@ module tier.run
 go 1.19
 
 require (
-	blake.io/pages v0.0.0-20220812040613-c661a112fee7
+	blake.io/pages v0.0.0-00010101000000-000000000000
 	github.com/kr/pretty v0.3.0
 	github.com/stripe/stripe-go/v72 v72.122.0
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f

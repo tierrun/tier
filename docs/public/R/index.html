@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>tier.run</title>
+	
+
+	
+	
+	<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+	<script>
+		
+		tailwind.config = {
+			theme: {
+				extend: {
+					colors: {
+						tr_amber: '#ff7e00',
+						tr_cerulean: '#07b9de',
+						tr_wintersky: '#f460e6',
+						tr_purple: '#f460e6',
+						tr_colbalt: '#303080'
+					}
+				}
+			}
+		}
+	</script>
+	
+</head>
+
+<body>
+	<div class="">
+		<div class="grid grid-flow-auto grid-cols-[1fr,3fr] mx-auto p-6">
+			<aside class="h-screen sticky top-0 pt-2">
+				No TOC!
+			</aside>
+			<main class="">
+				<h1 class="text-6xl border-b-4 pb-2 border-b-tr_wintersky">Tier</h1>
+				<ul>
+<li><a href="#install-tier">Install Tier</a></li>
+<li><a href="#connect-to-stripe">Connect to Stripe</a>
+<ul>
+<li><a href="#verify">Verify</a></li>
+</ul>
+</li>
+</ul>
+<h2 id="install-tier">Install Tier</h2>
+<ol>
+<li><a href="https://tier.run/download">Download Tier</a></li>
+<li></li>
+</ol>
+<h2 id="connect-to-stripe">Connect to Stripe</h2>
+<pre><code>; tier connect
+To authenticate with Stripe, copy your API key from:
+
+	https://dashboard.stripe.com/test/apikeys (test key)
+	https://dashboard.stripe.com/apikeys      (live key)
+
+Stripe API key: ****************************************
+
+Success.
+
+---------
+  -----
+    -
+
+Welcome to Tier.
+
+You're now ready to push a pricing model to Stripe using Tier. To learn more,
+please visit:
+
+	https://tier.run/docs/push
+</code></pre>
+<p><strong>Environment variables</strong></p>
+<p>If set, Tier will honor the environment variables:</p>
+<ul>
+<li><code>STRIPE_API_KEY</code> - the API key to use for the CLI</li>
+<li><code>STRIPE_DEVICE_NAME</code> - the device name for the CLI, visible in the Dashboard.</li>
+</ul>
+<p>Example:</p>
+<pre><code>; STRIPE_API_KEY=sk_test_123 tier whoami
+</code></pre>
+<h3 id="verify">Verify</h3>
+<p>Verify tier is the right version, or is connected to stripe with the right
+account using the <code>tier version</code> and <code>tier whoami</code> commands, respectively.</p>
+<p><strong>Verify your CLI version</strong></p>
+<p>The <code>tier version</code> command reports the current version of the CLI which can be use to verify you're on the version you expect to be.</p>
+<p><strong>Verify the CLI's stripe connection</strong></p>
+<pre><code>; tier version
+</code></pre>
+<p>To verify your API keys are set correctly:</p>
+<pre><code>; tier whoami
+</code></pre>
+<p>The output should match the account you expect. If it does not, you may run
+<code>tier connect</code> or reset the environment variables to use different keys.</p>
+<ul>
+<li>
+<p>define features</p>
+</li>
+<li>
+<p>push features</p>
+</li>
+<li>
+<p>pull features (import)</p>
+</li>
+<li></li>
+<li>
+<p>features are the building block of pricing models</p>
+</li>
+<li>
+<p>a feature represent a thing a customer can consume, possibly for a price, and maybe up to some limit.</p>
+</li>
+<li>
+<p>features are <em>not</em> shared</p>
+</li>
+<li>
+<p>features define limits, pricing, and the billing period the limits and prices apply to</p>
+</li>
+<li>
+<p>features are arranged into plans (why?)</p>
+</li>
+<li>
+<p>samples of features</p>
+<ul>
+<li>minimal feature == free + no limit</li>
+<li>basic feature == base price, no tiers</li>
+<li>tiered feature = no feature base, 1 tier with a limit</li>
+<li>tiered (1 tier, $0/unit, base only) == same as no tiers with base</li>
+</ul>
+</li>
+<li>
+<p>feature schema reference</p>
+</li>
+<li>
+<p>Observe that no matter how hard you try, you can't override a plan that already exists.</p>
+<ul>
+<li>Copy and push hello plan</li>
+<li>Verify plan has correct:
+<ul>
+<li>monthly billing interval</li>
+<li>price is $1.00/mo</li>
+<li>is licensed</li>
+<li></li>
+</ul>
+</li>
+<li>Try adding and pushing another feature</li>
+<li>Try changing a plan that was already pushed</li>
+<li>Try adding two of the same plan@version to the model and pushing</li>
+<li>Prevent tampering with Tier plans using Stripe key scopes</li>
+</ul>
+</li>
+<li>
+<p>Confirm setup with example model</p>
+<ul>
+<li>pull empty model</li>
+<li>push hello feature</li>
+<li>check hello feature in stripe</li>
+<li>check hello feature in pull</li>
+</ul>
+</li>
+<li>
+<p>Make first pass</p>
+</li>
+<li>
+<p>build a full model</p>
+</li>
+<li>
+<p>push the full model</p>
+</li>
+<li>
+<p>push with confidence (safe)</p>
+<ul>
+<li>idempotent</li>
+<li>changes to already pushed plan does not update stripe</li>
+<li>add plan + push (see others do not update)</li>
+</ul>
+</li>
+<li>
+<p>name rules</p>
+<ul>
+<li>plan
+<ul>
+<li>has <code>plan:</code> prefix</li>
+<li>has <code>[\w\d_:\.]+</code> name</li>
+<li>has <code>[\w\d\.]+</code> version</li>
+</ul>
+</li>
+<li>feature
+<ul>
+<li>has <code>feature:</code> prefix</li>
+<li>has <code>[\w\d_:\.]+</code> name</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p>building a new model</p>
+</li>
+<li>
+<p>building a model from existing stripe prices and products</p>
+</li>
+</ul>
+<pre><code>// intercom.io starter plan:
+{
+        &quot;plans&quot;: {
+                &quot;plan:starter@0&quot;: {
+                        &quot;features&quot;: {
+                                &quot;feature:base&quot;: {
+                                        &quot;description&quot;: &quot;Base Price&quot;,
+                                        &quot;base&quot;: 7500,
+                                },
+                                &quot;feature:seats&quot;: {
+                                        &quot;aggregate&quot;: &quot;perpetual&quot;,
+                                        &quot;tiers&quot;: [
+                                                {&quot;upto&quot;: 2},
+                                                {&quot;upto&quot;: 25, &quot;price&quot;: 1900},
+                                        ],
+                                },
+                                &quot;feature:reach&quot;: {
+                                        &quot;aggregate&quot;: &quot;max/1000&quot;,
+                                        &quot;tiers&quot;: [
+                                                {&quot;upto&quot;: 1},
+                                                {&quot;upto&quot;: 5, &quot;price&quot;: 5000},
+                                        ],
+                                },
+                        },
+                },
+        },
+}
+</code></pre>
+<pre><code>
+</code></pre>
+
+			</main>
+		</div>
+	</div>
+</body>
+
+</html>

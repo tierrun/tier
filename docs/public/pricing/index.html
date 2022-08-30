@@ -33,165 +33,176 @@
 			<aside class="h-screen sticky top-0 pt-2">
 				No TOC!
 			</aside>
-			<main class="prose lg:prose-xl">
+			<main class="">
 				<h1 class="text-6xl border-b-4 pb-2 border-b-tr_wintersky">Tier</h1>
-				<h1 id="pricing-models">Pricing Models</h1>
+				<h1 id="using-tier">Using Tier</h1>
 <ul>
+<li><a href="#getting-started">Getting Started</a>
+<ul>
+<li><a href="#install">Install</a></li>
+<li><a href="#connect">Connect</a></li>
+<li><a href="#hello-pricing">Hello Pricing</a></li>
+</ul>
+</li>
 <li><a href="#pricing-models">Pricing Models</a>
 <ul>
 <li><a href="#introduction">Introduction</a></li>
-<li><a href="#pricing-syntax">Pricing syntax</a>
-<ul>
+<li><a href="#pricing-model-syntax">Pricing model syntax</a></li>
 <li><a href="#plans">Plans</a></li>
-</ul>
-</li>
-<li><a href="#pricing-samples">Pricing samples</a></li>
-<li><a href="#scheduling-plans">Scheduling plans</a></li>
-<li><a href="#mappings">Mappings</a>
+<li><a href="#features">Features</a>
 <ul>
-<li><a href="#plans-1">Plans</a></li>
-<li><a href="#features">Features</a></li>
+<li><a href="#licensed">Licensed</a></li>
+<li><a href="#metered">Metered</a></li>
+<li><a href="#limits">Limits</a></li>
 </ul>
 </li>
 </ul>
 </li>
 </ul>
-<p>Tier supports <a href="/TODO">PriceOps Pricing Models</a> using the <code>pricing.json</code> schema. Use
-Pricing Models to define plan, feature, and pricing relationships for <em>pushing</em>
-to a target billing engine.</p>
+<h1 id="getting-started">Getting Started</h1>
+<blockquote>
+<p>TODO: This section will guide you through pushing your first minimal pricing model to Stripe.</p>
+</blockquote>
+<h2 id="install">Install</h2>
+<blockquote>
+<p>TODO</p>
+</blockquote>
+<h2 id="connect">Connect</h2>
+<ul>
+<li>create stripe account (if not already there)</li>
+<li>install tier</li>
+<li>connect: <code>tier connect</code></li>
+<li>verify: <code>tier pull</code></li>
+</ul>
+<blockquote>
+<p>TODO</p>
+</blockquote>
+<h2 id="hello-pricing">Hello Pricing</h2>
+<blockquote>
+<p>TODO</p>
+</blockquote>
+<h1 id="pricing-models">Pricing Models</h1>
 <h2 id="introduction">Introduction</h2>
-<p>Tier Pricing Models are expressed as an <em>infinite</em> “human JSON” file referred to
-as <code>pricing.json</code>, which can be viewed as the whole file, or slices of the file.
-HuJSON is a superset of JSON that allows comments and trailing commas. The
-<em>infinite</em> nature of a <code>pricing.json</code> allows for working with the whole file, or a slice
-of the file at a time. This makes <code>pricing.json</code>files easy to maintain while
-staying read/writable by both humans and machines.</p>
-<p>TODO: address how to deal with large pricing.json. For simple cases, you can
-edit the policy file by hand in the admin panel. Organizations with more complex
-needs can use the API to automatically update rules from software.</p>
-<h2 id="pricing-syntax">Pricing syntax</h2>
-<p>The default pricing model is an empty one without any plans, features, or
-prices. If <code>tier pull</code> is run on a fresh Stripe account, this is what the output
-will be:</p>
-<pre tabindex="0" style="color:#f8f8f2;background-color:#272822">{
-	<span style="color:#f92672">&#34;plans&#34;</span>: {},
-}
-</pre><h3 id="plans">Plans</h3>
-<p>define a proper plan name</p>
-<ul>
-<li>provide the prefix <code>plan:</code></li>
-<li>provide a name after the prefix that contains only <code>[\w\d_]+</code>,</li>
-<li>provide a version after the name that starts with <code>@</code> followed by alphanumeric charters only.</li>
-</ul>
-<p>Each plan name must start with the prefix <code>plan:</code>,</p>
-<p>Plans describe and define a collection of one or more entitlements
-called &quot;features&quot;.  The minimal plan contains <em>only</em> a uniquely identifiable
-key. A minimal plan looks like:</p>
+<p>TODO</p>
+<h2 id="pricing-model-syntax">Pricing model syntax</h2>
+<p>Pricing Model Definitions are expressed in a single HuJSON file. HuJSON is a
+superset of JSON that allows for comments and trailing commas. This allows
+humans to maintain the file, while also being easy for machines to read.</p>
+<blockquote>
+<p>The term <code>pricing.json</code> is short for Pricing Model Definition File, and is
+used frequently below.</p>
+</blockquote>
+<p>An example <code>pricing.json</code>:</p>
 <pre tabindex="0" style="color:#f8f8f2;background-color:#272822">{
 	<span style="color:#f92672">&#34;plans&#34;</span>: {
-		<span style="color:#f92672">&#34;plan:empty@0&#34;</span>: {},
+		<span style="color:#f92672">&#34;plan:free@0&#34;</span>: {
+			<span style="color:#f92672">&#34;features&#34;</span>: {
+				<span style="color:#75715e">// free plan users get 1 free Todo list
+</span><span style="color:#75715e"></span>				<span style="color:#f92672">&#34;feature:todo:lists&#34;</span>: {
+					<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">1</span>}],
+				},
+
+				<span style="color:#75715e">// free plan users work alone
+</span><span style="color:#75715e"></span>				<span style="color:#f92672">&#34;feature:todo:seats&#34;</span>: {},
+			},
+
+			<span style="color:#f92672">&#34;plan:pro@0&#34;</span>: {
+				<span style="color:#f92672">&#34;features&#34;</span>: {
+					<span style="color:#75715e">// pro plan users get 10 Todo list for $9/mo
+</span><span style="color:#75715e"></span>					<span style="color:#f92672">&#34;feature:todo:lists&#34;</span>: {
+						<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">10</span>, <span style="color:#f92672">&#34;base&#34;</span>: <span style="color:#ae81ff">900</span>}],
+					},
+
+					<span style="color:#75715e">// pro plan users may have up to 2 more seats
+</span><span style="color:#75715e"></span>					<span style="color:#75715e">// at no additional charge
+</span><span style="color:#75715e"></span>					<span style="color:#f92672">&#34;feature:todo:seats&#34;</span>: {
+						<span style="color:#f92672">&#34;tiers&#34;</span>: [{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">2</span>}],
+					},
+				},
+			},
+
+			<span style="color:#75715e">// A special enterprise plan for the ACME company
+</span><span style="color:#75715e"></span>			<span style="color:#f92672">&#34;plan:acme@0&#34;</span>: {
+				<span style="color:#f92672">&#34;features&#34;</span>: {
+					<span style="color:#75715e">// Acme doesn&#39;t worry about spend on todo lists, but instead wants to
+</span><span style="color:#75715e"></span>					<span style="color:#75715e">// buy based on seats at a known cost they can measure: seats.
+</span><span style="color:#75715e"></span>
+					<span style="color:#75715e">// unlimited free lists
+</span><span style="color:#75715e"></span>					<span style="color:#f92672">&#34;feature:todo:lists&#34;</span>: {
+						<span style="color:#f92672">&#34;tiers&#34;</span>: [{}],
+					},
+
+					<span style="color:#f92672">&#34;feature:todo:seats&#34;</span>: {
+						<span style="color:#f92672">&#34;mode&#34;</span>:      <span style="color:#e6db74">&#34;volume&#34;</span>,
+						<span style="color:#f92672">&#34;aggregate&#34;</span>: <span style="color:#e6db74">&#34;last&#34;</span>,
+						<span style="color:#f92672">&#34;tiers&#34;</span>: [
+							{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">100</span>, <span style="color:#f92672">&#34;price&#34;</span>: <span style="color:#ae81ff">900</span>}, <span style="color:#75715e">// $9/mo until more than 100 users
+</span><span style="color:#75715e"></span>							{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">500</span>, <span style="color:#f92672">&#34;price&#34;</span>: <span style="color:#ae81ff">700</span>},
+							{<span style="color:#f92672">&#34;price&#34;</span>: <span style="color:#ae81ff">400</span>},
+						],
+					},
+				},
+			},
+		},
 	},
 }
-</pre><p>The minimal doesn't allow the user to do anything and is referred to as the
-<em>cancel plan</em>, because it denys access to all features.</p>
-<h2 id="pricing-samples">Pricing samples</h2>
+</pre><h2 id="plans">Plans</h2>
+<p>The <code>plans</code> section includes zero or more plans, keyed on their plan ID.</p>
+<p>An example plan looks like:</p>
+<pre tabindex="0" style="color:#f8f8f2;background-color:#272822">{
+	<span style="color:#f92672">&#34;plans&#34;</span>: {<span style="color:#f92672">&#34;plan:free@0&#34;</span>: {
+		<span style="color:#f92672">&#34;features&#34;</span>: {<span style="color:#f92672">&#34;feature:all&#34;</span>: {}},
+	}},
+}
+</pre><p>Plan IDs follow the format: <code>plan:&lt;name&gt;@&lt;version&gt;</code>. Both the name and version
+must contain at least one valid character. Valid name characters are in the
+alphanumeric range, the <code>_</code>, and the <code>:</code>.  Valid version characters are in the
+alphanumeric range, or the <code>_</code>.</p>
+<p>An example plan looks like:</p>
+<p>The <code>title</code> field specifies an optional human-friendly name for use in invoicing, pricing pages, etc. If no title is specified, the default title is the plan ID.</p>
+<p>The <code>features</code> section specifies any features subscribers
+of the plan are entitled to, and the pricing structure the subscriber will have
+agreed to be selecting the plan.</p>
+<h2 id="features">Features</h2>
+<p>The features section provides the means to:</p>
 <ul>
-<li>wws: develop simple plans</li>
-<li>wws: create tailored plans, entitlements, and limits for large customer</li>
-<li>wws: develop complex, incentive-based plans</li>
-<li>wws: rapidly tweak and test new pricing plans with limited sets of customers</li>
-<li>wws: introduce new pricing models without inadvertently disrupting existing customers billing expectations. (stripe prevents this already, but we should still talk about it)</li>
+<li>Specify the <em>features</em> subscribers of the plan are entitled to.</li>
+<li>Specify the <em>pricing structure</em> subscribers of the plan have agreed to per feature.</li>
 </ul>
-<h2 id="scheduling-plans">Scheduling plans</h2>
-<hr />
-<h2 id="mappings">Mappings</h2>
-<h3 id="plans-1">Plans</h3>
-<table>
-<thead>
-<tr>
-<th>Tier Plan</th>
-<th>Stripe Product Field</th>
-<th>Transform (if any)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>plans[PlanID]</code></td>
-<td><code>product.id</code></td>
-<td>makeID(PlanID)</td>
-</tr>
-<tr>
-<td><code>plans[PlanID]</code></td>
-<td><code>product.metadata[&quot;tier.plan&quot;]</code></td>
-<td></td>
-</tr>
-<tr>
-<td><code>plans[PlanID].title</code> OR <code>PlanID</code></td>
-<td><code>product.title</code></td>
-<td></td>
-</tr>
-<tr>
-<td><code>&quot;service&quot;</code></td>
-<td><code>product.type</code></td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<h3 id="features">Features</h3>
-<p>For each feature in a plan, an equivalent price is created in Stripe, each with its own price ID.</p>
-<table>
-<thead>
-<tr>
-<th>Tier Feature</th>
-<th>Stipe Price Field</th>
-<th>Transform</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>-</td>
-<td><code>makeID(join(PlanID, &quot;__&quot;, FeatureID))</code></td>
-<td></td>
-</tr>
-<tr>
-<td><code>currency</code></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td><code>title</code></td>
-<td><code>plans[PlanID].features[PlanID].title</code> OR <code>PlanID</code></td>
-<td></td>
-</tr>
-<tr>
-<td><code>price.type</code></td>
-<td><code>&quot;service&quot;</code></td>
-<td>Currently, only services are supported</td>
-</tr>
-</tbody>
-</table>
-<p>&lt;--</p>
-<ul>
-<li>
-<p>open pricing.json</p>
-</li>
-<li>
-<p>add plan:free@0 (without title)</p>
-</li>
-<li>
-<p>add feature:base (without title)</p>
-</li>
-<li>
-<p>add</p>
-</li>
-<li>
-<p>you have created a new pricing model, pushed it to Stripe, verified it mapped correctly, added it to a customers schedule, and verified it worked</p>
-</li>
-<li>
-<p>push your completed pricing model</p>
-</li>
+<p>Each feature is keyed on a feature ID. Feature IDs follow the format:
+<code>feature:&lt;name&gt;</code>. The name must contain at least one valid character. Valid name
+characters are in the alphanumeric range, the <code>_</code>, and the <code>:</code>.</p>
+<p>An example <code>feature</code> definition looks like:</p>
+<pre tabindex="0" style="color:#f8f8f2;background-color:#272822">{
+	<span style="color:#f92672">&#34;feature:seats&#34;</span>: {
+		<span style="color:#f92672">&#34;interval&#34;</span>:  <span style="color:#e6db74">&#34;@monthly&#34;</span>,
+		<span style="color:#f92672">&#34;aggregate&#34;</span>: <span style="color:#e6db74">&#34;perpetual&#34;</span>,
+		<span style="color:#f92672">&#34;currency&#34;</span>:  <span style="color:#e6db74">&#34;eur&#34;</span>,
+		<span style="color:#f92672">&#34;mode&#34;</span>:      <span style="color:#e6db74">&#34;volume&#34;</span>,
+		<span style="color:#f92672">&#34;tiers&#34;</span>: [
+			{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">10</span>, <span style="color:#f92672">&#34;price&#34;</span>: <span style="color:#ae81ff">1000</span>},
+			{<span style="color:#f92672">&#34;upto&#34;</span>: <span style="color:#ae81ff">50</span>, <span style="color:#f92672">&#34;price&#34;</span>: <span style="color:#ae81ff">700</span>},
+			{<span style="color:#f92672">&#34;price&#34;</span>: <span style="color:#ae81ff">400</span>},
+		],
+	},
+}
+</pre><p>By default, a feature without any fields or tiers set, is a free feature with an
+unlimited limit.</p>
+<pre tabindex="0" style="color:#f8f8f2;background-color:#272822">{
+	<span style="color:#f92672">&#34;feature:seats&#34;</span>: {},
+}
+</pre><ul>
+<li><code>currency</code></li>
+<li><code>base</code></li>
+<li><code>aggregate</code></li>
+<li><code>mode</code></li>
+<li><code>tiers</code></li>
 </ul>
-<p>--&gt;</p>
+<h3 id="licensed">Licensed</h3>
+<h3 id="metered">Metered</h3>
+<h3 id="limits">Limits</h3>
+<p>The <code>features</code> is used to list each feature, and it's pricing for the plan it is
+in.</p>
 
 			</main>
 		</div>
