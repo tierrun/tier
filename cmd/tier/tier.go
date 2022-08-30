@@ -10,10 +10,12 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"text/tabwriter"
 
 	"golang.org/x/exp/slices"
 	"tier.run/pricing"
 	"tier.run/pricing/schema"
+	"tier.run/values"
 )
 
 var (
@@ -23,7 +25,7 @@ var (
 )
 
 var (
-	errUsage      = errors.New("usage: tier <connect|push|pull|connect> [<args>]")
+	errUsage      = errors.New("usage: tier <connect|push|pull|ls> [<args>]")
 	errPushFailed = errors.New("push failed")
 )
 
@@ -121,17 +123,30 @@ func tier(cmd string, args []string) error {
 
 		filterNonTierPlans(m.Plans)
 
+		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
+		defer tw.Flush()
+
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			"PLAN",
+			"FEATURE",
+			"MODE",
+			"AGG",
+			"BASE",
+			"LINK",
+		)
+
 		for _, p := range m.Plans {
 			link, err := url.JoinPath(dashURL[tc().Live()], "products", pricing.MakeID(p.ID))
 			if err != nil {
 				return err
 			}
+
 			for _, f := range p.Features {
-				fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%d\t%s\n",
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
 					f.Plan,
 					f.ID,
-					f.Mode,
-					f.Aggregate,
+					values.Coalesce(f.Mode, "licensed"),
+					values.Coalesce(f.Aggregate, "-"),
 					f.Base,
 					link,
 				)
