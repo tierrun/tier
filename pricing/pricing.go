@@ -258,7 +258,10 @@ func (c *Client) PushPlan(ctx context.Context, p *schema.Plan, f ReportFunc) err
 		PlanProviderID: convert.MakeID(p.ID),
 		Err:            err,
 	})
-	if err != nil && !errors.Is(err, ErrPlanExists) {
+	if err != nil {
+		if errors.Is(err, ErrPlanExists) {
+			return nil
+		}
 		return err
 	}
 
