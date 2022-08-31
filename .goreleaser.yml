@@ -1,0 +1,98 @@
+project_name: tier
+
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+    # you may remove this if you don't need go generate
+    - go generate ./...
+release:
+  # Repo in which the release will be created.
+  # Default is extracted from the origin remote URL or empty if its private hosted.
+  github:
+    owner: tierrun
+    name: tier
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/tier
+    binary: tier
+archives:
+  - replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: i386
+      amd64: x86_64
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+# .goreleaser.yaml
+brews:
+  -
+    # Name template of the recipe
+    # Default to project name
+    name: tier
+
+    # NOTE: make sure the url_template, the token and given repo (github or gitlab) owner and name are from the
+    # same kind. We will probably unify this in the next major version like it is done with scoop.
+
+    # GitHub/GitLab repository to push the formula to
+    tap:
+      owner: tierrun
+      name: homebrew-tap
+
+    # Git author used to commit to the repository.
+    # Defaults are shown.
+    commit_author:
+      name: Tier Open-source
+      email: oss@tier.run
+
+    # The project name and current git tag are used in the format string.
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+
+    # Folder inside the repository to put the formula.
+    # Default is the root folder.
+    folder: Formula
+
+    # Caveats for the user of your binary.
+    # Default is empty.
+    caveats: "How to use this binary"
+
+    # Your app's homepage.
+    # Default is empty.
+    homepage: "https://tier.run"
+
+    # Template of your app's description.
+    # Default is empty.
+    description: "Software to create fast and easy drum rolls."
+
+    # Setting this will prevent goreleaser to actually try to commit the updated
+    # formula - instead, the formula file will be stored on the dist folder only,
+    # leaving the responsibility of publishing it to the user.
+    # If set to auto, the release will not be uploaded to the homebrew tap
+    # in case there is an indicator for prerelease in the tag e.g. v1.0.0-rc1
+    # Default is false.
+    skip_upload: true
+
+    # So you can `brew test` your formula.
+    # Default is empty.
+    test: |
+      system "#{bin}/tier version"
