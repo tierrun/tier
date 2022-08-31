@@ -188,7 +188,8 @@ func TestPushExistingPlanAndFeatures(t *testing.T) {
 		}
 	}
 
-	checkPush(nil, `{"plans": {"plan:test@0": {"features": {"feature:test": {}}}}}`)
+	// errors produced in this test should be "soft" and emitted via the
+	// report function; other should be considered fatal and returned.
 	checkPush(nil, `{"plans": {"plan:test@0": {"features": {"feature:test": {}}}}}`)
 	checkPush(nil, `{"plans": {"plan:test@0": {"features": {"feature:test": {}}}}}`)
 	checkPush(nil, `{"plans": {"plan:test@0": {"features": {"feature:xxxx": {}}}}}`)
@@ -197,11 +198,7 @@ func TestPushExistingPlanAndFeatures(t *testing.T) {
 		{"stripe", "plan:test@0", "tier_plan_test_0", "", "", nil},
 		{"stripe", "plan:test@0", "tier_plan_test_0", "feature:test", "tier_plan_test_0__feature_test", nil},
 		{"stripe", "plan:test@0", "tier_plan_test_0", "", "", ErrPlanExists},
-		{"stripe", "plan:test@0", "tier_plan_test_0", "feature:test", "tier_plan_test_0__feature_test", ErrFeatureExists},
 		{"stripe", "plan:test@0", "tier_plan_test_0", "", "", ErrPlanExists},
-		{"stripe", "plan:test@0", "tier_plan_test_0", "feature:test", "tier_plan_test_0__feature_test", ErrFeatureExists},
-		{"stripe", "plan:test@0", "tier_plan_test_0", "", "", ErrPlanExists},
-		{"stripe", "plan:test@0", "tier_plan_test_0", "feature:xxxx", "tier_plan_test_0__feature_xxxx", nil},
 	}
 
 	t.Logf("got: %# v", pretty.Formatter(got))

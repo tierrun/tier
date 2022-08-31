@@ -68,18 +68,22 @@ func tier(cmd string, args []string) error {
 		defer f.Close()
 
 		if err := tc().PushJSON(ctx, f, func(e *pricing.PushEvent) {
-			if e.Feature == "" {
-				return // no need to report plan creation
-			}
 			status := "ok"
-
-			reason := "created"
-			if e.Err != nil {
+			var reason string
+			switch e.Err {
+			case nil:
+				reason = "created"
+			case pricing.ErrFeatureExists:
+				reason = "feature already exists"
+			case pricing.ErrPlanExists:
+				reason = "plan already exists"
+			default:
 				status = "failed"
 				reason = e.Err.Error()
 			}
-			if errors.Is(e.Err, pricing.ErrFeatureExists) {
-				reason = "already exists"
+
+			if e.Feature == "" && reason == "" {
+				return // no need to report plan creation
 			}
 
 			link, err := url.JoinPath(dashURL[tc().Live()], "products", e.PlanProviderID)
