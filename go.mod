@@ -3,7 +3,6 @@ module tier.run
 go 1.19
 
 require (
-	blake.io/pages v0.0.0-00010101000000-000000000000
 	github.com/kr/pretty v0.3.0
 	github.com/stripe/stripe-go/v72 v72.122.0
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
@@ -18,6 +17,7 @@ require (
 )
 
 require (
+	blake.io/pages v0.0.0-20220814225412-f2d5f7b10ccf // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/BurntSushi/toml v0.4.1 // indirect
 	github.com/alecthomas/chroma v0.9.4 // indirect
@@ -42,5 +42,3 @@ require (
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
 )
-
-replace blake.io/pages => ../pages

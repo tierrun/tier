@@ -1,3 +1,5 @@
+blake.io/pages v0.0.0-20220814225412-f2d5f7b10ccf h1:FXR8TBwpEzKcdc3DUMwKDjiExt2oyy67f4TzAh0lQT0=
+blake.io/pages v0.0.0-20220814225412-f2d5f7b10ccf/go.mod h1:joHFByjNrKmtml+ZLV4327YahknZzCMjt1ZaVOrCQ+o=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:/vQbFIOMbk2FiG/kXiLl8BRyzTWDw7gX/Hz7Dd5eDMs=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:hN7oaIRCjzsZ2dE+yG5k+rsdt3qcwykqK6HVGcKwsw4=
 github.com/99designs/keyring v1.2.1 h1:tYLp1ULvO7i3fI5vE21ReQuj99QFSs7lGm0xWyJo87o=
