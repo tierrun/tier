@@ -17,7 +17,7 @@ type tick struct{}
 
 var (
 	Data  any
-	Funcs = template.FuncMap{
+	Funcs = map[string]any{
 		// model is a template function that validates, formats, and
 		// returns a pricing model json.
 		"model": func(s string) (template.HTML, error) {
