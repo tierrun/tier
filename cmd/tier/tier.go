@@ -38,8 +38,7 @@ var (
 
 // Errors
 var (
-	errUsage      = errors.New("usage: tier [--live] <connect|push|pull|ls> [<args>]")
-	errPushFailed = errors.New("push failed")
+	errUsage = errors.New("usage: tier [--live] <connect|push|pull|ls> [<args>]")
 )
 
 func main() {
@@ -111,10 +110,7 @@ func tier(cmd string, args []string) error {
 				reason,
 			)
 		}); err != nil {
-			if errors.As(err, &pricing.DecodeError{}) {
-				return err
-			}
-			return errPushFailed
+			return err
 		}
 		return nil
 	case "pull":
