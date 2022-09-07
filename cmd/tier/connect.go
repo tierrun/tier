@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,10 +14,6 @@ import (
 	"tier.run/cmd/tier/profile"
 	"tier.run/fetch"
 )
-
-func init() {
-	log.SetFlags(log.Llongfile)
-}
 
 func connect() error {
 	ctx := context.Background()
@@ -112,10 +107,14 @@ func fetchProfile(ctx context.Context, pollURL string) (*profile.Profile, error)
 	}
 }
 
-var envAPIKey = os.Getenv("STRIPE_API_KEY")
-
+// getKey returns the API from the environment variable STRIPE_API_KEY, or the
+// live mode key in config.json, or the test mode key in config.json, in that
+// order. It returns an error if no key is found.
 func getKey() (string, error) {
 	if envAPIKey != "" {
+		if *flagLive {
+			return "", errors.New("cannot use --live with STRIPE_API_KEY set")
+		}
 		return envAPIKey, nil
 	}
 
@@ -124,10 +123,14 @@ func getKey() (string, error) {
 		return "", err
 	}
 
+	if *flagLive {
+		return p.LiveAPIKey, nil
+	}
 	return p.TestAPIKey, nil
 }
 
-type Error struct {
+//lint:ignore U1000 this type is used as a type parameter, but staticcheck seems to not be able to detect that yet. Remove this comment when staticcheck will stop complaining.
+type jsonError struct {
 	Err struct {
 		Code    string
 		Param   string
@@ -135,12 +138,12 @@ type Error struct {
 	} `json:"error"`
 }
 
-func (e Error) Error() string {
+func (e *jsonError) Error() string {
 	return fmt.Sprintf("stripe: %s: %s: %s", e.Err.Code, e.Err.Param, e.Err.Message)
 }
 
 func fetchOK[R any](ctx context.Context, method, urlStr string, body any, opts ...any) (R, error) {
-	return fetch.OK[R, *Error](ctx, http.DefaultClient, method, urlStr, body, append([]any{http.Header{
+	return fetch.OK[R, *jsonError](ctx, http.DefaultClient, method, urlStr, body, append([]any{http.Header{
 		"Content-Type":               []string{"application/x-www-form-urlencoded"},
 		"Accept-Encoding":            []string{"identity"},
 		"User-Agent":                 []string{"tier (version TODO)"},
