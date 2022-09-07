@@ -71,7 +71,9 @@ func Save(name string, p *Profile) error {
 	}
 	defer f.Close()
 
-	return json.NewEncoder(f).Encode(c)
+	e := json.NewEncoder(f)
+	e.SetIndent("", "    ")
+	return e.Encode(c)
 }
 
 func open() (*os.File, error) {

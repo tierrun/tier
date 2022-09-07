@@ -13,19 +13,32 @@ import (
 	"text/tabwriter"
 
 	"golang.org/x/exp/slices"
+	"tier.run/cmd/tier/profile"
 	"tier.run/pricing"
 	"tier.run/pricing/schema"
 	"tier.run/values"
 )
 
+// Flags
+var (
+	flagLive = flag.Bool("live", false, "use live Stripe key (default is false)")
+)
+
+// Env
+var (
+	envAPIKey = os.Getenv("STRIPE_API_KEY")
+)
+
+// resettable IO for testing
 var (
 	stdin  io.Reader = os.Stdin
 	stdout io.Writer = os.Stdout
 	stderr io.Writer = os.Stderr
 )
 
+// Errors
 var (
-	errUsage      = errors.New("usage: tier <connect|push|pull|ls> [<args>]")
+	errUsage      = errors.New("usage: tier [--live] <connect|push|pull|ls> [<args>]")
 	errPushFailed = errors.New("push failed")
 )
 
@@ -176,24 +189,15 @@ var tierClient *pricing.Client
 
 func tc() *pricing.Client {
 	if tierClient == nil {
-		c, err := pricing.FromEnv()
-		if err == nil {
-			tierClient = c
-			return tierClient
-		}
-		if errors.Is(err, pricing.ErrKeyNotSet) {
-			key, err := getKey()
-			if err != nil {
-				fmt.Fprintf(stderr, "tier: There was an error looking up your Stripe API Key: %v\n", err)
-				fmt.Fprintf(stderr, "tier: Please run `tier connect` to connect your Stripe account\n")
-				os.Exit(1)
-			}
-			tierClient = &pricing.Client{StripeKey: key}
-			return tierClient
-		}
+		key, err := getKey()
 		if err != nil {
-			log.Fatalf("tier: %v", err)
+			fmt.Fprintf(stderr, "tier: There was an error looking up your Stripe API Key: %v\n", err)
+			if errors.Is(err, profile.ErrProfileNotFound) {
+				fmt.Fprintf(stderr, "tier: Please run `tier connect` to connect your Stripe account\n")
+			}
+			os.Exit(1)
 		}
+		tierClient = &pricing.Client{StripeKey: key}
 	}
 	return tierClient
 }
