@@ -153,5 +153,7 @@ type FeaturePlan struct {
 }
 
 func Validate(p *Plan) error {
-	return nil
+	var check Checker
+	check.Plan(p.ID)
+	return check.Err()
 }

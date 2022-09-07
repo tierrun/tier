@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"tailscale.com/util/multierr"
@@ -11,9 +12,13 @@ type Checker struct {
 	errs []error
 }
 
+var (
+	planRegexp = regexp.MustCompile(`^plan:[a-z0-9:]+@[a-z0-9]+$`)
+)
+
 func (c *Checker) Plan(id string) {
-	if !strings.HasPrefix(id, "plan:") {
-		c.errs = append(c.errs, fmt.Errorf("plan ID (%q) must start with 'plan:'", id))
+	if !planRegexp.MatchString(id) {
+		c.errs = append(c.errs, fmt.Errorf("plan ID (%q) must match %q", id, planRegexp.String()))
 	}
 }
 
