@@ -4,90 +4,148 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"time"
 
-	"golang.org/x/term"
+	"tailscale.com/logtail/backoff"
 
-	"github.com/99designs/keyring"
-	"tier.run/pricing"
+	"tier.run/cmd/tier/profile"
+	"tier.run/fetch"
 )
 
+func init() {
+	log.SetFlags(log.Llongfile)
+}
+
 func connect() error {
-	fmt.Print(`To authenticate with Stripe, copy your API key from:
+	ctx := context.Background()
 
-	https://dashboard.stripe.com/test/apikeys (test key)
-	https://dashboard.stripe.com/apikeys      (live key)
-
-Stripe API key: `)
-
-	defer fmt.Println()
-
-	apiKey, err := term.ReadPassword(0)
+	deviceName, err := os.Hostname()
 	if err != nil {
 		return err
 	}
 
-	fmt.Print(strings.Repeat("*", 40))
-
-	if err := setKey(apiKey); err != nil {
-		return err
-	}
-
-	_, err = tc().WhoAmI(context.Background())
+	ls, err := getLinks(ctx, "https://api.stripe.com", deviceName)
 	if err != nil {
 		return err
 	}
 
-	fmt.Print(`
+	fmt.Fprintf(stdout, `Tier connect instructions:
 
-Success.
+1. Take a mental note of the following code:
 
----------
-  -----
-    -
+	%s
 
-Welcome to Tier.
+2. Follow this link and verify the above code:
 
-You're now ready to push a pricing model to Stripe using Tier. To learn more,
-please visit:
+	%s
 
-	https://tier.run/docs/push
+3. Return here and continue using Tier.
+
+`, ls.VerificationCode, ls.BrowserURL)
+
+	p, err := fetchProfile(ctx, ls.PollURL)
+	if err != nil {
+		return err
+	}
+
+	if err := profile.Save("tier", p); err != nil {
+		return err
+	}
+
+	// TODO(bmizerany): check whoami to verify keys are correct
+
+	fmt.Printf(`Welcome to Tier!
+
+ ---------
+   -----
+     -
+
+You may now use the Tier CLI to manage you pricing model in Stripe.
+
+Please continue to https://tier.run/docs for more information.
 `)
 
 	return nil
 }
 
-const (
-	keyringLabel     = "Tier Credentials"
-	keyringService   = "Tier Credentials"
-	keyringStripeKey = "stripe.cli.tier.run"
-)
-
-func setKey(apiKey []byte) error {
-	if !pricing.IsValidKey(string(apiKey)) {
-		return errors.New("invalid key: key must start with (\"sk_\") or (\"rk_\") prefix")
-	}
-	return ring().Set(keyring.Item{
-		Label: keyringLabel,
-		Key:   keyringStripeKey,
-		Data:  apiKey,
-	})
+type Links struct {
+	BrowserURL       string `json:"browser_url"`
+	PollURL          string `json:"poll_url"`
+	VerificationCode string `json:"verification_code"`
 }
 
+const defaultDashboardBaseURL = "https://dashboard.stripe.com"
+
+func getLinks(ctx context.Context, baseURL string, deviceName string) (*Links, error) {
+	urlStr, err := url.JoinPath(defaultDashboardBaseURL, "/stripecli/auth")
+	if err != nil {
+		return nil, err
+	}
+
+	return fetchOK[*Links](ctx, "POST", urlStr, url.Values{
+		"device_name": []string{deviceName},
+	}.Encode())
+
+}
+
+var errNotRedeemed = errors.New("not redeemed")
+
+func fetchProfile(ctx context.Context, pollURL string) (*profile.Profile, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	bo := backoff.NewBackoff("keys", nopLogf, 1*time.Second)
+	for {
+		ks, err := fetchOK[*profile.Profile](ctx, "GET", pollURL, nil)
+		if err == nil {
+			if ks.Redeemed {
+				return ks, nil
+			} else {
+				err = errNotRedeemed
+			}
+		}
+		bo.BackOff(ctx, err)
+	}
+}
+
+var envAPIKey = os.Getenv("STRIPE_API_KEY")
+
 func getKey() (string, error) {
-	i, err := ring().Get(keyringStripeKey)
+	if envAPIKey != "" {
+		return envAPIKey, nil
+	}
+
+	p, err := profile.Load("tier")
 	if err != nil {
 		return "", err
 	}
-	return string(i.Data), nil
+
+	return p.TestAPIKey, nil
 }
 
-func ring() keyring.Keyring {
-	kr, err := keyring.Open(keyring.Config{
-		ServiceName: keyringService,
-	})
-	if err != nil {
-		panic(err)
-	}
-	return kr
+type Error struct {
+	Err struct {
+		Code    string
+		Param   string
+		Message string
+	} `json:"error"`
 }
+
+func (e Error) Error() string {
+	return fmt.Sprintf("stripe: %s: %s: %s", e.Err.Code, e.Err.Param, e.Err.Message)
+}
+
+func fetchOK[R any](ctx context.Context, method, urlStr string, body any, opts ...any) (R, error) {
+	return fetch.OK[R, *Error](ctx, http.DefaultClient, method, urlStr, body, append([]any{http.Header{
+		"Content-Type":               []string{"application/x-www-form-urlencoded"},
+		"Accept-Encoding":            []string{"identity"},
+		"User-Agent":                 []string{"tier (version TODO)"},
+		"X-Stripe-Client-User-Agent": []string{"xxx"},
+	}}, opts...)...)
+}
+
+func nopLogf(format string, args ...interface{}) {}
