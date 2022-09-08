@@ -28,8 +28,8 @@ func Validate(p *Plan) error {
 		}
 
 		for i, t := range f.Tiers {
-			if t.Upto < 0 {
-				e.reportf("plans[%q].features[%q].tiers[%d]: upto must be positive", p.ID, f.ID, i)
+			if t.Upto < 1 {
+				e.reportf("plans[%q].features[%q].tiers[%d]: upto must be greater than zero", p.ID, f.ID, i)
 			}
 			if t.Price < 0 {
 				e.reportf("plans[%q].features[%q].tiers[%d]: price must be positive", p.ID, f.ID, i)
