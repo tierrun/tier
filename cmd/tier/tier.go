@@ -118,7 +118,7 @@ func tier(cmd string, args []string) error {
 			return err
 		}
 
-		filterNonTierPlans(m.Plans)
+		m.Plans = filterNonTierPlans(m.Plans)
 
 		out, err := json.MarshalIndent(m, "", "     ")
 		if err != nil {
@@ -133,7 +133,7 @@ func tier(cmd string, args []string) error {
 			return err
 		}
 
-		filterNonTierPlans(m.Plans)
+		m.Plans = filterNonTierPlans(m.Plans)
 
 		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
 		defer tw.Flush()
@@ -201,7 +201,7 @@ func filterNonTierPlans(plans schema.Plans) schema.Plans {
 	var dst schema.Plans
 	for _, p := range plans {
 		if p.ID != "" {
-			plans = append(dst, p)
+			dst = append(dst, p)
 		}
 	}
 	return dst
