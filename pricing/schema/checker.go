@@ -12,6 +12,11 @@ import (
 func Validate(p *Plan) error {
 	var e errors
 	e.report(validatePlanID(p.ID))
+
+	if len(p.Features) == 0 {
+		e.reportf("plans[%q]: plans must have at least one feature", p.ID)
+	}
+
 	for _, f := range p.Features {
 		e.report(validateFeatureID(p.ID, f.ID))
 
@@ -59,11 +64,11 @@ func validatePlanID(id string) error {
 func validateFeatureID(planID, id string) error {
 	var e errors
 	prefix, name, _ := strings.Cut(id, ":")
-	if prefix != "plan" {
-		e.reportf("plans[%q].features[%q]: plan names must start with 'feature:'", planID, id)
+	if prefix != "feature" {
+		e.reportf("plans[%q].features[%q]: feature names must start with 'feature:'", planID, id)
 	}
 	if !isAlphaNumeric(name, ":") {
-		e.reportf("plans[%q].features[%q]: feature names must contain only letters, digits, or ':'s", planID, id)
+		e.reportf("plans[%q].features[%q]: feature names must not be empty and contain only letters, digits, or ':'s", planID, id)
 	}
 	return multierr.New(e...)
 }
@@ -81,6 +86,9 @@ func (e *errors) reportf(format string, args ...any) {
 }
 
 func isAlphaNumeric(s string, extra string) bool {
+	if s == "" {
+		return false
+	}
 	for _, r := range s {
 		if slices.Contains([]rune(extra), r) {
 			continue

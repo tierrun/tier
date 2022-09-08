@@ -31,7 +31,10 @@ func TestValidatePlanID(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.planID, func(t *testing.T) {
-			p := &Plan{ID: tc.planID}
+			p := &Plan{
+				ID:       tc.planID,
+				Features: Features{{ID: "feature:x"}},
+			}
 			err := Validate(p)
 			if tc.valid && err != nil {
 				t.Errorf("unexpected error: %v", err)
