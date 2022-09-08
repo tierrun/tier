@@ -12,7 +12,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"golang.org/x/exp/slices"
 	"tier.run/cmd/tier/profile"
 	"tier.run/pricing"
 	"tier.run/pricing/schema"
@@ -199,15 +198,11 @@ func tc() *pricing.Client {
 }
 
 func filterNonTierPlans(plans schema.Plans) schema.Plans {
-	for i, p := range plans {
-		if p.ID == "" {
-			plans = slices.Delete(plans, i, i+1)
-		}
-		for j, f := range p.Features {
-			if f.Err != nil {
-				p.Features = slices.Delete(p.Features, j, j+1)
-			}
+	var dst schema.Plans
+	for _, p := range plans {
+		if p.ID != "" {
+			plans = append(dst, p)
 		}
 	}
-	return plans
+	return dst
 }
