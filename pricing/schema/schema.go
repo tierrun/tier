@@ -151,9 +151,3 @@ type FeaturePlan struct {
 	PlanID         string
 	*Feature
 }
-
-func Validate(p *Plan) error {
-	var check Checker
-	check.Plan(p.ID)
-	return check.Err()
-}
