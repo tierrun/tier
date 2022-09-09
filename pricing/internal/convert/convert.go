@@ -37,10 +37,20 @@ var intervalLookup = map[schema.Interval]stripe.PriceRecurringInterval{
 	"@yearly":  stripe.PriceRecurringIntervalYear,
 }
 
+var aggregateLookup = map[schema.Aggregate]stripe.PlanAggregateUsage{
+	"sum":       stripe.PlanAggregateUsageSum,
+	"max":       stripe.PlanAggregateUsageMax,
+	"last":      stripe.PlanAggregateUsageLastDuringPeriod,
+	"perpetual": stripe.PlanAggregateUsageLastEver,
+}
+
 func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stripe.PriceParams, error) {
-	interval := intervalLookup[v.Interval]
-	if interval == "" {
-		return nil, fmt.Errorf("invalid interval %q", v.Interval)
+	interval := stripe.PriceRecurringIntervalMonth
+	if v.Interval != "" {
+		interval = intervalLookup[v.Interval]
+		if interval == "" {
+			return nil, fmt.Errorf("invalid interval %q", v.Interval)
+		}
 	}
 
 	pp := &stripe.PriceParams{
@@ -76,10 +86,18 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 			return a.Upto < b.Upto
 		})
 
+		aggregate := stripe.PlanAggregateUsageSum
+		if v.Aggregate != "" {
+			aggregate = aggregateLookup[v.Aggregate]
+			if aggregate == "" {
+				return nil, fmt.Errorf("invalid aggregate %q", v.Aggregate)
+			}
+		}
+
 		pp.UnitAmount = nil
 		pp.BillingScheme = ptr("tiered")
 		pp.Recurring.UsageType = ptr("metered")
-		pp.Recurring.AggregateUsage = ptr(string(v.Aggregate))
+		pp.Recurring.AggregateUsage = ptr(string(aggregate))
 		pp.TiersMode = ptr(string(v.Mode))
 	}
 

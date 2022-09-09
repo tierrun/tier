@@ -26,9 +26,10 @@ const (
 type Aggregate string
 
 const (
-	AggregateSum Aggregate = "sum"
-	AggregateMin Aggregate = "min"
-	AggregateMax Aggregate = "max"
+	AggregateSum       Aggregate = "sum"
+	AggregateMax       Aggregate = "max"
+	AggregateLast      Aggregate = "last"
+	AggregatePerpetual Aggregate = "perpetual"
 )
 
 type Model struct {

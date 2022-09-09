@@ -200,6 +200,26 @@ func TestToStripePriceParams(t *testing.T) {
 		},
 		{
 			fp: &schema.Feature{
+				ID:        "feature:aggregate:perpetual",
+				Aggregate: "perpetual",
+				Tiers:     []schema.Tier{{Upto: 10}},
+			},
+			want: &stripe.PriceParams{
+				BillingScheme: ptr("tiered"),
+				Currency:      ptr("usd"),
+				Recurring: &stripe.PriceRecurringParams{
+					AggregateUsage: ptr("last_ever"),
+					UsageType:      ptr("metered"),
+					Interval:       ptr("month"),
+				},
+				TiersMode: ptr("graduated"),
+				Tiers: []*stripe.PriceTierParams{
+					{UpToInf: ptr(true), FlatAmount: p64(0), UnitAmount: p64(0)},
+				},
+			},
+		},
+		{
+			fp: &schema.Feature{
 				ID:       "feature:currency",
 				Currency: "eur",
 			},
