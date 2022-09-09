@@ -85,9 +85,8 @@ func TestToStripePriceParamsTierWithZero(t *testing.T) {
 
 func TestToStripePriceParams(t *testing.T) {
 	defaultRecurring := &stripe.PriceRecurringParams{
-		Interval:       ptr("month"),
-		UsageType:      ptr("licensed"),
-		AggregateUsage: ptr("sum"),
+		Interval:  ptr("month"),
+		UsageType: ptr("licensed"),
 	}
 
 	defaultTieredRecurring := &stripe.PriceRecurringParams{
@@ -128,9 +127,8 @@ func TestToStripePriceParams(t *testing.T) {
 				BillingScheme: ptr("per_unit"),
 				Currency:      ptr("usd"),
 				Recurring: &stripe.PriceRecurringParams{
-					Interval:       ptr("year"),
-					UsageType:      ptr("licensed"),
-					AggregateUsage: ptr("sum"),
+					Interval:  ptr("year"),
+					UsageType: ptr("licensed"),
 				},
 				UnitAmount: p64(0),
 			},
