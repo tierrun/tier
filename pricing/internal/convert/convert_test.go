@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/kr/pretty"
 	"github.com/stripe/stripe-go/v72"
 	"kr.dev/diff"
 	"tier.run/pricing/schema"
@@ -84,8 +85,9 @@ func TestToStripePriceParamsTierWithZero(t *testing.T) {
 
 func TestToStripePriceParams(t *testing.T) {
 	defaultRecurring := &stripe.PriceRecurringParams{
-		Interval:  ptr("month"),
-		UsageType: ptr("licensed"),
+		Interval:       ptr("month"),
+		UsageType:      ptr("licensed"),
+		AggregateUsage: ptr("sum"),
 	}
 
 	defaultTieredRecurring := &stripe.PriceRecurringParams{
@@ -126,8 +128,9 @@ func TestToStripePriceParams(t *testing.T) {
 				BillingScheme: ptr("per_unit"),
 				Currency:      ptr("usd"),
 				Recurring: &stripe.PriceRecurringParams{
-					Interval:  ptr("year"),
-					UsageType: ptr("licensed"),
+					Interval:       ptr("year"),
+					UsageType:      ptr("licensed"),
+					AggregateUsage: ptr("sum"),
 				},
 				UnitAmount: p64(0),
 			},
@@ -351,15 +354,20 @@ func TestToFeature(t *testing.T) {
 					"tier.plan":    "plan:test@0",
 					"tier.limit":   "inf",
 				},
-				Recurring: &stripe.PriceRecurring{
-					Interval: "day",
+				Recurring: recurringMetered,
+				Tiers: []*stripe.PriceTier{
+					{UpTo: 0, FlatAmount: 2, UnitAmount: 3},
 				},
 			},
 			want: &schema.Feature{
 				ID:         "feature:test:providerID",
 				ProviderID: "pr_123",
 				Plan:       "plan:test@0",
-				Interval:   "@daily",
+				Interval:   "@monthly",
+				Aggregate:  "sum",
+				Tiers: []schema.Tier{
+					{Upto: schema.Inf, Base: 2, Price: 3},
+				},
 			},
 		},
 		{
@@ -369,14 +377,12 @@ func TestToFeature(t *testing.T) {
 					"tier.plan":    "plan:test@0",
 					"tier.limit":   "inf",
 				},
-				Recurring: &stripe.PriceRecurring{
-					Interval: "day",
-				},
+				Recurring: recurringLicensed,
 			},
 			want: &schema.Feature{
 				ID:       "feature:test:interval",
 				Plan:     "plan:test@0",
-				Interval: "@daily",
+				Interval: "@monthly",
 			},
 		},
 		{
@@ -459,6 +465,9 @@ func TestToFeature(t *testing.T) {
 					UsageType:      "metered",
 					AggregateUsage: "last_ever",
 				},
+				Tiers: []*stripe.PriceTier{
+					{UpTo: 0, FlatAmount: 2, UnitAmount: 3},
+				},
 			},
 			want: &schema.Feature{
 				ID:         "feature:aggregate:perpetual",
@@ -466,6 +475,9 @@ func TestToFeature(t *testing.T) {
 				Plan:       "plan:test@0",
 				Aggregate:  "perpetual",
 				Interval:   "@daily",
+				Tiers: []schema.Tier{
+					{Upto: schema.Inf, Base: 2, Price: 3},
+				},
 			},
 		},
 	}
@@ -484,6 +496,9 @@ func TestToFeature(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			t.Logf("got: %# v", pretty.Formatter(got))
+			t.Logf("pp : %# v", pretty.Formatter(pp))
 
 			sp := priceParamsToPrice(tt.price.ID, pp)
 			got, err = ToFeature(sp)

@@ -53,6 +53,14 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 		}
 	}
 
+	aggregate := stripe.PriceRecurringAggregateUsageSum
+	if v.Aggregate != "" {
+		aggregate = aggregateLookup[v.Aggregate]
+		if aggregate == "" {
+			return nil, fmt.Errorf("invalid aggregate %q", v.Aggregate)
+		}
+	}
+
 	pp := &stripe.PriceParams{
 		Params: stripe.Params{
 			Context: ctx,
@@ -70,8 +78,9 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 		BillingScheme: ptr("per_unit"),
 		UnitAmount:    ptr(v.Base),
 		Recurring: &stripe.PriceRecurringParams{
-			Interval:  ptr(string(interval)),
-			UsageType: ptr("licensed"),
+			Interval:       ptr(string(interval)),
+			UsageType:      ptr("licensed"),
+			AggregateUsage: ptr(string(aggregate)),
 		},
 	}
 
@@ -85,14 +94,6 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 		slices.SortFunc(v.Tiers, func(a, b schema.Tier) bool {
 			return a.Upto < b.Upto
 		})
-
-		aggregate := stripe.PriceRecurringAggregateUsageSum
-		if v.Aggregate != "" {
-			aggregate = aggregateLookup[v.Aggregate]
-			if aggregate == "" {
-				return nil, fmt.Errorf("invalid aggregate %q", v.Aggregate)
-			}
-		}
 
 		pp.UnitAmount = nil
 		pp.BillingScheme = ptr("tiered")
@@ -183,19 +184,14 @@ func ToFeature(p *stripe.Price) (*schema.Feature, error) {
 		}
 		v.Interval = s
 
-		fmt.Println("id", v.ID)
-		fmt.Println("aggregate", p.Recurring.AggregateUsage)
-		if p.Recurring.AggregateUsage != "" {
+		if p.Recurring.UsageType == "metered" {
 			aggregate, err := fromPriceAggregate(p.Recurring.AggregateUsage)
-			fmt.Println("aggregate::", aggregate)
 			if err != nil {
 				errs = append(errs, err)
 			}
 			v.Aggregate = aggregate
 		}
 	}
-
-	fmt.Println("v.Aggregate", v.Aggregate)
 
 	limit, err := getLimit(p)
 	if err != nil {
