@@ -37,11 +37,11 @@ var intervalLookup = map[schema.Interval]stripe.PriceRecurringInterval{
 	"@yearly":  stripe.PriceRecurringIntervalYear,
 }
 
-var aggregateLookup = map[schema.Aggregate]stripe.PlanAggregateUsage{
-	"sum":       stripe.PlanAggregateUsageSum,
-	"max":       stripe.PlanAggregateUsageMax,
-	"last":      stripe.PlanAggregateUsageLastDuringPeriod,
-	"perpetual": stripe.PlanAggregateUsageLastEver,
+var aggregateLookup = map[schema.Aggregate]stripe.PriceRecurringAggregateUsage{
+	"sum":       stripe.PriceRecurringAggregateUsageSum,
+	"max":       stripe.PriceRecurringAggregateUsageMax,
+	"last":      stripe.PriceRecurringAggregateUsageLastDuringPeriod,
+	"perpetual": stripe.PriceRecurringAggregateUsageLastEver,
 }
 
 func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stripe.PriceParams, error) {
@@ -86,7 +86,7 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 			return a.Upto < b.Upto
 		})
 
-		aggregate := stripe.PlanAggregateUsageSum
+		aggregate := stripe.PriceRecurringAggregateUsageSum
 		if v.Aggregate != "" {
 			aggregate = aggregateLookup[v.Aggregate]
 			if aggregate == "" {
@@ -145,6 +145,16 @@ func fromPriceInterval(v stripe.PriceRecurringInterval) (schema.Interval, error)
 	return in, nil
 }
 
+var aggregateConvert = values.Invert(aggregateLookup)
+
+func fromPriceAggregate(v stripe.PriceRecurringAggregateUsage) (schema.Aggregate, error) {
+	in, ok := aggregateConvert[v]
+	if !ok {
+		return "", fmt.Errorf("invalid aggregate %q", v)
+	}
+	return in, nil
+}
+
 func ToFeature(p *stripe.Price) (*schema.Feature, error) {
 	v := &schema.Feature{
 		ProviderID: p.ID,
@@ -172,8 +182,20 @@ func ToFeature(p *stripe.Price) (*schema.Feature, error) {
 			errs = append(errs, err)
 		}
 		v.Interval = s
-		v.Aggregate = schema.Aggregate(p.Recurring.AggregateUsage)
+
+		fmt.Println("id", v.ID)
+		fmt.Println("aggregate", p.Recurring.AggregateUsage)
+		if p.Recurring.AggregateUsage != "" {
+			aggregate, err := fromPriceAggregate(p.Recurring.AggregateUsage)
+			fmt.Println("aggregate::", aggregate)
+			if err != nil {
+				errs = append(errs, err)
+			}
+			v.Aggregate = aggregate
+		}
 	}
+
+	fmt.Println("v.Aggregate", v.Aggregate)
 
 	limit, err := getLimit(p)
 	if err != nil {

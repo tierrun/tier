@@ -351,7 +351,9 @@ func TestToFeature(t *testing.T) {
 					"tier.plan":    "plan:test@0",
 					"tier.limit":   "inf",
 				},
-				Recurring: &stripe.PriceRecurring{Interval: "day"},
+				Recurring: &stripe.PriceRecurring{
+					Interval: "day",
+				},
 			},
 			want: &schema.Feature{
 				ID:         "feature:test:providerID",
@@ -367,7 +369,9 @@ func TestToFeature(t *testing.T) {
 					"tier.plan":    "plan:test@0",
 					"tier.limit":   "inf",
 				},
-				Recurring: &stripe.PriceRecurring{Interval: "day"},
+				Recurring: &stripe.PriceRecurring{
+					Interval: "day",
+				},
 			},
 			want: &schema.Feature{
 				ID:       "feature:test:interval",
@@ -440,6 +444,28 @@ func TestToFeature(t *testing.T) {
 				Tiers: []schema.Tier{
 					{Upto: 1, Base: 2, Price: 3},
 				},
+			},
+		},
+		{
+			price: &stripe.Price{
+				ID: "pr_123",
+				Metadata: map[string]string{
+					"tier.feature": "feature:aggregate:perpetual",
+					"tier.plan":    "plan:test@0",
+					"tier.limit":   "inf",
+				},
+				Recurring: &stripe.PriceRecurring{
+					Interval:       "day",
+					UsageType:      "metered",
+					AggregateUsage: "last_ever",
+				},
+			},
+			want: &schema.Feature{
+				ID:         "feature:aggregate:perpetual",
+				ProviderID: "pr_123",
+				Plan:       "plan:test@0",
+				Aggregate:  "perpetual",
+				Interval:   "@daily",
 			},
 		},
 	}
