@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kr/pretty"
 	"github.com/stripe/stripe-go/v72"
 	"kr.dev/diff"
 	"tier.run/pricing/schema"
+	"tier.run/values"
 )
 
 func TestToStripePriceParamsMetadata(t *testing.T) {
@@ -75,7 +75,7 @@ func TestToStripePriceParamsInvalidBaseWithTiered(t *testing.T) {
 func TestToStripePriceParamsTierWithZero(t *testing.T) {
 	// TODO: delete this test when we support zero.
 	_, err := ToPriceParams(context.Background(), "plan:test@0", &schema.Feature{
-		ID:    "feature:tiered_with_base",
+		ID:    "feature:upto:zero",
 		Tiers: []schema.Tier{{Upto: 0}},
 	})
 	if err == nil {
@@ -83,202 +83,263 @@ func TestToStripePriceParamsTierWithZero(t *testing.T) {
 	}
 }
 
-func TestToStripePriceParams(t *testing.T) {
-	defaultRecurring := &stripe.PriceRecurringParams{
-		Interval:  ptr("month"),
-		UsageType: ptr("licensed"),
+func TestRoundTripInterval(t *testing.T) {
+	for in, want := range intervalLookup {
+		t.Run(string(in), func(t *testing.T) {
+			testRoundTrip(t, &schema.Feature{
+				ID:       "feature:interval",
+				Interval: in,
+			}, &stripe.PriceParams{
+				Recurring: &stripe.PriceRecurringParams{
+					Interval: ptr(string(want)),
+				},
+			})
+		})
 	}
 
-	defaultTieredRecurring := &stripe.PriceRecurringParams{
-		AggregateUsage: ptr("sum"),
-		Interval:       ptr("month"),
-		UsageType:      ptr("metered"),
+	t.Run("invalid", func(t *testing.T) {
+		_, err := ToPriceParams(context.Background(), "plan:test@0", &schema.Feature{
+			ID:       "feature:interval:invalid",
+			Interval: "invalid",
+		})
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+func TestRoundTripAggregate(t *testing.T) {
+	for agg, want := range aggregateLookup {
+		t.Run(string(agg), func(t *testing.T) {
+			testRoundTrip(t, &schema.Feature{
+				ID:        "feature:aggregate",
+				Aggregate: agg,
+				Tiers:     []schema.Tier{{Upto: 1}},
+			}, &stripe.PriceParams{
+				BillingScheme: ptr("tiered"),
+				TiersMode:     ptr("graduated"),
+				Tiers: []*stripe.PriceTierParams{
+					{UpToInf: ptr(true), FlatAmount: p64(0), UnitAmount: p64(0)},
+				},
+				Recurring: &stripe.PriceRecurringParams{
+					UsageType: ptr("metered"),
+
+					// What is being tested here.
+					AggregateUsage: ptr(string(want)),
+				},
+			})
+		})
 	}
 
-	ctx := context.Background()
+	t.Run("invalid", func(t *testing.T) {
+		_, err := ToPriceParams(context.Background(), "plan:test@0", &schema.Feature{
+			ID:        "feature:aggregate:invalid",
+			Aggregate: "invalid",
+			Tiers:     []schema.Tier{{Upto: 1}}, // aggregate should be ignored if no tiers
+		})
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestRoundTripTiersMode(t *testing.T) {
+	for _, mode := range []schema.Mode{"graduated", "volume"} {
+		t.Run(string(mode), func(t *testing.T) {
+			testRoundTrip(t, &schema.Feature{
+				ID:    "feature:mode",
+				Tiers: []schema.Tier{{Upto: 1}},
+
+				Mode: mode,
+			}, &stripe.PriceParams{
+				BillingScheme: ptr("tiered"),
+				Tiers: []*stripe.PriceTierParams{
+					{UpToInf: ptr(true), FlatAmount: p64(0), UnitAmount: p64(0)},
+				},
+				Recurring: &stripe.PriceRecurringParams{
+					AggregateUsage: ptr("sum"),
+					UsageType:      ptr("metered"),
+				},
+
+				TiersMode: ptr(string(mode)),
+			})
+		})
+	}
+
+	t.Run("invalid", func(t *testing.T) {
+		_, err := ToPriceParams(context.Background(), "plan:test@0", &schema.Feature{
+			ID:        "feature:aggregate",
+			Aggregate: "invalid",
+			Tiers:     []schema.Tier{{Upto: 1}}, // aggregate should be ignored if no tiers
+		})
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestRoundTripTiers(t *testing.T) {
 	cases := []struct {
-		fp   *schema.Feature
-		want *stripe.PriceParams
+		tiers []schema.Tier
+		want  []*stripe.PriceTierParams
 	}{
 		{
-			fp: &schema.Feature{ID: "feature:blank"},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("per_unit"),
-				Currency:      ptr("usd"),
-				Recurring:     defaultRecurring,
-				UnitAmount:    p64(0),
+			tiers: []schema.Tier{{Upto: 1}},
+			want:  []*stripe.PriceTierParams{{UpToInf: ptr(true), UnitAmount: p64(0), FlatAmount: p64(0)}},
+		},
+		{
+			tiers: []schema.Tier{{Upto: 1, Price: 2, Base: 3}},
+			want:  []*stripe.PriceTierParams{{UpToInf: ptr(true), UnitAmount: p64(2), FlatAmount: p64(3)}},
+		},
+		{
+			// inf
+			tiers: []schema.Tier{{Upto: schema.Inf}},
+			want:  []*stripe.PriceTierParams{{UpToInf: ptr(true), UnitAmount: p64(0), FlatAmount: p64(0)}},
+		},
+		{
+			tiers: []schema.Tier{
+				{Upto: 1, Price: 2, Base: 3},
+				{Upto: 2, Price: 2, Base: 3},
+			},
+			want: []*stripe.PriceTierParams{
+				{UpTo: p64(1), UnitAmount: p64(2), FlatAmount: p64(3)},
+				{UpToInf: ptr(true), UnitAmount: p64(2), FlatAmount: p64(3)},
 			},
 		},
 		{
-			fp: &schema.Feature{ID: "feature:base", Base: 10},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("per_unit"),
-				Currency:      ptr("usd"),
-				Recurring:     defaultRecurring,
-				UnitAmount:    p64(10),
+			// unsorted
+			tiers: []schema.Tier{
+				{Upto: 2, Price: 2, Base: 3},
+				{Upto: 1, Price: 2, Base: 3},
+			},
+			want: []*stripe.PriceTierParams{
+				{UpTo: p64(1), UnitAmount: p64(2), FlatAmount: p64(3)},
+				{UpToInf: ptr(true), UnitAmount: p64(2), FlatAmount: p64(3)},
 			},
 		},
 		{
-			fp: &schema.Feature{
-				ID:       "feature:interval",
-				Interval: "@yearly",
+			// unsorted + dup
+			tiers: []schema.Tier{
+				{Upto: 2, Price: 2, Base: 3},
+				{Upto: 1, Price: 2, Base: 3},
+				{Upto: 2, Price: 4, Base: 5},
 			},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("per_unit"),
-				Currency:      ptr("usd"),
-				Recurring: &stripe.PriceRecurringParams{
-					Interval:  ptr("year"),
-					UsageType: ptr("licensed"),
-				},
-				UnitAmount: p64(0),
+			want: []*stripe.PriceTierParams{
+				{UpTo: p64(1), UnitAmount: p64(2), FlatAmount: p64(3)},
+				{UpTo: p64(2), UnitAmount: p64(2), FlatAmount: p64(3)},
+				{UpToInf: ptr(true), UnitAmount: p64(4), FlatAmount: p64(5)},
 			},
 		},
 		{
-			fp: &schema.Feature{ID: "feature:single:tiered", Tiers: []schema.Tier{
-				{Upto: 10, Price: 00, Base: 00},
-			}},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("tiered"),
-				Currency:      ptr("usd"),
-				Recurring:     defaultTieredRecurring,
-				TiersMode:     ptr("graduated"),
-				Tiers: []*stripe.PriceTierParams{
-					{UpToInf: ptr(true), FlatAmount: p64(0), UnitAmount: p64(0)},
-				},
+			tiers: []schema.Tier{
+				{Upto: 2, Price: 2, Base: 3},
+				{Upto: 1, Price: 2, Base: 3},
+				{Upto: 2, Price: 4, Base: 5},
+			},
+			want: []*stripe.PriceTierParams{
+				{UpTo: p64(1), UnitAmount: p64(2), FlatAmount: p64(3)},
+				{UpTo: p64(2), UnitAmount: p64(2), FlatAmount: p64(3)},
+				{UpToInf: ptr(true), UnitAmount: p64(4), FlatAmount: p64(5)},
 			},
 		},
 		{
-			fp: &schema.Feature{ID: "feature:multi:tiered:catch-all", Tiers: []schema.Tier{
-				{Upto: 10, Base: 2},
-				{Upto: 20, Base: 1},
-			}},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("tiered"),
-				Currency:      ptr("usd"),
-				Recurring:     defaultTieredRecurring,
-				TiersMode:     ptr("graduated"),
-				Tiers: []*stripe.PriceTierParams{
-					{UpTo: p64(10), FlatAmount: p64(2), UnitAmount: p64(0)},
-					{UpToInf: ptr(true), FlatAmount: p64(1), UnitAmount: p64(0)},
-				},
+			tiers: []schema.Tier{
+				{Upto: 2, Price: 2, Base: 3},
+				{Upto: 1, Price: 2, Base: 3},
+				{Upto: 1, Price: 2, Base: 3},
 			},
-		},
-		{
-			fp: &schema.Feature{
-				ID:    "feature:tiered_volume",
-				Mode:  "volume",
-				Tiers: []schema.Tier{{Upto: 10}},
-			},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("tiered"),
-				Currency:      ptr("usd"),
-				Recurring:     defaultTieredRecurring,
-				TiersMode:     ptr("volume"),
-				Tiers: []*stripe.PriceTierParams{
-					{UpToInf: ptr(true), FlatAmount: p64(0), UnitAmount: p64(0)},
-				},
-			},
-		},
-		{
-			fp: &schema.Feature{
-				ID:        "feature:aggregate",
-				Aggregate: "max",
-				Tiers:     []schema.Tier{{Upto: 10}},
-			},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("tiered"),
-				Currency:      ptr("usd"),
-				Recurring: &stripe.PriceRecurringParams{
-					AggregateUsage: ptr("max"),
-					Interval:       ptr("month"),
-					UsageType:      ptr("metered"),
-				},
-				TiersMode: ptr("graduated"),
-				Tiers: []*stripe.PriceTierParams{
-					{UpToInf: ptr(true), FlatAmount: p64(0), UnitAmount: p64(0)},
-				},
-			},
-		},
-		{
-			fp: &schema.Feature{
-				ID:        "feature:aggregate:perpetual",
-				Aggregate: "perpetual",
-				Tiers:     []schema.Tier{{Upto: 10}},
-			},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("tiered"),
-				Currency:      ptr("usd"),
-				Recurring: &stripe.PriceRecurringParams{
-					AggregateUsage: ptr("last_ever"),
-					UsageType:      ptr("metered"),
-					Interval:       ptr("month"),
-				},
-				TiersMode: ptr("graduated"),
-				Tiers: []*stripe.PriceTierParams{
-					{UpToInf: ptr(true), FlatAmount: p64(0), UnitAmount: p64(0)},
-				},
-			},
-		},
-		{
-			fp: &schema.Feature{
-				ID:       "feature:currency",
-				Currency: "eur",
-			},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("per_unit"),
-				Currency:      ptr("eur"),
-				Recurring:     defaultRecurring,
-				UnitAmount:    p64(0),
-			},
-		},
-		{
-			fp: &schema.Feature{
-				ID:    "feature:tiered:upto:inf",
-				Tiers: []schema.Tier{{Upto: schema.Inf}},
-			},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("tiered"),
-				Currency:      ptr("usd"),
-				Recurring:     defaultTieredRecurring,
-				TiersMode:     ptr("graduated"),
-				Tiers: []*stripe.PriceTierParams{
-					{UpToInf: ptr(true), FlatAmount: p64(0), UnitAmount: p64(0)},
-				},
-			},
-		},
-		{
-			fp: &schema.Feature{
-				ID:    "feature:tiered:non-zero:upto_base_and_price",
-				Tiers: []schema.Tier{{Upto: 1, Base: 2, Price: 3}},
-			},
-			want: &stripe.PriceParams{
-				BillingScheme: ptr("tiered"),
-				Currency:      ptr("usd"),
-				Recurring:     defaultTieredRecurring,
-				TiersMode:     ptr("graduated"),
-				Tiers: []*stripe.PriceTierParams{
-					{UpToInf: ptr(true), FlatAmount: p64(2), UnitAmount: p64(3)},
-				},
+			want: []*stripe.PriceTierParams{
+				{UpTo: p64(1), UnitAmount: p64(2), FlatAmount: p64(3)},
+				{UpTo: p64(1), UnitAmount: p64(2), FlatAmount: p64(3)},
+				{UpToInf: ptr(true), UnitAmount: p64(2), FlatAmount: p64(3)},
 			},
 		},
 	}
 
 	for _, tt := range cases {
-		t.Run(tt.fp.ID, func(t *testing.T) {
-			fp := Expand(tt.fp)
-			const plan = "plan:test@0"
-			got, err := ToPriceParams(ctx, plan, fp)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			want := tt.want
-			want.Nickname = ptr(tt.fp.ID)
-			want.LookupKey = ptr(MakeID(plan, tt.fp.ID))
-			diff.Test(t, t.Errorf, got, tt.want,
-				diff.ZeroFields[stripe.PriceParams]("Params", "Product"))
+		t.Run("", func(t *testing.T) {
+			testRoundTrip(t,
+				&schema.Feature{Tiers: tt.tiers},
+				&stripe.PriceParams{
+					BillingScheme: ptr("tiered"),
+					TiersMode:     ptr("graduated"),
+					Recurring: &stripe.PriceRecurringParams{
+						AggregateUsage: ptr("sum"),
+						UsageType:      ptr("metered"),
+					},
+					Tiers: tt.want,
+				})
 		})
 	}
+}
+
+func TestDefaults(t *testing.T) {
+	t.Run("without expand", func(t *testing.T) {
+		fp := &schema.Feature{}
+		_, err := ToPriceParams(context.Background(), "plan:test@0", fp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		diff.Test(t, t.Errorf, fp, &schema.Feature{})
+	})
+	t.Run("with expand", func(t *testing.T) {
+		fp := Expand(&schema.Feature{})
+		_, err := ToPriceParams(context.Background(), "plan:test@0", fp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		diff.Test(t, t.Errorf, fp, &schema.Feature{
+			Currency: "usd",
+			Interval: "@monthly",
+		})
+	})
+}
+
+func TestRoundTripCurrency(t *testing.T) {
+	for _, cur := range []string{
+		"",
+		"usd",
+		"eur",
+		"gbp",
+		"jpy",
+	} {
+		testRoundTrip(t,
+			&schema.Feature{Currency: cur},
+			&stripe.PriceParams{Currency: ptr(values.Coalesce(cur, "usd"))})
+	}
+}
+
+func testRoundTrip(t *testing.T, fp *schema.Feature, want *stripe.PriceParams) {
+	t.Helper()
+
+	values.MaybeSet(&want.Currency, ptr("usd"))
+	values.MaybeSet(&want.BillingScheme, ptr("per_unit"))
+	values.MaybeSet(&want.Recurring, &stripe.PriceRecurringParams{})
+	values.MaybeSet(&want.Recurring.UsageType, ptr("licensed"))
+	values.MaybeSet(&want.Recurring.Interval, ptr("month"))
+	values.MaybeSet(&want.Nickname, ptr(fp.ID))
+
+	if len(fp.Tiers) == 0 {
+		values.MaybeSet(&want.UnitAmount, p64(0))
+	}
+
+	fp = Expand(fp)
+	got, err := ToPriceParams(context.Background(), "plan:test@0", fp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	diff.Test(t, t.Errorf, got, want, diff.ZeroFields[stripe.PriceParams]("Params", "Product", "LookupKey"))
+
+	// Round trip.
+	gotFP, err := ToFeature(priceParamsToPrice("pr_123", got))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantFP := fp
+	wantFP.ProviderID = "pr_123"
+	wantFP.Plan = "plan:test@0"
+	diff.Test(t, t.Errorf, gotFP, wantFP)
 }
 
 func TestToStripePriceParamsLookupKeys(t *testing.T) {
@@ -328,186 +389,6 @@ func TestToStripePriceParamsLimit(t *testing.T) {
 	}
 }
 
-func TestToFeature(t *testing.T) {
-	recurringLicensed := &stripe.PriceRecurring{
-		Interval:  "month",
-		UsageType: "licensed",
-	}
-
-	recurringMetered := &stripe.PriceRecurring{
-		Interval:       "month",
-		AggregateUsage: "sum",
-		UsageType:      "metered",
-	}
-
-	cases := []struct {
-		price *stripe.Price
-		want  *schema.Feature
-	}{
-		{
-			price: &stripe.Price{
-				ID: "pr_123",
-				Metadata: map[string]string{
-					"tier.feature": "feature:test:providerID",
-					"tier.plan":    "plan:test@0",
-					"tier.limit":   "inf",
-				},
-				Recurring: recurringMetered,
-				Tiers: []*stripe.PriceTier{
-					{UpTo: 0, FlatAmount: 2, UnitAmount: 3},
-				},
-			},
-			want: &schema.Feature{
-				ID:         "feature:test:providerID",
-				ProviderID: "pr_123",
-				Plan:       "plan:test@0",
-				Interval:   "@monthly",
-				Aggregate:  "sum",
-				Tiers: []schema.Tier{
-					{Upto: schema.Inf, Base: 2, Price: 3},
-				},
-			},
-		},
-		{
-			price: &stripe.Price{
-				Metadata: map[string]string{
-					"tier.feature": "feature:test:interval",
-					"tier.plan":    "plan:test@0",
-					"tier.limit":   "inf",
-				},
-				Recurring: recurringLicensed,
-			},
-			want: &schema.Feature{
-				ID:       "feature:test:interval",
-				Plan:     "plan:test@0",
-				Interval: "@monthly",
-			},
-		},
-		{
-			price: &stripe.Price{
-				Metadata: map[string]string{
-					"tier.feature": "feature:test:currency",
-					"tier.plan":    "plan:test@0",
-					"tier.limit":   "inf",
-				},
-				Currency:  "eur",
-				Recurring: recurringLicensed,
-			},
-			want: &schema.Feature{
-				ID:       "feature:test:currency",
-				Plan:     "plan:test@0",
-				Interval: "@monthly",
-				Currency: "eur",
-			},
-		},
-		{
-			price: &stripe.Price{
-				Metadata: map[string]string{
-					"tier.feature": "feature:test:tiers",
-					"tier.plan":    "plan:test@0",
-					"tier.limit":   "inf",
-				},
-				Recurring: recurringMetered,
-				TiersMode: "graduated",
-				Tiers: []*stripe.PriceTier{
-					{UpTo: 1, FlatAmount: 2, UnitAmount: 3},
-					{UpTo: 0, FlatAmount: 4, UnitAmount: 5},
-				},
-			},
-			want: &schema.Feature{
-				ID:        "feature:test:tiers",
-				Plan:      "plan:test@0",
-				Interval:  "@monthly",
-				Mode:      "graduated",
-				Aggregate: "sum",
-				Tiers: []schema.Tier{
-					{Upto: 1, Base: 2, Price: 3},
-					{Upto: schema.Inf, Base: 4, Price: 5},
-				},
-			},
-		},
-		{
-			price: &stripe.Price{
-				Metadata: map[string]string{
-					"tier.feature": "feature:test:limit",
-					"tier.plan":    "plan:test@0",
-					"tier.limit":   "1",
-				},
-				Recurring: recurringMetered,
-				TiersMode: "graduated",
-				Tiers: []*stripe.PriceTier{
-					{UpTo: 0, FlatAmount: 2, UnitAmount: 3},
-				},
-			},
-			want: &schema.Feature{
-				ID:        "feature:test:limit",
-				Plan:      "plan:test@0",
-				Mode:      "graduated",
-				Interval:  "@monthly",
-				Aggregate: "sum",
-				Tiers: []schema.Tier{
-					{Upto: 1, Base: 2, Price: 3},
-				},
-			},
-		},
-		{
-			price: &stripe.Price{
-				ID: "pr_123",
-				Metadata: map[string]string{
-					"tier.feature": "feature:aggregate:perpetual",
-					"tier.plan":    "plan:test@0",
-					"tier.limit":   "inf",
-				},
-				Recurring: &stripe.PriceRecurring{
-					Interval:       "day",
-					UsageType:      "metered",
-					AggregateUsage: "last_ever",
-				},
-				Tiers: []*stripe.PriceTier{
-					{UpTo: 0, FlatAmount: 2, UnitAmount: 3},
-				},
-			},
-			want: &schema.Feature{
-				ID:         "feature:aggregate:perpetual",
-				ProviderID: "pr_123",
-				Plan:       "plan:test@0",
-				Aggregate:  "perpetual",
-				Interval:   "@daily",
-				Tiers: []schema.Tier{
-					{Upto: schema.Inf, Base: 2, Price: 3},
-				},
-			},
-		},
-	}
-
-	for _, tt := range cases {
-		name := tt.price.Metadata["tier.feature"]
-		t.Run(name, func(t *testing.T) {
-			got, err := ToFeature(tt.price)
-			if err != nil {
-				t.Fatal(err)
-			}
-			diff.Test(t, t.Errorf, got, tt.want)
-
-			// RoundTrip check
-			pp, err := ToPriceParams(context.Background(), "plan:test@0", got)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			t.Logf("got: %# v", pretty.Formatter(got))
-			t.Logf("pp : %# v", pretty.Formatter(pp))
-
-			sp := priceParamsToPrice(tt.price.ID, pp)
-			got, err = ToFeature(sp)
-			if err != nil {
-				t.Fatal(err)
-			}
-			diff.Test(t, t.Errorf, got, tt.want)
-		})
-	}
-}
-
 func priceParamsToPrice(stripePriceID string, pp *stripe.PriceParams) *stripe.Price {
 	sp := new(stripe.Price)
 	sp.ID = stripePriceID
@@ -540,7 +421,7 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-func coerce[D ~string](dst *D, src *string) {
+func coerce[D, S ~string](dst *D, src *S) {
 	if src == nil {
 		return
 	}
