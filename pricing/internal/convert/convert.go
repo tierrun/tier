@@ -25,23 +25,25 @@ func Expand(fp *schema.Feature) *schema.Feature {
 	*newFP = *fp
 	values.MaybeSet(&newFP.Interval, "@monthly")
 	values.MaybeSet(&newFP.Currency, "usd")
-	values.MaybeSet(&newFP.Mode, "graduated")
-	values.MaybeSet(&newFP.Aggregate, "sum")
+	if len(newFP.Tiers) > 0 {
+		values.MaybeSet(&newFP.Mode, "graduated")
+		values.MaybeSet(&newFP.Aggregate, "sum")
+	}
 	return newFP
 }
 
 var intervalLookup = map[schema.Interval]stripe.PriceRecurringInterval{
-	"@daily":   stripe.PriceRecurringIntervalDay,
-	"@weekly":  stripe.PriceRecurringIntervalWeek,
-	"@monthly": stripe.PriceRecurringIntervalMonth,
-	"@yearly":  stripe.PriceRecurringIntervalYear,
+	"@daily":   "day",
+	"@weekly":  "week",
+	"@monthly": "month",
+	"@yearly":  "year",
 }
 
-var aggregateLookup = map[schema.Aggregate]stripe.PriceRecurringAggregateUsage{
-	"sum":       stripe.PriceRecurringAggregateUsageSum,
-	"max":       stripe.PriceRecurringAggregateUsageMax,
-	"last":      stripe.PriceRecurringAggregateUsageLastDuringPeriod,
-	"perpetual": stripe.PriceRecurringAggregateUsageLastEver,
+var aggregateLookup = map[schema.Aggregate]string{
+	"sum":       "sum",
+	"max":       "max",
+	"last":      "last_during_period",
+	"perpetual": "last_ever",
 }
 
 func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stripe.PriceParams, error) {
@@ -86,7 +88,7 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 			return a.Upto < b.Upto
 		})
 
-		aggregate := stripe.PriceRecurringAggregateUsageSum
+		aggregate := "sum"
 		if v.Aggregate != "" {
 			aggregate = aggregateLookup[v.Aggregate]
 			if aggregate == "" {
@@ -147,8 +149,8 @@ func fromPriceInterval(v stripe.PriceRecurringInterval) (schema.Interval, error)
 
 var aggregateConvert = values.Invert(aggregateLookup)
 
-func fromPriceAggregate(v stripe.PriceRecurringAggregateUsage) (schema.Aggregate, error) {
-	in, ok := aggregateConvert[v]
+func fromPriceAggregate[S ~string](v S) (schema.Aggregate, error) {
+	in, ok := aggregateConvert[string(v)]
 	if !ok {
 		return "", fmt.Errorf("invalid aggregate %q", v)
 	}
@@ -226,7 +228,7 @@ func getLimit(p *stripe.Price) (n int64, err error) {
 	if len(p.Tiers) == 0 {
 		return 0, nil
 	}
-	errorfmt.Handlef("error parsing tier.limit: %w", &err)
+	defer errorfmt.Handlef("error parsing tier.limit: %w", &err)
 	v, err := getMeta(p, "tier.limit")
 	if err != nil {
 		return 0, err
