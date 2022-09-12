@@ -313,14 +313,14 @@ func testRoundTrip(t *testing.T, fp *schema.Feature, want *stripe.PriceParams) {
 
 	values.MaybeSet(&want.Currency, ptr("usd"))
 	values.MaybeSet(&want.BillingScheme, ptr("per_unit"))
+	if len(fp.Tiers) == 0 {
+		// only per_unit should set a UnitAmount
+		values.MaybeSet(&want.UnitAmount, p64(0))
+	}
 	values.MaybeSet(&want.Recurring, &stripe.PriceRecurringParams{})
 	values.MaybeSet(&want.Recurring.UsageType, ptr("licensed"))
 	values.MaybeSet(&want.Recurring.Interval, ptr("month"))
 	values.MaybeSet(&want.Nickname, ptr(fp.ID))
-
-	if len(fp.Tiers) == 0 {
-		values.MaybeSet(&want.UnitAmount, p64(0))
-	}
 
 	fp = Expand(fp)
 	got, err := ToPriceParams(context.Background(), "plan:test@0", fp)

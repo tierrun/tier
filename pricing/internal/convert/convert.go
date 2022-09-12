@@ -77,9 +77,7 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 		},
 	}
 
-	hasTiers := len(v.Tiers) > 0
-
-	if hasTiers {
+	if len(v.Tiers) > 0 {
 		if v.Base > 0 {
 			return nil, fmt.Errorf("a non zero base is not supported for tiered pricing")
 		}
@@ -96,32 +94,30 @@ func ToPriceParams(ctx context.Context, planID string, v *schema.Feature) (*stri
 			}
 		}
 
-		pp.UnitAmount = nil
 		pp.BillingScheme = ptr("tiered")
+		pp.UnitAmount = nil
 		pp.Recurring.UsageType = ptr("metered")
 		pp.Recurring.AggregateUsage = ptr(string(aggregate))
 		pp.TiersMode = ptr(string(v.Mode))
-	}
 
-	for _, t := range v.Tiers {
-		pt := &stripe.PriceTierParams{
-			UnitAmount: ptr(t.Price),
-			FlatAmount: ptr(t.Base),
+		for _, t := range v.Tiers {
+			pt := &stripe.PriceTierParams{
+				UnitAmount: ptr(t.Price),
+				FlatAmount: ptr(t.Base),
+			}
+
+			switch t.Upto {
+			case 0:
+				return nil, fmt.Errorf("invalid tier %v; zero upto reserved for future use", t)
+			case schema.Inf:
+				pt.UpToInf = ptr(true)
+			default:
+				pt.UpTo = ptr(t.Upto)
+			}
+
+			pp.Tiers = append(pp.Tiers, pt)
 		}
 
-		switch t.Upto {
-		case 0:
-			return nil, fmt.Errorf("invalid tier %v; zero upto reserved for future use", t)
-		case schema.Inf:
-			pt.UpToInf = ptr(true)
-		default:
-			pt.UpTo = ptr(t.Upto)
-		}
-
-		pp.Tiers = append(pp.Tiers, pt)
-	}
-
-	if hasTiers {
 		limit := v.Tiers[len(v.Tiers)-1].Upto
 		if limit == schema.Inf {
 			pp.Metadata["tier.limit"] = "inf"
