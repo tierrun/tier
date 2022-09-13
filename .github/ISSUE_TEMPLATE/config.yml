@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Support
+    url: https://tier.run.com/support/
+    about: Contact us for support
+  - name: Troubleshooting
+    url: https://tier.run.com/docs/troubleshooting
+    about: Troubleshoot common issues
