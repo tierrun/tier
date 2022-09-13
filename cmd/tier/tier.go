@@ -68,16 +68,20 @@ var dashURL = map[bool]string{
 	false: "https://dashboard.stripe.com/test",
 }
 
+var (
+	// only one trace per invoking (for now)
+	traceID = newID()
+)
+
 func tier(cmd string, args []string) (err error) {
 	start := time.Now()
-	traceID := newID()
 	defer func() {
 		report(event{
-			TraceID: traceID,
-			ID:      traceID, // single level for now, so use traceID as ID
-			Start:   start,
-			End:     time.Now(),
-			Err:     err,
+			Type:  "cli",
+			Name:  cmd,
+			Start: start,
+			End:   time.Now(),
+			Err:   err,
 		})
 		flushEvents()
 	}()
@@ -231,12 +235,15 @@ type event struct {
 	TraceID string
 	ID      string
 
-	AccountID string
-	Type      string
-	Name      string
-	Start     time.Time
-	End       time.Time
-	Err       error
+	Type  string
+	Name  string
+	Start time.Time
+	End   time.Time
+	Err   error
+
+	AccountID   string
+	DisplayName string
+	DeviceName  string
 }
 
 func (e *event) MarshalJSON() ([]byte, error) {
@@ -255,25 +262,48 @@ func (e *event) MarshalJSON() ([]byte, error) {
 	})
 }
 
-var (
-	ebuf bytes.Buffer
-	enc  = json.NewEncoder(&ebuf)
-)
+var events []event
 
 func report(ev event) {
-	if err := enc.Encode(ev); err != nil {
-		vlogf("failed to encode event: %v", err)
-	}
+	events = append(events, ev)
 }
 
 func flushEvents() {
 	f := func() error {
-		req, err := http.NewRequest(http.MethodPost, "https://tele.tier.run/api/t", &ebuf)
+		p, err := profile.Load("tier")
+		if err != nil {
+			report(event{
+				Type:  "cli",
+				Name:  "flush/profile.Load",
+				Start: time.Now(),
+				End:   time.Now(),
+				Err:   err,
+			})
+		}
+
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		for _, ev := range events {
+			ev.TraceID = traceID
+			ev.ID = traceID
+
+			if p != nil {
+				ev.AccountID = p.AccountID
+				ev.DisplayName = p.DisplayName
+				ev.DeviceName = p.DeviceName
+			}
+
+			if err := enc.Encode(ev); err != nil {
+				return err
+			}
+		}
+
+		req, err := http.NewRequest(http.MethodPost, "https://tele.tier.run/api/t", &buf)
 		if err != nil {
 			return err
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "tier-cli")
+		req.Header.Set("User-Agent", "tier-cli") // TODO: include version, commit, etc
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
