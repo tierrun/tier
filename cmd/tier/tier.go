@@ -21,6 +21,7 @@ import (
 	"tier.run/pricing"
 	"tier.run/pricing/schema"
 	"tier.run/values"
+	"tier.run/version"
 )
 
 // Flags
@@ -88,6 +89,9 @@ func tier(cmd string, args []string) (err error) {
 
 	ctx := context.Background()
 	switch cmd {
+	case "version":
+		fmt.Println(version.String())
+		return nil
 	case "init":
 		panic("TODO")
 	case "push":
