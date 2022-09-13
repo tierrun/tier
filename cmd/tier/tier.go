@@ -44,7 +44,7 @@ var (
 
 // Errors
 var (
-	errUsage = errors.New("usage: tier [--live] <connect|push|pull|ls> [<args>]")
+	errUsage = errors.New("usage: tier [--live] <version|connect|push|pull|ls> [<args>]")
 )
 
 func main() {
