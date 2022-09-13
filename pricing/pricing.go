@@ -49,11 +49,6 @@ func FromEnv() (*Client, error) {
 	return &Client{StripeKey: stripeKey}, nil
 }
 
-func UnsafeStripeClient(c *Client) *client.API {
-	c.init()
-	return c.sc
-}
-
 var (
 	keyPrefixes     = []string{"sk_", "rk_"}
 	testKeyPrefixes = []string{"sk_test", "rk_test"}
