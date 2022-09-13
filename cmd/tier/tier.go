@@ -248,6 +248,7 @@ type event struct {
 	AccountID   string
 	DisplayName string
 	DeviceName  string
+	Version     string
 }
 
 func (e *event) MarshalJSON() ([]byte, error) {
@@ -296,6 +297,8 @@ func flushEvents() {
 				ev.DisplayName = p.DisplayName
 				ev.DeviceName = p.DeviceName
 			}
+
+			ev.Version = version.String()
 
 			if err := enc.Encode(ev); err != nil {
 				return err
