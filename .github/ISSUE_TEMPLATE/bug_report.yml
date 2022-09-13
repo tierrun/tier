@@ -2,11 +2,6 @@ name: Bug report
 description: File a bug report
 labels: [needs-triage, bug]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Please check if your bug is [already filed](https://github.com/tierrun/tier/issues).
-        Have an urgent issue? Let us know by emailing us at <support@tier.run>.
   - type: textarea
     id: what-happened
     attributes:
