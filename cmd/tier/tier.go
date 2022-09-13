@@ -1,16 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"tier.run/cmd/tier/profile"
 	"tier.run/pricing"
@@ -20,7 +25,8 @@ import (
 
 // Flags
 var (
-	flagLive = flag.Bool("live", false, "use live Stripe key (default is false)")
+	flagLive    = flag.Bool("live", false, "use live Stripe key (default is false)")
+	flagVerbose = flag.Bool("v", false, "verbose output")
 )
 
 // Env
@@ -47,6 +53,7 @@ func main() {
 	if len(args) == 0 {
 		log.Fatalf("%v", errUsage)
 	}
+
 	if err := tier(args[0], args[1:]); err != nil {
 		if errors.Is(err, errUsage) {
 			log.Fatalf("%v", err)
@@ -61,7 +68,20 @@ var dashURL = map[bool]string{
 	false: "https://dashboard.stripe.com/test",
 }
 
-func tier(cmd string, args []string) error {
+func tier(cmd string, args []string) (err error) {
+	start := time.Now()
+	traceID := newID()
+	defer func() {
+		report(event{
+			TraceID: traceID,
+			ID:      traceID, // single level for now, so use traceID as ID
+			Start:   start,
+			End:     time.Now(),
+			Err:     err,
+		})
+		flushEvents()
+	}()
+
 	ctx := context.Background()
 	switch cmd {
 	case "init":
@@ -205,4 +225,79 @@ func filterNonTierPlans(plans schema.Plans) schema.Plans {
 		}
 	}
 	return dst
+}
+
+type event struct {
+	TraceID string
+	ID      string
+
+	AccountID string
+	Type      string
+	Name      string
+	Start     time.Time
+	End       time.Time
+	Err       error
+}
+
+func (e *event) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		AccountID string
+		Type      string
+		Start     string
+		End       string
+		Err       string
+	}{
+		AccountID: e.AccountID,
+		Type:      e.Type,
+		Start:     e.Start.Format(time.RFC3339),
+		End:       e.End.Format(time.RFC3339),
+		Err:       e.Err.Error(),
+	})
+}
+
+var (
+	ebuf bytes.Buffer
+	enc  = json.NewEncoder(&ebuf)
+)
+
+func report(ev event) {
+	if err := enc.Encode(ev); err != nil {
+		vlogf("failed to encode event: %v", err)
+	}
+}
+
+func flushEvents() {
+	f := func() error {
+		req, err := http.NewRequest(http.MethodPost, "https://tele.tier.run/api/t", &ebuf)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "tier-cli")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		resp.Body.Close() // fire-and-forget
+		return nil
+	}
+	if err := f(); err != nil {
+		vlogf("failed to report event: %v", err)
+	}
+}
+
+func vlogf(format string, args ...interface{}) {
+	if *flagVerbose {
+		fmt.Fprintf(stderr, format, args...)
+	}
+}
+
+// newID returns a random, hex encoded ID.
+func newID() string {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(buf[:])
 }
