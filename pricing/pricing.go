@@ -25,6 +25,8 @@ var (
 	ErrKeyNotSet     = errors.New("STRIPE_API_KEY not set")
 	ErrPlanExists    = errors.New("plan already exists")
 	ErrFeatureExists = errors.New("feature already exists")
+
+	ErrTestDataDeleteInProgress = errors.New("test data delete in progress; please try again later")
 )
 
 var MakeID = convert.MakeID
@@ -34,6 +36,7 @@ type Client struct {
 
 	Logf       func(string, ...any)
 	HTTPClient *http.Client
+	BaseURL    string
 
 	initOnce sync.Once
 	sc       *client.API
@@ -82,7 +85,7 @@ func (c *Client) Live() bool { return IsLiveKey(c.StripeKey) }
 func (c *Client) init() {
 	c.initOnce.Do(func() {
 		c.sc = &client.API{}
-		bs := newBackends(c.HTTPClient)
+		bs := newBackends(c.HTTPClient, c.BaseURL)
 		c.sc.Init(c.StripeKey, bs)
 		c.sem = make(chan token, 20)
 	})
@@ -135,7 +138,7 @@ func (c *Client) FetchFeatures(ctx context.Context, ids ...string) ([]schema.Fea
 		})
 	}
 	if err := it.Err(); err != nil {
-		return nil, err
+		return nil, toNiceErr(err)
 	}
 
 	slices.SortFunc(fps, func(a, b schema.FeaturePlan) bool {
@@ -321,6 +324,10 @@ func listParams(ctx context.Context) stripe.ListParams {
 }
 
 func toNiceErr(err error) error {
+	if err == nil {
+		return nil // preserve nil
+	}
+
 	var e *stripe.Error
 	if errors.As(err, &e) {
 		switch {
@@ -330,20 +337,34 @@ func toNiceErr(err error) error {
 			return ErrFeatureExists
 		}
 	}
+
+	// This particular error is returned when the Stripe SDK as an plain
+	// error.errorString, so we can't type assert it. Instead, just brute
+	// force the check using strings.Contains.
+	if strings.Contains(err.Error(), "test data is in the process of being deleted") {
+		return ErrTestDataDeleteInProgress
+	}
+
 	return err
 }
 
 // newBackends creates a new set of backends with the given HTTP client without
 // the default logger. This is a copy of stripe.NewBackends, but one that
 // doesn't puke ugly logs all over your stderr
-func newBackends(httpClient *http.Client) *stripe.Backends {
-	apiConfig := &stripe.BackendConfig{HTTPClient: httpClient, LeveledLogger: &stripe.LeveledLogger{Level: stripe.LevelNull}}
-	connectConfig := &stripe.BackendConfig{HTTPClient: httpClient, LeveledLogger: &stripe.LeveledLogger{Level: stripe.LevelNull}}
-	uploadConfig := &stripe.BackendConfig{HTTPClient: httpClient, LeveledLogger: &stripe.LeveledLogger{Level: stripe.LevelNull}}
+func newBackends(httpClient *http.Client, baseURL string) *stripe.Backends {
+	cfg := &stripe.BackendConfig{
+		LeveledLogger: &stripe.LeveledLogger{Level: stripe.LevelNull},
+
+		HTTPClient: httpClient,
+	}
+	if baseURL != "" {
+		cfg.URL = &baseURL
+	}
+
 	return &stripe.Backends{
-		API:     stripe.GetBackendWithConfig(stripe.APIBackend, apiConfig),
-		Connect: stripe.GetBackendWithConfig(stripe.ConnectBackend, connectConfig),
-		Uploads: stripe.GetBackendWithConfig(stripe.UploadsBackend, uploadConfig),
+		API:     stripe.GetBackendWithConfig(stripe.APIBackend, cfg),
+		Connect: stripe.GetBackendWithConfig(stripe.ConnectBackend, cfg),
+		Uploads: stripe.GetBackendWithConfig(stripe.UploadsBackend, cfg),
 	}
 }
 
