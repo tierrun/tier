@@ -13,7 +13,8 @@ var ErrProfileNotFound = errors.New("profile not found")
 type Profile struct {
 	Redeemed           bool   `json:"redeemed"`
 	AccountID          string `json:"account_id"`
-	DeviceName         string `json:"account_display_name"`
+	DisplayName        string `json:"account_display_name"`
+	DeviceName         string `json:"-"`
 	LiveAPIKey         string `json:"livemode_key_secret"`
 	LivePublishableKey string `json:"livemode_key_publishable"`
 	TestAPIKey         string `json:"testmode_key_secret"`
@@ -50,6 +51,13 @@ func LoadConfig() (*Config, error) {
 			return &Config{}, nil
 		}
 		return nil, err
+	}
+	host, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range c.Profiles {
+		p.DeviceName = host
 	}
 	return c, nil
 }
