@@ -64,7 +64,7 @@ func init() {
 }
 
 // GitCommit, if non-empty, is the git commit of the
-// github.com/tierrun/tier repository at which Tailscale was
+// github.com/tierrun/tier repository at which Tier was
 // built. Its format is the one returned by `git describe --always
 // --exclude "*" --dirty --abbrev=200`.
 var GitCommit = ""
@@ -73,15 +73,3 @@ var GitCommit = ""
 // control changes in the working directory (debug.ReadBuildInfo
 // setting "vcs.modified" was true).
 var GitDirty bool
-
-// ExtraGitCommit, if non-empty, is the git commit of a "supplemental"
-// repository at which Tailscale was built. Its format is the same as
-// gitCommit.
-//
-// ExtraGitCommit is used to track the source revision when the main
-// Tailscale repository is integrated into and built from another
-// repository (for example, Tailscale's proprietary code, or the
-// Android OSS repository). Together, GitCommit and ExtraGitCommit
-// exactly describe what repositories and commits were used in a
-// build.
-var ExtraGitCommit = ""

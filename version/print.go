@@ -24,9 +24,6 @@ func String() string {
 		}
 		fmt.Fprintf(&ret, "  tier commit: %s%s\n", GitCommit, dirty)
 	}
-	if ExtraGitCommit != "" {
-		fmt.Fprintf(&ret, "  other commit: %s\n", ExtraGitCommit)
-	}
 	fmt.Fprintf(&ret, "  go version: %s\n", runtime.Version())
 	return strings.TrimSpace(ret.String())
 }
