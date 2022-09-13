@@ -168,10 +168,6 @@ func (c *Client) WhoAmI(ctx context.Context) (UserInfo, error) {
 	return UserInfo{}, nil
 }
 
-type Stringish interface {
-	string | []byte
-}
-
 type DecodeError struct {
 	err error
 }
