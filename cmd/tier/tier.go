@@ -104,7 +104,7 @@ func tier(cmd string, args []string) error {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t[%s]\n",
 				status,
 				e.Plan,
-				e.Feature,
+				values.Coalesce(e.Feature, "-"),
 				link,
 				reason,
 			)
@@ -148,15 +148,15 @@ func tier(cmd string, args []string) error {
 		)
 
 		for _, p := range m.Plans {
-			link, err := url.JoinPath(dashURL[tc().Live()], "products", pricing.MakeID(p.ID))
-			if err != nil {
-				return err
-			}
-
 			for _, f := range p.Features {
+				link, err := url.JoinPath(dashURL[tc().Live()], "prices", f.ProviderID)
+				if err != nil {
+					return err
+				}
+
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
 					f.Plan,
-					f.ID,
+					values.Coalesce(f.ID, "-"),
 					values.Coalesce(f.Mode, "licensed"),
 					values.Coalesce(f.Aggregate, "-"),
 					f.Base,
