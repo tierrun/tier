@@ -338,7 +338,7 @@ func toNiceErr(err error) error {
 		}
 	}
 
-	// This particular error is returned when the Stripe SDK as an plain
+	// This particular error is returned from the Stripe SDK as an plain
 	// error.errorString, so we can't type assert it. Instead, just brute
 	// force the check using strings.Contains.
 	if strings.Contains(err.Error(), "test data is in the process of being deleted") {
