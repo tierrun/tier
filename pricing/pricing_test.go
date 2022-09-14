@@ -3,7 +3,9 @@ package pricing
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -224,6 +226,30 @@ func TestIsLive(t *testing.T) {
 		if got := tc.Live(); got != tt.live {
 			t.Errorf("[%q]: c.Live() = %v, want %v", tt.key, got, tt.live)
 		}
+	}
+}
+
+func TestErrorTestDataDeleteInProgress(t *testing.T) {
+	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(409)
+		io.WriteString(w, `{
+			"status": 409,
+			"message": "Your test data is in the process of being deleted. Once this is complete you will be able to make test mode requests again.",
+			"request_id": "req_jwAIp0vLfTqumh",
+			"type": "invalid_request_error"
+		}`)
+	}))
+	defer s.Close()
+
+	c := &Client{
+		StripeKey:  "sk_test_123",
+		HTTPClient: s.Client(),
+		BaseURL:    s.URL,
+	}
+
+	_, err := c.Pull(context.Background())
+	if !errors.Is(err, ErrTestDataDeleteInProgress) {
+		t.Errorf("err = %v, want %v", err, ErrTestDataDeleteInProgress)
 	}
 }
 
