@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -11,12 +10,12 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"text/tabwriter"
 	"time"
 
+	"go4.org/types"
 	"tier.run/cmd/tier/profile"
 	"tier.run/pricing"
 	"tier.run/pricing/schema"
@@ -74,17 +73,36 @@ var (
 	traceID = newID()
 )
 
+func timeNow() types.Time3339 {
+	return types.Time3339(time.Now()) // preserve time zone
+}
+
 func tier(cmd string, args []string) (err error) {
-	start := time.Now()
+	start := timeNow()
 	defer func() {
-		report(event{
-			Type:  "cli",
-			Name:  cmd,
-			Start: start,
-			End:   time.Now(),
-			Err:   err,
+		p, err := profile.Load("tier")
+		if err != nil {
+			vlogf("tier: %v", err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		report.send(ctx, &event{
+			TraceID:     traceID,
+			ID:          traceID,
+			Type:        "cli",
+			Name:        cmd,
+			Start:       start,
+			End:         timeNow(),
+			Err:         err,
+			AccountID:   p.AccountID,
+			DisplayName: p.DisplayName,
+			DeviceName:  p.DeviceName,
+			Version:     version.String(),
 		})
-		flushEvents()
+
+		report.flush()
 	}()
 
 	ctx := context.Background()
@@ -235,98 +253,10 @@ func filterNonTierPlans(plans schema.Plans) schema.Plans {
 	return dst
 }
 
-type event struct {
-	TraceID string
-	ID      string
-
-	Type  string
-	Name  string
-	Start time.Time
-	End   time.Time
-	Err   error
-
-	AccountID   string
-	DisplayName string
-	DeviceName  string
-	Version     string
-}
-
-func (e *event) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct {
-		AccountID string
-		Type      string
-		Start     string
-		End       string
-		Err       string
-	}{
-		AccountID: e.AccountID,
-		Type:      e.Type,
-		Start:     e.Start.Format(time.RFC3339),
-		End:       e.End.Format(time.RFC3339),
-		Err:       e.Err.Error(),
-	})
-}
-
-var events []event
-
-func report(ev event) {
-	events = append(events, ev)
-}
-
-func flushEvents() {
-	f := func() error {
-		p, err := profile.Load("tier")
-		if err != nil {
-			report(event{
-				Type:  "cli",
-				Name:  "flush/profile.Load",
-				Start: time.Now(),
-				End:   time.Now(),
-				Err:   err,
-			})
-		}
-
-		var buf bytes.Buffer
-		enc := json.NewEncoder(&buf)
-		for _, ev := range events {
-			ev.TraceID = traceID
-			ev.ID = traceID
-
-			if p != nil {
-				ev.AccountID = p.AccountID
-				ev.DisplayName = p.DisplayName
-				ev.DeviceName = p.DeviceName
-			}
-
-			ev.Version = version.String()
-
-			if err := enc.Encode(ev); err != nil {
-				return err
-			}
-		}
-
-		req, err := http.NewRequest(http.MethodPost, "https://tele.tier.run/api/t", &buf)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "tier-cli") // TODO: include version, commit, etc
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return err
-		}
-		resp.Body.Close() // fire-and-forget
-		return nil
-	}
-	if err := f(); err != nil {
-		vlogf("failed to report event: %v", err)
-	}
-}
-
 func vlogf(format string, args ...interface{}) {
 	if *flagVerbose {
 		fmt.Fprintf(stderr, format, args...)
+		fmt.Fprintln(stderr)
 	}
 }
 
