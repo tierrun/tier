@@ -14,6 +14,7 @@ import (
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/tailscale/hujson"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"tailscale.com/util/multierr"
 	"tier.run/pricing/internal/convert"
@@ -97,20 +98,24 @@ func (c *Client) Pull(ctx context.Context) (schema.Model, error) {
 		return schema.Model{}, err
 	}
 
-	var cp *schema.Plan
-	var plans schema.Plans
+	seen := map[string]*schema.Plan{}
 	for _, fp := range fps {
-		if cp == nil || cp.ID != fp.PlanID {
-			cp = &schema.Plan{ID: fp.PlanID, ProviderID: fp.PlanProviderID}
-			plans = append(plans, cp)
+		p := seen[fp.PlanID]
+		if p == nil {
+			p = &schema.Plan{ID: fp.PlanID}
+			seen[p.ID] = p
 		}
-		cp.Features = append(cp.Features, fp.Feature)
+		p.Features = append(p.Features, fp.Feature)
 	}
 
+	var plans schema.Plans
+	if len(seen) > 0 {
+		// preserve nil
+		plans = maps.Values(seen)
+	}
 	slices.SortFunc(plans, func(a, b *schema.Plan) bool {
 		return a.ID < b.ID
 	})
-
 	return schema.Model{Plans: plans}, nil
 }
 
@@ -145,10 +150,7 @@ func (c *Client) FetchFeatures(ctx context.Context, ids ...string) ([]schema.Fea
 		if a.PlanID < b.PlanID {
 			return true
 		}
-		if a.ID < b.ID {
-			return true
-		}
-		return false
+		return a.ID < b.ID
 	})
 
 	return fps, nil
