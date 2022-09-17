@@ -83,6 +83,7 @@ func tier(cmd string, args []string) (err error) {
 		p, err := profile.Load("tier")
 		if err != nil {
 			vlogf("tier: %v", err)
+			p = &profile.Profile{}
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
