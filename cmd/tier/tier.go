@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"go4.org/types"
-	"tier.run/cmd/tier/profile"
 	"tier.run/pricing"
 	"tier.run/pricing/schema"
+	"tier.run/profile"
 	"tier.run/values"
 	"tier.run/version"
 )
