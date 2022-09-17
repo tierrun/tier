@@ -11,8 +11,8 @@ import (
 
 	"tailscale.com/logtail/backoff"
 
-	"tier.run/cmd/tier/profile"
 	"tier.run/fetch"
+	"tier.run/profile"
 )
 
 func connect() error {
