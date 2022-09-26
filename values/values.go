@@ -47,3 +47,20 @@ func Invert[K, V comparable](m map[K]V) map[V]K {
 	}
 	return out
 }
+
+// ZeroIf returns the zero value of T if this is equal to that; otherwise it
+// returns this. It never returns that.
+func ZeroIf[T comparable](this, that T) T {
+	if this == that {
+		var zero T
+		return zero
+	}
+	return this
+}
+
+// MaybeZero is shorthand for
+//
+//	v = ZeroIf(v, someValue)
+func MaybeZero[T comparable](v *T, zero T) {
+	*v = ZeroIf(*v, zero)
+}

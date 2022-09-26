@@ -1,4 +1,4 @@
-package schema
+package materialize
 
 import "testing"
 
@@ -31,11 +31,16 @@ func TestValidatePlanID(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.planID, func(t *testing.T) {
-			p := &Plan{
-				ID:       tc.planID,
-				Features: Features{{ID: "feature:x"}},
+			m := jsonModel{
+				Plans: map[string]jsonPlan{
+					tc.planID: {
+						Features: map[string]jsonFeature{
+							"feature:x": {},
+						},
+					},
+				},
 			}
-			err := Validate(p)
+			err := validate(m)
 			if tc.valid && err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

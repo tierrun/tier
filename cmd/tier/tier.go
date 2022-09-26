@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,10 +15,11 @@ import (
 	"time"
 
 	"go4.org/types"
-	"tier.run/pricing"
-	"tier.run/pricing/schema"
+	"golang.org/x/sync/errgroup"
+	"tier.run/features"
+	"tier.run/materialize"
 	"tier.run/profile"
-	"tier.run/values"
+	"tier.run/stripe"
 	"tier.run/version"
 )
 
@@ -125,33 +125,30 @@ func tier(cmd string, args []string) (err error) {
 		}
 		defer f.Close()
 
-		if err := tc().PushJSON(ctx, f, func(e *pricing.PushEvent) {
-			status := "ok"
-			var reason string
-			switch e.Err {
+		if err := pushJSON(ctx, f, func(f features.Feature, err error) {
+			link, lerr := url.JoinPath(dashURL[tc().Live()], "products", f.ID())
+			if lerr != nil {
+				panic(lerr)
+			}
+
+			var status, reason string
+			switch err {
 			case nil:
+				status = "ok"
 				reason = "created"
-			case pricing.ErrFeatureExists:
+			case features.ErrFeatureExists:
+				status = "ok"
 				reason = "feature already exists"
-			case pricing.ErrPlanExists:
-				reason = "plan already exists"
 			default:
 				status = "failed"
-				reason = e.Err.Error()
+				reason = err.Error()
+				link = "-"
 			}
 
-			if e.Feature == "" && reason == "" {
-				return // no need to report plan creation
-			}
-
-			link, err := url.JoinPath(dashURL[tc().Live()], "products", e.PlanProviderID)
-			if err != nil {
-				reason = fmt.Sprintf("failed to create link: %v", err)
-			}
 			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t[%s]\n",
 				status,
-				e.Plan,
-				values.Coalesce(e.Feature, "-"),
+				f.Plan,
+				f.Name,
 				link,
 				reason,
 			)
@@ -160,27 +157,24 @@ func tier(cmd string, args []string) (err error) {
 		}
 		return nil
 	case "pull":
-		m, err := tc().Pull(ctx)
+		fs, err := tc().Pull(ctx, 0)
 		if err != nil {
 			return err
 		}
 
-		m.Plans = filterNonTierPlans(m.Plans)
-
-		out, err := json.MarshalIndent(m, "", "     ")
+		out, err := materialize.ToPricingJSON(fs)
 		if err != nil {
 			return err
 		}
+
 		fmt.Fprintf(stdout, "%s\n", out)
 
 		return nil
 	case "ls":
-		m, err := tc().Pull(ctx)
+		fs, err := tc().Pull(ctx, 0)
 		if err != nil {
 			return err
 		}
-
-		m.Plans = filterNonTierPlans(m.Plans)
 
 		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
 		defer tw.Flush()
@@ -194,22 +188,20 @@ func tier(cmd string, args []string) (err error) {
 			"LINK",
 		)
 
-		for _, p := range m.Plans {
-			for _, f := range p.Features {
-				link, err := url.JoinPath(dashURL[tc().Live()], "prices", f.ProviderID)
-				if err != nil {
-					return err
-				}
-
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
-					f.Plan,
-					values.Coalesce(f.ID, "-"),
-					values.Coalesce(f.Mode, "licensed"),
-					values.Coalesce(f.Aggregate, "-"),
-					f.Base,
-					link,
-				)
+		for _, f := range fs {
+			link, err := url.JoinPath(dashURL[tc().Live()], "products", f.ID())
+			if err != nil {
+				return err
 			}
+
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
+				f.Plan,
+				f.Name,
+				f.Mode,
+				f.Aggregate,
+				f.Base,
+				link,
+			)
 		}
 
 		return nil
@@ -227,9 +219,9 @@ func fileOrStdin(fname string) (io.ReadCloser, error) {
 	return os.Open(fname)
 }
 
-var tierClient *pricing.Client
+var tierClient *features.Client
 
-func tc() *pricing.Client {
+func tc() *features.Client {
 	if tierClient == nil {
 		key, err := getKey()
 		if err != nil {
@@ -239,19 +231,15 @@ func tc() *pricing.Client {
 			}
 			os.Exit(1)
 		}
-		tierClient = &pricing.Client{StripeKey: key}
-	}
-	return tierClient
-}
-
-func filterNonTierPlans(plans schema.Plans) schema.Plans {
-	var dst schema.Plans
-	for _, p := range plans {
-		if p.ID != "" {
-			dst = append(dst, p)
+		sc := &stripe.Client{
+			APIKey: key,
+		}
+		tierClient = &features.Client{
+			Stripe: sc,
+			Logf:   vlogf,
 		}
 	}
-	return dst
+	return tierClient
 }
 
 func vlogf(format string, args ...interface{}) {
@@ -268,4 +256,27 @@ func newID() string {
 		panic(err)
 	}
 	return hex.EncodeToString(buf[:])
+}
+
+func pushJSON(ctx context.Context, r io.Reader, cb func(features.Feature, error)) error {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	fs, err := materialize.FromPricingHuJSON(data)
+	if err != nil {
+		return err
+	}
+	var g errgroup.Group
+	g.SetLimit(20)
+	for _, f := range fs {
+		f := f
+		g.Go(func() error {
+			err := tc().Push(ctx, f)
+			cb(f, err)
+			return nil
+		})
+	}
+	return g.Wait()
 }
