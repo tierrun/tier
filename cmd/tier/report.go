@@ -42,8 +42,8 @@ type reporter struct {
 }
 
 func (r *reporter) init() {
-	r.g.SetLimit(100)                      // arbitrary limit; large enough to not block
-	r.send(context.Background(), &event{}) // wake up the telemetry server
+	r.g.SetLimit(50)                  // arbitrary; large enough to avoid blocking
+	r.send(context.Background(), nil) // wake up the telemetry server
 }
 
 func (r *reporter) send(ctx context.Context, ev *event) {
@@ -54,31 +54,40 @@ func (r *reporter) send(ctx context.Context, ev *event) {
 			return nil
 		}
 
-		ctx, cancel := context.WithCancel(ctx)
+		done := make(chan struct{})
 		ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 			WroteRequest: func(info httptrace.WroteRequestInfo) {
+				vvlogf("report: err: %v", info.Err)
 				// one the request has been written, we're done
 				// and callers may unblock before a response is
 				// received
-				cancel() // unblock Do(); we don't need the response
+				close(done)
 			},
 		})
 
-		vvlogf("sending event: %v", ev)
-		req, err := http.NewRequestWithContext(ctx, "POST", "https://tele.tier.run/api/t", bytes.NewReader(data))
-		if err != nil {
-			panic(err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "tier/1") // TODO(bmizerany): include version, commit, etc (already in event.Version)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			vlogf("error sending events: %v", err)
+		go func() {
+			vvlogf("sending event: %v", ev)
+			req, err := http.NewRequestWithContext(ctx, "POST", "https://tele.tier.run/api/t", bytes.NewReader(data))
+			if err != nil {
+				panic(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("User-Agent", "tier/1") // TODO(bmizerany): include version, commit, etc (already in event.Version)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				vvlogf("error sending events: %v", err)
+				return
+			}
+			resp.Body.Close()
+			vvlogf("sent events: %v", resp.Status)
+		}()
+
+		select {
+		case <-done:
 			return nil
+		case <-ctx.Done():
+			return ctx.Err()
 		}
-		resp.Body.Close()
-		vvlogf("sent events: %v", resp.Status)
-		return nil
 	})
 	if !ok {
 		vvlogf("report: event dropped")
