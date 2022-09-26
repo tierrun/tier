@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strconv"
 	"text/tabwriter"
 	"time"
 
@@ -298,10 +299,18 @@ func tc() *features.Client {
 	return tierClient
 }
 
-func vlogf(format string, args ...interface{}) {
-	if *flagVerbose {
+var debugLevel, _ = strconv.Atoi(os.Getenv("TIER_DEBUG"))
+
+func vlogf(format string, args ...any) {
+	if *flagVerbose || debugLevel > 0 {
 		fmt.Fprintf(stderr, format, args...)
 		fmt.Fprintln(stderr)
+	}
+}
+
+func vvlogf(format string, args ...any) {
+	if debugLevel > 2 {
+		vlogf(format, args...)
 	}
 }
 
