@@ -4,14 +4,12 @@ go 1.19
 
 require (
 	github.com/kr/pretty v0.3.0
-	github.com/stripe/stripe-go/v72 v72.122.0
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/tools v0.1.12
 	honnef.co/go/tools v0.3.3
 	kr.dev/diff v0.2.1-0.20220605072704-63b4f29d6f39
-	kr.dev/errorfmt v0.1.1
 	tailscale.com v1.22.2
 )
 

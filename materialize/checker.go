@@ -1,4 +1,4 @@
-package schema
+package materialize
 
 import (
 	"fmt"
@@ -9,33 +9,33 @@ import (
 	"tailscale.com/util/multierr"
 )
 
-func Validate(p *Plan) error {
+func validate(m jsonModel) error {
 	var e errors
-	e.report(validatePlanID(p.ID))
-
-	if len(p.Features) == 0 {
-		e.reportf("plans[%q]: plans must have at least one feature", p.ID)
-	}
-
-	for _, f := range p.Features {
-		e.report(validateFeatureID(p.ID, f.ID))
-
-		if f.Base > 0 && len(f.Tiers) > 0 {
-			e.reportf("plans[%q].features[%q]: base must be zero with tiers", p.ID, f.ID)
+	for plan, p := range m.Plans {
+		e.report(validatePlanID(plan))
+		if len(p.Features) == 0 {
+			e.reportf("plans[%q]: plans must have at least one feature", plan)
 		}
-		if f.Base < 0 {
-			e.reportf("plans[%q].features[%q]: base must be positive", p.ID, f.ID)
-		}
+		for feature, f := range p.Features {
+			e.report(validateFeatureID(plan, feature))
 
-		for i, t := range f.Tiers {
-			if t.Upto < 1 {
-				e.reportf("plans[%q].features[%q].tiers[%d]: upto must be greater than zero", p.ID, f.ID, i)
+			if f.Base > 0 && len(f.Tiers) > 0 {
+				e.reportf("plans[%q].features[%q]: base must be zero with tiers", plan, feature)
 			}
-			if t.Price < 0 {
-				e.reportf("plans[%q].features[%q].tiers[%d]: price must be positive", p.ID, f.ID, i)
+			if f.Base < 0 {
+				e.reportf("plans[%q].features[%q]: base must be positive", plan, feature)
 			}
-			if t.Base < 0 {
-				e.reportf("plans[%q].features[%q].tiers[%d]: base must be positive", p.ID, f.ID, i)
+
+			for i, t := range f.Tiers {
+				if t.Upto < 1 {
+					e.reportf("plans[%q].features[%q].tiers[%d]: upto must be greater than zero", plan, feature, i)
+				}
+				if t.Price < 0 {
+					e.reportf("plans[%q].features[%q].tiers[%d]: price must be positive", plan, feature, i)
+				}
+				if t.Base < 0 {
+					e.reportf("plans[%q].features[%q].tiers[%d]: base must be positive", plan, feature, i)
+				}
 			}
 		}
 	}
