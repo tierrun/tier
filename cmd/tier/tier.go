@@ -25,8 +25,9 @@ import (
 
 // Flags
 var (
-	flagLive    = flag.Bool("live", false, "use live Stripe key (default is false)")
-	flagVerbose = flag.Bool("v", false, "verbose output")
+	flagLive     = flag.Bool("live", false, "use live Stripe key (default is false)")
+	flagVerbose  = flag.Bool("v", false, "verbose output")
+	flagMainHelp = flag.Bool("h", false, "show this message")
 )
 
 // Env
@@ -43,12 +44,38 @@ var (
 
 // Errors
 var (
-	errUsage = errors.New("usage: tier [--live] <version|connect|push|pull|ls> [<args>]")
+	//lint:ignore ST1005 this error is not used like normal errors
+	errUsage = errors.New(`Usage:
+
+	tier [flags] <command> [arguments]
+
+The commands are:
+
+	connect    connect your Stripe account
+	push       push pricing plans to Stripe
+	pull       pull pricing plans from Stripe
+	ls         list pricing plans
+	version    print the current CLI version
+
+The flags are:
+
+	-l, -live  use live Stripe key (default is false)
+	-v         verbose output
+	-h         show this message
+`)
 )
 
 func main() {
 	log.SetFlags(0)
+	flag.Usage = func() {
+		if err := help(stderr, ""); err != nil {
+			log.Fatalf("%v", err)
+		}
+	}
 	flag.Parse()
+	if *flagMainHelp {
+		flag.Usage()
+	}
 	args := flag.Args()
 	if len(args) == 0 {
 		log.Fatalf("%v", errUsage)
@@ -83,7 +110,9 @@ func tier(cmd string, args []string) (err error) {
 		p, err := profile.Load("tier")
 		if err != nil {
 			vlogf("tier: %v", err)
-			p = &profile.Profile{}
+			p = &profile.Profile{
+				DeviceName: "profile.unknown",
+			}
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -106,14 +135,32 @@ func tier(cmd string, args []string) (err error) {
 		report.flush()
 	}()
 
+	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+	fs.Usage = func() {
+		if err := help(stdout, cmd); err != nil {
+			log.Fatalf("tier: %v", err)
+		}
+		os.Exit(2)
+	}
+	flagHelp := fs.Bool("h", false, "help")
+	fs.Parse(args)
+
 	ctx := context.Background()
 	switch cmd {
+	case "help":
+		if fs.NArg() == 0 {
+			return errUsage
+		}
+		return help(stdout, args[0])
 	case "version":
 		fmt.Println(version.String())
 		return nil
 	case "init":
 		panic("TODO")
 	case "push":
+		if *flagHelp {
+			return help(stdout, "push")
+		}
 		pj := ""
 		if len(args) > 0 {
 			pj = args[0]
@@ -157,6 +204,9 @@ func tier(cmd string, args []string) (err error) {
 		}
 		return nil
 	case "pull":
+		if *flagHelp {
+			return help(stdout, "pull")
+		}
 		fs, err := tc().Pull(ctx, 0)
 		if err != nil {
 			return err
@@ -171,6 +221,9 @@ func tier(cmd string, args []string) (err error) {
 
 		return nil
 	case "ls":
+		if *flagHelp {
+			return help(stdout, "ls")
+		}
 		fs, err := tc().Pull(ctx, 0)
 		if err != nil {
 			return err
@@ -206,6 +259,9 @@ func tier(cmd string, args []string) (err error) {
 
 		return nil
 	case "connect":
+		if *flagHelp {
+			return help(stdout, "connect")
+		}
 		return connect()
 	default:
 		return errUsage
