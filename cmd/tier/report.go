@@ -50,7 +50,7 @@ func (r *reporter) send(ctx context.Context, ev *event) {
 	ok := r.g.TryGo(func() error {
 		data, err := json.Marshal(ev)
 		if err != nil {
-			vlogf("report: %v", err)
+			vvlogf("report: %v", err)
 			return nil
 		}
 
@@ -64,7 +64,7 @@ func (r *reporter) send(ctx context.Context, ev *event) {
 			},
 		})
 
-		vlogf("sending event: %v", ev)
+		vvlogf("sending event: %v", ev)
 		req, err := http.NewRequestWithContext(ctx, "POST", "https://tele.tier.run/api/t", bytes.NewReader(data))
 		if err != nil {
 			panic(err)
@@ -77,11 +77,11 @@ func (r *reporter) send(ctx context.Context, ev *event) {
 			return nil
 		}
 		resp.Body.Close()
-		vlogf("sent events: %v", resp.Status)
+		vvlogf("sent events: %v", resp.Status)
 		return nil
 	})
 	if !ok {
-		vlogf("report: event dropped")
+		vvlogf("report: event dropped")
 	}
 }
 
