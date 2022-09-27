@@ -17,7 +17,7 @@ import (
 
 	"go4.org/types"
 	"golang.org/x/sync/errgroup"
-	"tier.run/features"
+	"tier.run/client/tier"
 	"tier.run/materialize"
 	"tier.run/profile"
 	"tier.run/stripe"
@@ -82,7 +82,7 @@ func main() {
 		log.Fatalf("%v", errUsage)
 	}
 
-	if err := tier(args[0], args[1:]); err != nil {
+	if err := runTier(args[0], args[1:]); err != nil {
 		if errors.Is(err, errUsage) {
 			log.Fatalf("%v", err)
 		} else {
@@ -105,7 +105,7 @@ func timeNow() types.Time3339 {
 	return types.Time3339(time.Now()) // preserve time zone
 }
 
-func tier(cmd string, args []string) (err error) {
+func runTier(cmd string, args []string) (err error) {
 	start := timeNow()
 	defer func() {
 		p, err := profile.Load("tier")
@@ -173,7 +173,7 @@ func tier(cmd string, args []string) (err error) {
 		}
 		defer f.Close()
 
-		if err := pushJSON(ctx, f, func(f features.Feature, err error) {
+		if err := pushJSON(ctx, f, func(f tier.Feature, err error) {
 			link, lerr := url.JoinPath(dashURL[tc().Live()], "products", f.ID())
 			if lerr != nil {
 				panic(lerr)
@@ -184,7 +184,7 @@ func tier(cmd string, args []string) (err error) {
 			case nil:
 				status = "ok"
 				reason = "created"
-			case features.ErrFeatureExists:
+			case tier.ErrFeatureExists:
 				status = "ok"
 				reason = "feature already exists"
 			default:
@@ -276,9 +276,9 @@ func fileOrStdin(fname string) (io.ReadCloser, error) {
 	return os.Open(fname)
 }
 
-var tierClient *features.Client
+var tierClient *tier.Client
 
-func tc() *features.Client {
+func tc() *tier.Client {
 	if tierClient == nil {
 		key, err := getKey()
 		if err != nil {
@@ -291,7 +291,7 @@ func tc() *features.Client {
 		sc := &stripe.Client{
 			APIKey: key,
 		}
-		tierClient = &features.Client{
+		tierClient = &tier.Client{
 			Stripe: sc,
 			Logf:   vlogf,
 		}
@@ -323,7 +323,7 @@ func newID() string {
 	return hex.EncodeToString(buf[:])
 }
 
-func pushJSON(ctx context.Context, r io.Reader, cb func(features.Feature, error)) error {
+func pushJSON(ctx context.Context, r io.Reader, cb func(tier.Feature, error)) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return err
