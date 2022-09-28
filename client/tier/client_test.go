@@ -112,3 +112,49 @@ func TestRoundTrip(t *testing.T) {
 		}
 	})
 }
+
+func TestAppendPhase(t *testing.T) {
+	fs := []Feature{
+		{
+			Name:      "feature:x",
+			Plan:      "plan:test@0",
+			Interval:  "@yearly",
+			Currency:  "usd",
+			Title:     "FeatureTitle",
+			Mode:      "volume",
+			Aggregate: "perpetual",
+			Tiers: []Tier{
+				{Upto: 1, Price: 100, Base: 1},
+				{Upto: 2, Price: 200, Base: 2},
+				{Upto: 3, Price: 300, Base: 3},
+			},
+		},
+		{
+			Name:     "feature:y",
+			Plan:     "plan:test@0",
+			Interval: "@daily",
+			Currency: "eur",
+			Title:    "Test2",
+			Base:     1000,
+		},
+	}
+
+	ctx := context.Background()
+
+	tc := newTestClient(t)
+	t.Run("push", func(t *testing.T) {
+		for _, f := range fs {
+			f := f
+			t.Run(f.Name, func(t *testing.T) {
+				t.Parallel()
+				if err := tc.Push(ctx, f); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	})
+
+	if err := tc.AppendPhase(ctx, "org:123", nil); err != nil {
+		t.Fatal(err)
+	}
+}
