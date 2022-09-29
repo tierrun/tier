@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
 	"tier.run/stripe"
 )
@@ -47,7 +48,55 @@ func (c *Client) Subscribe(ctx context.Context, email string, phases []Phase) er
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules", f, nil)
 }
 
-// LookupOrgID returns the customer ID for the given email address; if any.
+func (c *Client) LookupPhases(ctx context.Context, email string) ([]Phase, error) {
+	org, err := c.lookupOrgID(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+
+	var f stripe.Form
+	f.Set("customer", org)
+
+	type T struct {
+		stripe.ID
+		Phases []struct {
+			Start int64 `json:"start_date"`
+			Items []struct {
+				stripe.ID `json:"price"`
+			}
+		}
+	}
+
+	ss, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/subscription_schedules", f)
+	if err != nil {
+		return nil, err
+	}
+	if len(ss) == 0 {
+		return nil, nil
+	}
+
+	c.Logf("ss: %# v", pretty.Formatter(ss))
+
+	var ps []Phase
+	for _, s := range ss {
+		for _, p := range s.Phases {
+			plans := make([]string, 0, len(p.Items))
+			for _, pi := range p.Items {
+				plans = append(plans, pi.ProviderID())
+			}
+			ps = append(ps, Phase{
+				Effective: time.Unix(p.Start, 0),
+				Plans:     plans,
+			})
+		}
+	}
+
+	// TODO(bmizerany): sort by Effective and decide how to disambiguate multiple schedules
+
+	return ps, nil
+}
+
+// lookupOrgID returns the customer ID for the given email address; if any.
 // It returns the empty string without an error if no customer exists with the provided email.
 //
 // It only returns errors encountered while communicating with Stripe.

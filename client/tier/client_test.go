@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/stripe"
@@ -165,17 +166,41 @@ func TestAppendPhase(t *testing.T) {
 		t.Fatalf("%#v", err)
 	}
 
-	ps := []Phase{
+	// TODO: maybe use Stripe clocks here? They're really slow, so holding
+	// off for now.
+	now := time.Now().Truncate(time.Second)
+	want := []Phase{
 		{
 			Plans: []string{"plan:test@0"},
 		},
 		{
-			Effective: time.Now().Add(24 * time.Hour),
+			Effective: now.AddDate(0, 0, 1),
 			Plans:     []string{"plan:test@0"},
 		},
 	}
 
-	if err := tc.Subscribe(ctx, "org@example.com", ps); err != nil {
+	if err := tc.Subscribe(ctx, "org@example.com", want); err != nil {
 		t.Fatal(err)
 	}
+
+	got, err := tc.LookupPhases(ctx, "org@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("got: %# v", pretty.Formatter(got))
+
+	// normalize times to "now"
+	for i := range got {
+		if got[i].Effective.Sub(now).Abs().Minutes() < 3 {
+			got[i].Effective = now
+		}
+	}
+	for i := range want {
+		if want[i].Effective.IsZero() {
+			want[i].Effective = now
+		}
+	}
+
+	diff.Test(t, t.Errorf, got, want)
 }
