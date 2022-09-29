@@ -45,6 +45,8 @@ func newTestClient(t *testing.T) *Client {
 }
 
 func TestRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	tc := newTestClient(t)
 	ctx := context.Background()
 
@@ -114,6 +116,8 @@ func TestRoundTrip(t *testing.T) {
 }
 
 func TestAppendPhase(t *testing.T) {
+	t.Parallel()
+
 	fs := []Feature{
 		{
 			Name:      "feature:x",
@@ -154,7 +158,19 @@ func TestAppendPhase(t *testing.T) {
 		}
 	})
 
-	if err := tc.AppendPhase(ctx, "org:123", nil); err != nil {
+	var f stripe.Form
+	f.Set("email", "org@example.com")
+	if err := tc.Stripe.Do(ctx, "POST", "/v1/customers", f, nil); err != nil {
+		t.Fatalf("%#v", err)
+	}
+
+	ps := []Phase{
+		{
+			Plans: []string{"plan:test@0"},
+		},
+	}
+
+	if err := tc.Schedule(ctx, "org@example.com", ps, Never); err != nil {
 		t.Fatal(err)
 	}
 }
