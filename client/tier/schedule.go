@@ -8,22 +8,14 @@ import (
 	"tier.run/stripe"
 )
 
-// Never is intended for use as the end parameter SetSchedule when specifying a
-// schedule that never expires (e.g. the final phase has no end date).
-//
-// Example:
-//
-//	c.Schedule(ctx, "bill@acme.com", phases, tier.Never)
-var Never time.Time
-
 type Phase struct {
-	Effective time.Time // the time the phase starts; zero means immediately
-	Plans     []string  // the plans and any features to apply during the phase
+	Effective time.Time
 
-	Meta map[string]string // interesting metadata (e.g. "churn-risk=high")
+	Plans []string          // the plans and any features to apply during the phase
+	Meta  map[string]string // interesting metadata (e.g. "churn-risk=high")
 }
 
-func (c *Client) Schedule(ctx context.Context, email string, phases []Phase, end time.Time) error {
+func (c *Client) Subscribe(ctx context.Context, email string, phases []Phase) error {
 	org, err := c.lookupOrgID(ctx, email)
 	if err != nil {
 		return err
@@ -40,20 +32,15 @@ func (c *Client) Schedule(ctx context.Context, email string, phases []Phase, end
 		if i == 0 {
 			f.Set("start_date", nowOrSpecific(p.Effective))
 		} else {
-			t := nowOrSpecific(p.Effective)
-			f.Set("phases", i-1, "end_date", t)
-			f.Set("phases", i, "start_date", t)
-		}
-		for k, v := range p.Meta {
-			f.Set("phases", i, "metadata", k, v)
+			f.Set("phases", i-1, "end_date", nowOrSpecific(p.Effective))
 		}
 
 		var j int
 		for _, fe := range fs {
 			if containsAny(p.Plans, fe.Plan, fe.Name) {
 				f.Set("phases", i, "items", j, "price", fe.ProviderID)
-				j++
 				// f.Set("phases", i, "items", "quantity", 0)
+				j++
 			}
 		}
 	}

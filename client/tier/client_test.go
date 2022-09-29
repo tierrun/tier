@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
@@ -122,7 +123,7 @@ func TestAppendPhase(t *testing.T) {
 		{
 			Name:      "feature:x",
 			Plan:      "plan:test@0",
-			Interval:  "@yearly",
+			Interval:  "@daily",
 			Currency:  "usd",
 			Title:     "FeatureTitle",
 			Mode:      "volume",
@@ -137,7 +138,7 @@ func TestAppendPhase(t *testing.T) {
 			Name:     "feature:y",
 			Plan:     "plan:test@0",
 			Interval: "@daily",
-			Currency: "eur",
+			Currency: "usd",
 			Title:    "Test2",
 			Base:     1000,
 		},
@@ -168,9 +169,13 @@ func TestAppendPhase(t *testing.T) {
 		{
 			Plans: []string{"plan:test@0"},
 		},
+		{
+			Effective: time.Now().Add(24 * time.Hour),
+			Plans:     []string{"plan:test@0"},
+		},
 	}
 
-	if err := tc.Schedule(ctx, "org@example.com", ps, Never); err != nil {
+	if err := tc.Subscribe(ctx, "org@example.com", ps); err != nil {
 		t.Fatal(err)
 	}
 }
