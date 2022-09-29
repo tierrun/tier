@@ -55,6 +55,7 @@ func (c *Client) LookupPhases(ctx context.Context, email string) ([]Phase, error
 	}
 
 	var f stripe.Form
+	f.Add("expand[]", "data.phases.items.price")
 	f.Set("customer", org)
 
 	type T struct {
@@ -62,7 +63,12 @@ func (c *Client) LookupPhases(ctx context.Context, email string) ([]Phase, error
 		Phases []struct {
 			Start int64 `json:"start_date"`
 			Items []struct {
-				stripe.ID `json:"price"`
+				Price struct {
+					Metadata struct {
+						Plan    string `json:"tier.plan"`
+						Feature string `json:"tier.feature"`
+					}
+				}
 			}
 		}
 	}
@@ -82,11 +88,12 @@ func (c *Client) LookupPhases(ctx context.Context, email string) ([]Phase, error
 		for _, p := range s.Phases {
 			plans := make([]string, 0, len(p.Items))
 			for _, pi := range p.Items {
-				plans = append(plans, pi.ProviderID())
+				plans = append(plans, pi.Price.Metadata.Plan)
 			}
+			slices.Sort(plans)
 			ps = append(ps, Phase{
 				Effective: time.Unix(p.Start, 0),
-				Plans:     plans,
+				Plans:     slices.Compact(plans),
 			})
 		}
 	}
