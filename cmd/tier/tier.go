@@ -145,6 +145,9 @@ func runTier(cmd string, args []string) (err error) {
 	}
 	flagHelp := fs.Bool("h", false, "help")
 	fs.Parse(args)
+	if *flagHelp {
+		return help(stdout, cmd)
+	}
 
 	ctx := context.Background()
 	switch cmd {
@@ -159,9 +162,6 @@ func runTier(cmd string, args []string) (err error) {
 	case "init":
 		panic("TODO")
 	case "push":
-		if *flagHelp {
-			return help(stdout, "push")
-		}
 		pj := ""
 		if len(args) > 0 {
 			pj = args[0]
@@ -205,9 +205,6 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		return nil
 	case "pull":
-		if *flagHelp {
-			return help(stdout, "pull")
-		}
 		fs, err := tc().Pull(ctx, 0)
 		if err != nil {
 			return err
@@ -222,9 +219,6 @@ func runTier(cmd string, args []string) (err error) {
 
 		return nil
 	case "ls":
-		if *flagHelp {
-			return help(stdout, "ls")
-		}
 		fs, err := tc().Pull(ctx, 0)
 		if err != nil {
 			return err
@@ -260,10 +254,18 @@ func runTier(cmd string, args []string) (err error) {
 
 		return nil
 	case "connect":
-		if *flagHelp {
-			return help(stdout, "connect")
-		}
 		return connect()
+	case "subscribe":
+		if len(args) < 2 {
+			return errUsage
+		}
+		email := args[0]
+		plans := args[1:]
+		if email == "" || len(plans) == 0 {
+			return errUsage
+		}
+		log.Printf("subscribing %s to %v", email, plans)
+		return tc().Subscribe(ctx, email, []tier.Phase{{Plans: plans}})
 	default:
 		return errUsage
 	}

@@ -2,6 +2,7 @@ package tier
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/kr/pretty"
@@ -20,6 +21,10 @@ func (c *Client) Subscribe(ctx context.Context, email string, phases []Phase) er
 	org, err := c.lookupOrgID(ctx, email)
 	if err != nil {
 		return err
+	}
+
+	if org == "" {
+		return errors.New("no customer found for email")
 	}
 
 	fs, err := c.Pull(ctx, 0)
@@ -43,6 +48,9 @@ func (c *Client) Subscribe(ctx context.Context, email string, phases []Phase) er
 				// f.Set("phases", i, "items", "quantity", 0)
 				j++
 			}
+		}
+		if j == 0 {
+			return errors.New("no plans found for phase")
 		}
 	}
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules", f, nil)
