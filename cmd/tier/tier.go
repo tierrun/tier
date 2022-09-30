@@ -174,11 +174,7 @@ func runTier(cmd string, args []string) (err error) {
 		defer f.Close()
 
 		if err := pushJSON(ctx, f, func(f tier.Feature, err error) {
-			link, lerr := url.JoinPath(dashURL[tc().Live()], "products", f.ID())
-			if lerr != nil {
-				panic(lerr)
-			}
-
+			link := makeLink(f)
 			var status, reason string
 			switch err {
 			case nil:
@@ -237,18 +233,13 @@ func runTier(cmd string, args []string) (err error) {
 		)
 
 		for _, f := range fs {
-			link, err := url.JoinPath(dashURL[tc().Live()], "products", f.ID())
-			if err != nil {
-				return err
-			}
-
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
 				f.Plan,
 				f.Name,
 				f.Mode,
 				f.Aggregate,
 				f.Base,
-				link,
+				makeLink(f),
 			)
 		}
 
@@ -346,4 +337,12 @@ func pushJSON(ctx context.Context, r io.Reader, cb func(tier.Feature, error)) er
 		})
 	}
 	return g.Wait()
+}
+
+func makeLink(f tier.Feature) string {
+	link, err := url.JoinPath(dashURL[tc().Live()], "products", f.ID())
+	if err != nil {
+		panic(err)
+	}
+	return link
 }
