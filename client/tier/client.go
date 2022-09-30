@@ -184,8 +184,7 @@ func (c *Client) Push(ctx context.Context, f Feature) error {
 	// TODO(bmizerany): data.Set("currency_options", "?")
 
 	err := c.Stripe.Do(ctx, "POST", "/v1/prices", data, nil)
-	var e *stripe.Error
-	if errors.As(err, &e) && e.Code == "resource_already_exists" {
+	if isExists(err) {
 		return ErrFeatureExists
 	}
 	return err
@@ -274,4 +273,9 @@ func parseLimit(s string) int {
 	}
 	n, _ := strconv.Atoi(s)
 	return n
+}
+
+func isExists(err error) bool {
+	var e *stripe.Error
+	return errors.As(err, &e) && e.Code == "resource_already_exists"
 }
