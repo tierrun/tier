@@ -105,12 +105,13 @@ func TestRoundTrip(t *testing.T) {
 	})
 
 	t.Run("product title", func(t *testing.T) {
-		f := want[0]
 		var got struct {
 			Name string
 		}
-		tc.Stripe.Do(ctx, "GET", "/v1/products/"+f.ID(), stripe.Form{}, &got)
-		const want = "PlanTitle (yearly): FeatureTitle (theVersion)"
+		if err := tc.Stripe.Do(ctx, "GET", "/v1/products/tier__test00__plan-free-theVersion", stripe.Form{}, &got); err != nil {
+			t.Fatal(err)
+		}
+		const want = "PlanTitle - FeatureTitle"
 		if got.Name != want {
 			t.Errorf("got %q, want %q", got.Name, want)
 		}

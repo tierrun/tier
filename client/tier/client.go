@@ -28,13 +28,6 @@ var (
 	}
 
 	intervalFromStripe = values.Invert(intervalToStripe)
-
-	intervalTitles = map[string]string{
-		"@daily":   "daily",
-		"@weekly":  "weekly",
-		"@monthly": "monthly",
-		"@yearly":  "yearly",
-	}
 )
 
 var (
@@ -89,14 +82,13 @@ type Feature struct {
 	Tiers []Tier
 }
 
+func (f *Feature) ID() string {
+	return makeID(f.Name, f.Plan)
+}
+
 func (f *Feature) Version() string {
 	_, version, _ := strings.Cut(f.Plan, "@")
 	return version
-}
-
-// ID returns string identifier for the feature which represents
-func (f *Feature) ID() string {
-	return makeID(f.Plan, string(f.Interval), f.Currency, f.Name)
 }
 
 // Tier holds the pricing information for a single tier.
@@ -127,27 +119,26 @@ func (c *Client) Push(ctx context.Context, f Feature) error {
 	data.Set("metadata", "tier.title", f.Title)
 	data.Set("metadata", "tier.feature", f.Name)
 
-	interval := intervalToStripe[f.Interval]
-	intervalTitle := intervalTitles[f.Interval]
-	if interval == "" {
-		return fmt.Errorf("unknown interval: %q", f.Interval)
-	}
-
-	data.Set("product_data", "id", f.ID())
-	data.Set("product_data", "name", fmt.Sprintf(
-		"%s (%s): %s (%s)",
-		f.PlanTitle,
-		intervalTitle,
-		f.Title,
-		f.Version(),
-	))
-
+	c.Logf("tier: pushing feature %q", f.ID())
 	data.Set("lookup_key", f.ID())
+	data.Set("product_data", "id", f.ID())
+
+	// This will appear as the line item description in the Stripe dashboard
+	// and customer invoices.
+	data.Set("product_data", "name", fmt.Sprintf("%s - %s",
+		values.Coalesce(f.PlanTitle, f.Plan),
+		values.Coalesce(f.Title, f.Name),
+	))
 
 	// secondary composite key in schedules:
 	data.Set("currency", f.Currency)
-	data.Set("recurring", "interval_count", 1) // TODO: support user-defined interval count
+
+	interval := intervalToStripe[f.Interval]
+	if interval == "" {
+		return fmt.Errorf("unknown interval: %q", f.Interval)
+	}
 	data.Set("recurring", "interval", interval)
+	data.Set("recurring", "interval_count", 1) // TODO: support user-defined interval count
 
 	if len(f.Tiers) == 0 {
 		data.Set("recurring", "usage_type", "licensed")
@@ -260,11 +251,11 @@ func (c *Client) Pull(ctx context.Context, limit int) ([]Feature, error) {
 func makeID(ids ...string) string {
 	id := []rune(strings.Join(ids, "__"))
 	for i, r := range id {
-		if !unicode.IsDigit(r) && !unicode.IsLetter(r) {
-			id[i] = '_'
+		if r != '_' && !unicode.IsDigit(r) && !unicode.IsLetter(r) {
+			id[i] = '-'
 		}
 	}
-	return "tier_" + string(id)
+	return "tier__" + string(id)
 }
 
 func parseLimit(s string) int {
