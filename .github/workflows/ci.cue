@@ -4,7 +4,7 @@ on: pull_request: branches: ["*"]
 
 jobs: {
 	test: {
-		"runs-on": "ubuntu-latest"
+		"runs-on": "buildjet-4vcpu-ubuntu-2204"
 		steps: [{
 			name: "Checkout"
 			uses: "actions/checkout@v3"
