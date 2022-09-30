@@ -4,7 +4,15 @@ on: pull_request: branches: ["*"]
 
 jobs: {
 	test: {
-		"runs-on": "buildjet-4vcpu-ubuntu-2204"
+		strategy: matrix: "runs-on": [
+			"buildjet-2vcpu-ubuntu-2204",
+			"buildjet-4vcpu-ubuntu-2204",
+			"buildjet-8vcpu-ubuntu-2204",
+			"buildjet-16vcpu-ubuntu-2204",
+		]
+
+		name:      "Test on ${{ matrix.runs-on }}"
+		"runs-on": "${{ matrix.runs-on }}"
 		steps: [{
 			name: "Checkout"
 			uses: "actions/checkout@v3"
