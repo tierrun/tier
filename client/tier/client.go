@@ -130,7 +130,7 @@ func (c *Client) Push(ctx context.Context, f Feature) error {
 	interval := intervalToStripe[f.Interval]
 	intervalTitle := intervalTitles[f.Interval]
 	if interval == "" {
-		return fmt.Errorf("invalid interval: %q", f.Interval)
+		return fmt.Errorf("unknown interval: %q", f.Interval)
 	}
 
 	data.Set("product_data", "id", f.ID())
@@ -159,7 +159,7 @@ func (c *Client) Push(ctx context.Context, f Feature) error {
 		data.Set("tiers_mode", f.Mode)
 		aggregate := aggregateToStripe[f.Aggregate]
 		if aggregate == "" {
-			return fmt.Errorf("invalid aggregate: %q", f.Aggregate)
+			return fmt.Errorf("unknown aggregate: %q", f.Aggregate)
 		}
 		data.Set("recurring", "aggregate_usage", aggregate)
 		var limit int
