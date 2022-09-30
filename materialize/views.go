@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 
 	"github.com/tailscale/hujson"
-	"tier.run/features"
+	"tier.run/client/tier"
 	"tier.run/values"
 )
 
@@ -23,7 +23,7 @@ func (t *jsonTier) MarshalJSON() ([]byte, error) {
 		Price int `json:"price,omitempty"`
 		Base  int `json:"base,omitempty"`
 	}{
-		Upto:  values.ZeroIf(t.Upto, features.Inf),
+		Upto:  values.ZeroIf(t.Upto, tier.Inf),
 		Price: t.Price,
 		Base:  t.Base,
 	})
@@ -40,7 +40,7 @@ func (t *jsonTier) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if v.Upto == nil {
-		t.Upto = features.Inf
+		t.Upto = tier.Inf
 	} else {
 		t.Upto = *v.Upto
 	}
@@ -68,7 +68,7 @@ type jsonModel struct {
 	Plans map[string]jsonPlan `json:"plans"`
 }
 
-func FromPricingHuJSON(data []byte) ([]features.Feature, error) {
+func FromPricingHuJSON(data []byte) ([]tier.Feature, error) {
 	data, err := hujson.Standardize(data)
 	if err != nil {
 		return nil, err
@@ -85,10 +85,10 @@ func FromPricingHuJSON(data []byte) ([]features.Feature, error) {
 		return nil, err
 	}
 
-	var fs []features.Feature
+	var fs []tier.Feature
 	for plan, p := range m.Plans {
 		for feature, f := range p.Features {
-			ff := features.Feature{
+			ff := tier.Feature{
 				Plan: plan,
 				Name: feature,
 
@@ -102,9 +102,9 @@ func FromPricingHuJSON(data []byte) ([]features.Feature, error) {
 				Aggregate: values.Coalesce(f.Aggregate, "sum"),
 			}
 
-			ff.Tiers = make([]features.Tier, len(f.Tiers))
+			ff.Tiers = make([]tier.Tier, len(f.Tiers))
 			for i, t := range f.Tiers {
-				ff.Tiers[i] = features.Tier{
+				ff.Tiers[i] = tier.Tier{
 					Upto:  t.Upto,
 					Price: t.Price,
 					Base:  t.Base,
@@ -117,7 +117,7 @@ func FromPricingHuJSON(data []byte) ([]features.Feature, error) {
 	return fs, nil
 }
 
-func ToPricingJSON(fs []features.Feature) ([]byte, error) {
+func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 	var m = jsonModel{
 		Plans: make(map[string]jsonPlan),
 	}

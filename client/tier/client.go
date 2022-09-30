@@ -1,4 +1,4 @@
-package features
+package tier
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/kr/pretty"
 	"tier.run/stripe"
 	"tier.run/values"
 )
@@ -121,8 +120,6 @@ func (c *Client) Live() bool { return c.Stripe.Live() }
 // Each call to push is subject to rate limiting via the clients shared rate
 // limit.
 func (c *Client) Push(ctx context.Context, f Feature) error {
-	c.Logf("pushing feature %# v", pretty.Formatter(f))
-
 	// https://stripe.com/docs/api/prices/create
 	var data stripe.Form
 	data.Set("metadata", "tier.plan", f.Plan)

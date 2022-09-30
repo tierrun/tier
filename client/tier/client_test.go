@@ -1,10 +1,12 @@
-package features
+package tier
 
 import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/stripe"
@@ -45,6 +47,8 @@ func newTestClient(t *testing.T) *Client {
 }
 
 func TestRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	tc := newTestClient(t)
 	ctx := context.Background()
 
@@ -111,4 +115,92 @@ func TestRoundTrip(t *testing.T) {
 			t.Errorf("got %q, want %q", got.Name, want)
 		}
 	})
+}
+
+func TestAppendPhase(t *testing.T) {
+	t.Parallel()
+
+	fs := []Feature{
+		{
+			Name:      "feature:x",
+			Plan:      "plan:test@0",
+			Interval:  "@daily",
+			Currency:  "usd",
+			Title:     "FeatureTitle",
+			Mode:      "volume",
+			Aggregate: "perpetual",
+			Tiers: []Tier{
+				{Upto: 1, Price: 100, Base: 1},
+				{Upto: 2, Price: 200, Base: 2},
+				{Upto: 3, Price: 300, Base: 3},
+			},
+		},
+		{
+			Name:     "feature:y",
+			Plan:     "plan:test@0",
+			Interval: "@daily",
+			Currency: "usd",
+			Title:    "Test2",
+			Base:     1000,
+		},
+	}
+
+	ctx := context.Background()
+
+	tc := newTestClient(t)
+	t.Run("push", func(t *testing.T) {
+		for _, f := range fs {
+			f := f
+			t.Run(f.Name, func(t *testing.T) {
+				t.Parallel()
+				if err := tc.Push(ctx, f); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	})
+
+	var f stripe.Form
+	f.Set("email", "org@example.com")
+	if err := tc.Stripe.Do(ctx, "POST", "/v1/customers", f, nil); err != nil {
+		t.Fatalf("%#v", err)
+	}
+
+	// TODO: maybe use Stripe clocks here? They're really slow, so holding
+	// off for now.
+	now := time.Now().Truncate(time.Second)
+	want := []Phase{
+		{
+			Plans: []string{"plan:test@0"},
+		},
+		{
+			Effective: now.AddDate(0, 0, 1),
+			Plans:     []string{"plan:test@0"},
+		},
+	}
+
+	if err := tc.Subscribe(ctx, "org@example.com", want); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := tc.LookupPhases(ctx, "org@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("got: %# v", pretty.Formatter(got))
+
+	// normalize times to "now"
+	for i := range got {
+		if got[i].Effective.Sub(now).Abs().Minutes() < 3 {
+			got[i].Effective = now
+		}
+	}
+	for i := range want {
+		if want[i].Effective.IsZero() {
+			want[i].Effective = now
+		}
+	}
+
+	diff.Test(t, t.Errorf, got, want)
 }

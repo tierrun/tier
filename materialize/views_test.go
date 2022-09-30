@@ -7,7 +7,7 @@ import (
 
 	"github.com/tailscale/hujson"
 	"kr.dev/diff"
-	"tier.run/features"
+	"tier.run/client/tier"
 )
 
 func TestPricingHuJSON(t *testing.T) {
@@ -34,7 +34,7 @@ func TestPricingHuJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []features.Feature{
+	want := []tier.Feature{
 		{
 			PlanTitle: "Just an example plan to show off features",
 			Plan:      "plan:example@1",
@@ -44,10 +44,10 @@ func TestPricingHuJSON(t *testing.T) {
 			Interval:  "@monthly",
 			Mode:      "graduated",
 			Aggregate: "sum",
-			Tiers: []features.Tier{
+			Tiers: []tier.Tier{
 				{Upto: 10, Price: 0, Base: 0},
 				{Upto: 20, Price: 100, Base: 0},
-				{Upto: features.Inf, Price: 50, Base: 0},
+				{Upto: tier.Inf, Price: 50, Base: 0},
 			},
 		},
 	}
