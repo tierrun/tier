@@ -25,7 +25,15 @@ func TestPricingHuJSON(t *testing.T) {
 						],
 					}
 				}
-			}
+			},
+			"plan:example@2": {
+				"title": "Just an example plan to show off features part duex",
+				"features": {
+					"feature:base": {
+						"base": 100,
+					},
+				},
+			},
 		}
 	}`)
 
@@ -50,6 +58,17 @@ func TestPricingHuJSON(t *testing.T) {
 				{Upto: tier.Inf, Price: 50, Base: 0},
 			},
 		},
+		{
+			PlanTitle: "Just an example plan to show off features part duex",
+			Plan:      "plan:example@2",
+			Title:     "feature:base",
+			Name:      "feature:base",
+			Currency:  "usd",
+			Interval:  "@monthly",
+			Mode:      "graduated", // defaults
+			Aggregate: "sum",       // defaults
+			Base:      100,
+		},
 	}
 
 	diff.Test(t, t.Errorf, got, want, diff.EmitFull)
@@ -70,6 +89,14 @@ func TestPricingHuJSON(t *testing.T) {
 							{ "upto": 20, "price": 100 },
 							{ "price": 50 }
 						],
+					}
+				}
+			},
+			"plan:example@2": {
+				"title": "Just an example plan to show off features part duex",
+				"features": {
+					"feature:base": {
+						"base": 100,
 					}
 				}
 			}
