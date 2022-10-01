@@ -98,16 +98,20 @@ func FromPricingHuJSON(data []byte) ([]tier.Feature, error) {
 				PlanTitle: values.Coalesce(p.Title, plan),
 				Title:     values.Coalesce(f.Title, feature),
 
+				Base: f.Base,
+
 				Mode:      values.Coalesce(f.Mode, "graduated"),
 				Aggregate: values.Coalesce(f.Aggregate, "sum"),
 			}
 
-			ff.Tiers = make([]tier.Tier, len(f.Tiers))
-			for i, t := range f.Tiers {
-				ff.Tiers[i] = tier.Tier{
-					Upto:  t.Upto,
-					Price: t.Price,
-					Base:  t.Base,
+			if len(f.Tiers) > 0 {
+				ff.Tiers = make([]tier.Tier, len(f.Tiers))
+				for i, t := range f.Tiers {
+					ff.Tiers[i] = tier.Tier{
+						Upto:  t.Upto,
+						Price: t.Price,
+						Base:  t.Base,
+					}
 				}
 			}
 
