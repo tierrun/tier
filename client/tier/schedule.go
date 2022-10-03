@@ -17,8 +17,8 @@ type Phase struct {
 	Meta  map[string]string // interesting metadata (e.g. "churn-risk=high")
 }
 
-func (c *Client) Subscribe(ctx context.Context, email string, phases []Phase) error {
-	org, err := c.lookupOrgID(ctx, email)
+func (c *Client) Subscribe(ctx context.Context, org string, phases []Phase) error {
+	cid, err := c.putCustomer(ctx, org)
 	if err != nil {
 		return err
 	}
@@ -33,7 +33,7 @@ func (c *Client) Subscribe(ctx context.Context, email string, phases []Phase) er
 	}
 
 	var f stripe.Form
-	f.Set("customer", org)
+	f.Set("customer", cid)
 	for i, p := range phases {
 		if i == 0 {
 			f.Set("start_date", nowOrSpecific(p.Effective))
@@ -56,8 +56,8 @@ func (c *Client) Subscribe(ctx context.Context, email string, phases []Phase) er
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules", f, nil)
 }
 
-func (c *Client) LookupPhases(ctx context.Context, email string) ([]Phase, error) {
-	org, err := c.lookupOrgID(ctx, email)
+func (c *Client) LookupPhases(ctx context.Context, org string) ([]Phase, error) {
+	org, err := c.putCustomer(ctx, org)
 	if err != nil {
 		return nil, err
 	}
@@ -111,26 +111,51 @@ func (c *Client) LookupPhases(ctx context.Context, email string) ([]Phase, error
 	return ps, nil
 }
 
-// lookupOrgID returns the customer ID for the given email address; if any.
-// It returns the empty string without an error if no customer exists with the provided email.
+// putCustomer safely creates a customer in Stripe for the provided org
+// identifier if one does not already exists.
+//
+// It uses an idempotency key to avoid racing with clients that may also be
+// attempting to create the same customer. This is necessary because unlike
+// products and prices, customer records do not have unique user-defined
+// identifiers, so we have to first look if a record already exists, and
+// subsequently create one if it doesn't, but being careful to not race with
+// another client which may have also seen there was no record and is attempting
+// to create the record at the same time we are.  It returns the empty string
+// without an error if no customer exists with the provided email.
 //
 // It only returns errors encountered while communicating with Stripe.
-func (c *Client) lookupOrgID(ctx context.Context, email string) (string, error) {
-	var f stripe.Form
-	f.Set("email", email)
-	f.Set("limit", 1) // be defensive
-
+func (c *Client) putCustomer(ctx context.Context, org string) (string, error) {
 	type T struct {
 		stripe.ID
+		Metadata struct {
+			Org string `json:"tier.org"`
+		}
 	}
-	cs, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/customers", f)
-	if err != nil {
+	var f stripe.Form
+	cus, err := stripe.List[T](ctx, c.Stripe, "GET", "/v1/customers", f).Find(func(v T) bool {
+		return v.Metadata.Org == org
+	})
+	if err == nil {
+		return cus.ProviderID(), nil
+	}
+	if !errors.Is(err, stripe.ErrNotFound) {
 		return "", err
 	}
-	if len(cs) == 0 {
-		return "", nil
+	return c.createCustomer(ctx, org)
+}
+
+func (c *Client) createCustomer(ctx context.Context, org string) (string, error) {
+	var f stripe.Form
+	f.Set("metadata[tier.org]", org)
+	f.SetIdempotencyKey("customer:create:" + org)
+	var created struct {
+		stripe.ID
 	}
-	return cs[0].ProviderID(), nil
+	if err := c.Stripe.Do(ctx, "POST", "/v1/customers", f, &created); err != nil {
+		// TODO(bmizerany): backoff and retry if idempotency_key_in_use
+		return "", err
+	}
+	return created.ProviderID(), nil
 }
 
 func nowOrSpecific(t time.Time) any {

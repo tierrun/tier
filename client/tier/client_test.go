@@ -2,35 +2,24 @@ package tier
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
+	"golang.org/x/sync/errgroup"
 	"kr.dev/diff"
 	"tier.run/stripe"
+	"tier.run/stripe/stroke"
 )
 
-func createAccount(t *testing.T, c *stripe.Client) string {
-	t.Helper()
-	var v struct {
-		stripe.ID
-	}
-	var f stripe.Form
-	f.Set("type", "standard")
-	if err := c.Do(context.Background(), "POST", "/v1/accounts", f, &v); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := c.Do(context.Background(), "DELETE", "/v1/accounts/"+v.ID.ProviderID(), stripe.Form{}, nil); err != nil {
-			t.Error(err)
-		}
-	})
-	return v.ID.ProviderID()
+type clientTester struct {
+	*Client
 }
 
-func newTestClient(t *testing.T) *Client {
+func newTestClient(t *testing.T) *clientTester {
 	t.Helper()
 
 	tc, err := stripe.FromEnv()
@@ -40,10 +29,26 @@ func newTestClient(t *testing.T) *Client {
 	if !strings.Contains(tc.APIKey, "_test_") {
 		t.Fatal("expected test key")
 	}
-	return &Client{
-		Stripe: tc.CloneAs(createAccount(t, tc)),
-		Logf:   t.Logf,
+	return &clientTester{
+		&Client{
+			Stripe: stroke.WithAccount(t, context.Background(), tc),
+			Logf:   t.Logf,
+		},
 	}
+}
+
+func (ct *clientTester) push(t *testing.T, fs []Feature) {
+	t.Run("push", func(t *testing.T) {
+		for _, f := range fs {
+			f := f
+			t.Run(f.Name, func(t *testing.T) {
+				t.Parallel()
+				if err := ct.Push(context.Background(), f); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	})
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -78,31 +83,19 @@ func TestRoundTrip(t *testing.T) {
 		},
 	}
 
-	t.Run("push", func(t *testing.T) {
-		for _, f := range want {
-			f := f
-			t.Run(f.Name, func(t *testing.T) {
-				t.Parallel()
-				if err := tc.Push(ctx, f); err != nil {
-					t.Fatal(err)
-				}
-			})
-		}
+	tc.push(t, want)
+
+	got, err := tc.Pull(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	slices.SortFunc(got, func(a, b Feature) bool {
+		return a.Name < b.Name
 	})
 
-	t.Run("pull", func(t *testing.T) {
-		got, err := tc.Pull(ctx, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		slices.SortFunc(got, func(a, b Feature) bool {
-			return a.Name < b.Name
-		})
-
-		diff.Test(t, t.Errorf, got, want,
-			diff.ZeroFields[Feature]("ProviderID"))
-	})
+	diff.Test(t, t.Errorf, got, want,
+		diff.ZeroFields[Feature]("ProviderID"))
 
 	t.Run("product title", func(t *testing.T) {
 		var got struct {
@@ -163,12 +156,11 @@ func TestAppendPhase(t *testing.T) {
 
 	var f stripe.Form
 	f.Set("email", "org@example.com")
+	f.Set("metadata", "tier.org", "org:example")
 	if err := tc.Stripe.Do(ctx, "POST", "/v1/customers", f, nil); err != nil {
 		t.Fatalf("%#v", err)
 	}
 
-	// TODO: maybe use Stripe clocks here? They're really slow, so holding
-	// off for now.
 	now := time.Now().Truncate(time.Second)
 	want := []Phase{
 		{
@@ -180,20 +172,19 @@ func TestAppendPhase(t *testing.T) {
 		},
 	}
 
-	if err := tc.Subscribe(ctx, "org@example.com", want); err != nil {
+	if err := tc.Subscribe(ctx, "org:example", want); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := tc.LookupPhases(ctx, "org@example.com")
+	got, err := tc.LookupPhases(ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Logf("got: %# v", pretty.Formatter(got))
 
-	// normalize times to "now"
 	for i := range got {
-		if got[i].Effective.Sub(now).Abs().Minutes() < 3 {
+		if closeEnough(got[i].Effective, now) {
 			got[i].Effective = now
 		}
 	}
@@ -204,4 +195,62 @@ func TestAppendPhase(t *testing.T) {
 	}
 
 	diff.Test(t, t.Errorf, got, want)
+}
+
+func TestDedupCustomer(t *testing.T) {
+	t.Parallel()
+
+	tc := newTestClient(t)
+	ctx := context.Background()
+	tc.push(t, []Feature{{
+		Name:     "feature:x",
+		Plan:     "plan:test@0",
+		Interval: "@daily",
+		Currency: "usd",
+	}})
+
+	start := make(chan bool)
+	var g errgroup.Group
+	for i := 0; i < 3; i++ {
+		g.Go(func() error {
+			<-start
+			if err := tc.Subscribe(ctx, "org:example", []Phase{
+				{Plans: []string{"plan:test@0"}},
+			}); err != nil {
+				// TODO(bmizerany): Subscribe should backoff an
+				// retry if idempotency_key_in_use is
+				// encountered.
+				var e *stripe.Error
+				if errors.As(err, &e) && e.Code == "idempotency_key_in_use" {
+					return nil
+				}
+				return err
+			}
+			return nil
+		})
+	}
+	close(start)
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	type W struct {
+		stripe.ID
+		Metadata map[string]string
+	}
+	got, err := stripe.Slurp[W](ctx, tc.Stripe, "GET", "/v1/customers", stripe.Form{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []W{{
+		ID: "cus_test",
+		Metadata: map[string]string{
+			"tier.org": "org:example",
+		},
+	}}
+	diff.Test(t, t.Errorf, got, want, diff.ZeroFields[W]("ID"))
+}
+
+func closeEnough(a, b time.Time) bool {
+	return a.Sub(b).Abs().Minutes() < 3
 }

@@ -29,12 +29,17 @@ func (e *Error) Error() string {
 // Form maps a string key to a list of values. It is intended for use when
 // building request bodies for Stripe requests.
 type Form struct {
-	v url.Values
+	v    url.Values
+	ikey string
 }
 
 // Clone returns a clone f.
 func (f Form) Clone() Form {
 	return Form{v: maps.Clone(f.v)}
+}
+
+func (f *Form) SetIdempotencyKey(key string) {
+	f.ikey = key
 }
 
 // Add creates a key and value from args and adds the value to the key. The key
@@ -138,6 +143,9 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 	}
 	req.SetBasicAuth(c.APIKey, "")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if f.ikey != "" {
+		req.Header.Set("Idempotency-Key", f.ikey)
+	}
 	if c.AccountID != "" {
 		req.Header.Set("Stripe-Account", c.AccountID)
 	}

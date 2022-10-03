@@ -2,7 +2,10 @@ package stripe
 
 import (
 	"context"
+	"errors"
 )
+
+var ErrNotFound = errors.New("stripe: not found")
 
 type ID string
 
@@ -61,6 +64,19 @@ func (i *Iterator[I]) Next() bool {
 		}
 		return false
 	}
+}
+
+func (i *Iterator[I]) Find(f func(v I) bool) (I, error) {
+	for i.Next() {
+		if f(i.Value()) {
+			return i.Value(), nil
+		}
+	}
+	var zero I
+	if err := i.Err(); err != nil {
+		return zero, err
+	}
+	return zero, ErrNotFound
 }
 
 func (i *Iterator[I]) refill() error {
