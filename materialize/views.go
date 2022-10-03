@@ -122,7 +122,7 @@ func FromPricingHuJSON(data []byte) ([]tier.Feature, error) {
 }
 
 func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
-	var m = jsonModel{
+	m := jsonModel{
 		Plans: make(map[string]jsonPlan),
 	}
 	for _, f := range fs {

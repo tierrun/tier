@@ -11,7 +11,7 @@ import (
 )
 
 func TestPricingHuJSON(t *testing.T) {
-	var data = []byte(`{
+	data := []byte(`{
 		"plans": {
 			"plan:example@1": {
 				"title": "Just an example plan to show off features",
@@ -78,7 +78,7 @@ func TestPricingHuJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var wantJSON = []byte(`{
+	wantJSON := []byte(`{
 		"plans": {
 			"plan:example@1": {
 				"title": "Just an example plan to show off features",
