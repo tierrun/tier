@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode"
 
+	"golang.org/x/sync/errgroup"
 	"tier.run/stripe"
 	"tier.run/values"
 )
@@ -106,12 +107,35 @@ type Client struct {
 // Live reports if APIKey is set to a "live" key.
 func (c *Client) Live() bool { return c.Stripe.Live() }
 
-// Push pushes f to Stripe as a product and price combination. A new price and
+// Push pushes each feature in fs to Stripe as a product and price combination. A new price and
 // product are created in Stripe if one does not already exist.
 //
 // Each call to push is subject to rate limiting via the clients shared rate
 // limit.
-func (c *Client) Push(ctx context.Context, f Feature) error {
+func (c *Client) Push(ctx context.Context, fs []Feature, cb func(f Feature, err error)) {
+	var g errgroup.Group
+	g.SetLimit(c.maxWorkers())
+	for _, f := range fs {
+		f := f
+		g.Go(func() error {
+			err := c.pushFeature(ctx, f)
+			cb(f, err)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		panic(err) // above goroutines should never return errors
+	}
+}
+
+func (c *Client) maxWorkers() int {
+	if c.Stripe.Live() {
+		return 50
+	}
+	return 20 // a little under the max concurrent requests in test mode
+}
+
+func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	// https://stripe.com/docs/api/prices/create
 	var data stripe.Form
 	data.Set("metadata", "tier.plan", f.Plan)

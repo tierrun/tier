@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"go4.org/types"
-	"golang.org/x/sync/errgroup"
 	"tier.run/client/tier"
 	"tier.run/materialize"
 	"tier.run/profile"
@@ -321,22 +320,12 @@ func pushJSON(ctx context.Context, r io.Reader, cb func(tier.Feature, error)) er
 	if err != nil {
 		return err
 	}
-
 	fs, err := materialize.FromPricingHuJSON(data)
 	if err != nil {
 		return err
 	}
-	var g errgroup.Group
-	g.SetLimit(20)
-	for _, f := range fs {
-		f := f
-		g.Go(func() error {
-			err := tc().Push(ctx, f)
-			cb(f, err)
-			return nil
-		})
-	}
-	return g.Wait()
+	tc().Push(ctx, fs, cb)
+	return nil
 }
 
 func makeLink(f tier.Feature) string {
