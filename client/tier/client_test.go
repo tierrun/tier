@@ -37,20 +37,6 @@ func newTestClient(t *testing.T) *clientTester {
 	}
 }
 
-func (ct *clientTester) push(t *testing.T, fs []Feature) {
-	t.Run("push", func(t *testing.T) {
-		for _, f := range fs {
-			f := f
-			t.Run(f.Name, func(t *testing.T) {
-				t.Parallel()
-				if err := ct.Push(context.Background(), f); err != nil {
-					t.Fatal(err)
-				}
-			})
-		}
-	})
-}
-
 func TestRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -83,7 +69,7 @@ func TestRoundTrip(t *testing.T) {
 		},
 	}
 
-	tc.push(t, want)
+	tc.Push(ctx, want, pushLogger(t))
 
 	got, err := tc.Pull(ctx, 0)
 	if err != nil {
@@ -142,17 +128,7 @@ func TestAppendPhase(t *testing.T) {
 	ctx := context.Background()
 
 	tc := newTestClient(t)
-	t.Run("push", func(t *testing.T) {
-		for _, f := range fs {
-			f := f
-			t.Run(f.Name, func(t *testing.T) {
-				t.Parallel()
-				if err := tc.Push(ctx, f); err != nil {
-					t.Fatal(err)
-				}
-			})
-		}
-	})
+	tc.Push(ctx, fs, pushLogger(t))
 
 	var f stripe.Form
 	f.Set("email", "org@example.com")
@@ -202,12 +178,12 @@ func TestDedupCustomer(t *testing.T) {
 
 	tc := newTestClient(t)
 	ctx := context.Background()
-	tc.push(t, []Feature{{
+	tc.Push(ctx, []Feature{{
 		Name:     "feature:x",
 		Plan:     "plan:test@0",
 		Interval: "@daily",
 		Currency: "usd",
-	}})
+	}}, pushLogger(t))
 
 	start := make(chan bool)
 	var g errgroup.Group
@@ -253,4 +229,15 @@ func TestDedupCustomer(t *testing.T) {
 
 func closeEnough(a, b time.Time) bool {
 	return a.Sub(b).Abs().Minutes() < 3
+}
+
+func pushLogger(t *testing.T) func(f Feature, err error) {
+	t.Helper()
+	return func(f Feature, err error) {
+		t.Helper()
+		t.Logf("pushed %s: %v", f.Name, err)
+		if err != nil {
+			t.Fail()
+		}
+	}
 }
