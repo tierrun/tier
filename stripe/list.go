@@ -11,6 +11,10 @@ type ID string
 
 func (id ID) ProviderID() string { return string(id) }
 
+type JustID struct {
+	ID
+}
+
 type Identifiable interface {
 	ProviderID() string
 }

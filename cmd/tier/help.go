@@ -56,6 +56,30 @@ The output is in the format:
 	plan:free@1     feature:convert  graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDMmhWG3i5D
 	plan:pro@0      feature:convert  graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDM5COLDSY1
 `,
+	"phases": `Usage:
+
+	tier phases [--live] <org>
+
+Tier phases lists all phases scheduled by Tier for the provided org.
+
+If the --live flag is provided, your accounts live mode will be used.
+
+The output is in the format:
+
+	ORG        EFFECTIVE                  FEATURE                 PLAN
+	org:blake  2022-10-10T23:26:10-07:00  feature:convert:temp    plan:pro@0
+	org:blake  2022-10-10T23:26:10-07:00  feature:convert:volume  plan:pro@0
+	org:blake  2022-10-10T23:26:10-07:00  feature:convert:weight  plan:pro@0
+`,
+	"subscribe": `Usage:
+
+	tier subscribe [--live] <org> <phase>...
+
+Tier subscribe creates or updates a subscription for the provided org, applying
+the features in the plan.
+
+If the --live flag is provided, your accounts live mode will be used.
+`,
 }
 
 func help(dst io.Writer, cmd string) error {
