@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tailscale/hujson"
+	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/client/tier"
 )
@@ -41,6 +42,9 @@ func TestPricingHuJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	slices.SortFunc(got, func(a, b tier.Feature) bool {
+		return a.Plan < b.Plan
+	})
 
 	want := []tier.Feature{
 		{

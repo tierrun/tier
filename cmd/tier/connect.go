@@ -93,7 +93,7 @@ func fetchProfile(ctx context.Context, pollURL string) (*profile.Profile, error)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	bo := backoff.NewBackoff("keys", nopLogf, 1*time.Second)
+	bo := backoff.NewBackoff("keys", nopLogf, 5*time.Second)
 	for {
 		ks, err := fetchOK[*profile.Profile](ctx, "GET", pollURL, nil)
 		if err == nil {
@@ -151,4 +151,4 @@ func fetchOK[R any](ctx context.Context, method, urlStr string, body any, opts .
 	}}, opts...)...)
 }
 
-func nopLogf(format string, args ...interface{}) {}
+func nopLogf(format string, args ...any) {}

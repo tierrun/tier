@@ -15,22 +15,44 @@ import (
 )
 
 type Error struct {
-	Type    string
-	Code    string
-	Param   string
-	Message string
-	DocURL  string
+	AccountID string
+	Type      string
+	Code      string
+	Param     string
+	Message   string
+	DocURL    string
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("stripe: %s: %s: %s", e.Code, e.Type, e.Message)
+	var b strings.Builder
+	b.WriteString("stripe: ")
+	if e.AccountID != "" {
+		b.WriteString(e.AccountID)
+	}
+	if e.Code != "" {
+		b.WriteString(": ")
+		b.WriteString(e.Code)
+	}
+	if e.Type != "" {
+		b.WriteString(": ")
+		b.WriteString(e.Type)
+	}
+	if e.Param != "" {
+		b.WriteString(": ")
+		b.WriteString(e.Param)
+	}
+	if e.Message != "" {
+		b.WriteString(": ")
+		b.WriteString(e.Message)
+	}
+	return b.String()
 }
 
 // Form maps a string key to a list of values. It is intended for use when
 // building request bodies for Stripe requests.
 type Form struct {
-	v    url.Values
-	ikey string
+	v              url.Values
+	idempotencyKey string
 }
 
 // Clone returns a clone f.
@@ -39,7 +61,7 @@ func (f Form) Clone() Form {
 }
 
 func (f *Form) SetIdempotencyKey(key string) {
-	f.ikey = key
+	f.idempotencyKey = key
 }
 
 // Add creates a key and value from args and adds the value to the key. The key
@@ -103,6 +125,10 @@ type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
 	AccountID  string
+
+	// KeyPrefix is prepended to all idempotentcy keys. Use a new key prefix
+	// after deleting test data. It is not recommended for use with live mode.
+	KeyPrefix string
 }
 
 func FromEnv() (*Client, error) {
@@ -143,8 +169,12 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 	}
 	req.SetBasicAuth(c.APIKey, "")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if f.ikey != "" {
-		req.Header.Set("Idempotency-Key", f.ikey)
+	if f.idempotencyKey != "" {
+		key := f.idempotencyKey
+		if c.KeyPrefix != "" {
+			key = c.KeyPrefix + "#" + key
+		}
+		req.Header.Set("Idempotency-Key", key)
 	}
 	if c.AccountID != "" {
 		req.Header.Set("Stripe-Account", c.AccountID)
@@ -163,6 +193,7 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 		if err := json.NewDecoder(resp.Body).Decode(&e); err != nil {
 			return fmt.Errorf("stripe: error parsing error response: %w", err)
 		}
+		e.Error.AccountID = c.AccountID
 		return e.Error
 	}
 	if out != nil {

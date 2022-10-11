@@ -8,15 +8,20 @@ import (
 	"tier.run/fetch/fetchtest"
 )
 
-func TestSetIdempotencyKey(t *testing.T) {
-	var got string
-	hc := fetchtest.NewTLSServer(t, func(w http.ResponseWriter, r *http.Request) {
-		got = r.Header.Get("Idempotency-Key")
-	})
+func newTestClient(t *testing.T, h func(w http.ResponseWriter, r *http.Request)) *Client {
+	hc := fetchtest.NewTLSServer(t, h)
 	c := &Client{
 		BaseURL:    fetchtest.BaseURL(hc),
 		HTTPClient: hc,
 	}
+	return c
+}
+
+func TestSetIdempotencyKey(t *testing.T) {
+	var got string
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Idempotency-Key")
+	})
 
 	var f Form
 	f.SetIdempotencyKey("foo")

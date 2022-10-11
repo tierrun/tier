@@ -102,13 +102,16 @@ type Tier struct {
 type Client struct {
 	Logf   func(format string, args ...any)
 	Stripe *stripe.Client
+	Clock  string
+
+	cache memo
 }
 
 // Live reports if APIKey is set to a "live" key.
 func (c *Client) Live() bool { return c.Stripe.Live() }
 
-// Push pushes each feature in fs to Stripe as a product and price combination. A new price and
-// product are created in Stripe if one does not already exist.
+// Push pushes each feature in fs to Stripe as a product and price combination.
+// A new price and product are created in Stripe if one does not already exist.
 //
 // Each call to push is subject to rate limiting via the clients shared rate
 // limit.
@@ -205,71 +208,105 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	return err
 }
 
+type stripePrice struct {
+	stripe.ID
+	Metadata struct {
+		Plan      string `json:"tier.plan"`
+		PlanTitle string `json:"tier.plan_title"`
+		Feature   string `json:"tier.feature"`
+		Limit     string `json:"tier.limit"`
+		Title     string `json:"tier.title"`
+	}
+	Recurring struct {
+		Interval       string
+		IntervalCount  int    `json:"interval_count"`
+		UsageType      string `json:"usage_type"`
+		AggregateUsage string `json:"aggregate_usage"`
+	}
+	BillingScheme string `json:"billing_scheme"`
+	TiersMode     string `json:"tiers_mode"`
+	UnitAmount    int    `json:"unit_amount"`
+	Tiers         []struct {
+		Upto  int `json:"up_to"`
+		Price int `json:"unit_amount"`
+		Base  int `json:"flat_amount"`
+	}
+	Currency string
+}
+
+func stripePriceToFeature(p stripePrice) Feature {
+	f := Feature{
+		ProviderID: p.ProviderID(),
+		Plan:       p.Metadata.Plan,
+		PlanTitle:  p.Metadata.PlanTitle,
+		Name:       p.Metadata.Feature,
+		Title:      p.Metadata.Title,
+		Currency:   p.Currency,
+		Interval:   intervalFromStripe[p.Recurring.Interval],
+		Mode:       p.TiersMode,
+		Aggregate:  aggregateFromStripe[p.Recurring.AggregateUsage],
+		Base:       p.UnitAmount,
+	}
+	for i, t := range p.Tiers {
+		f.Tiers = append(f.Tiers, Tier(t))
+		if i == len(p.Tiers)-1 {
+			f.Tiers[i].Upto = parseLimit(p.Metadata.Limit)
+		}
+	}
+	return f
+}
+
 // Pull retrieves the feature from Stripe.
 func (c *Client) Pull(ctx context.Context, limit int) ([]Feature, error) {
+	// https://stripe.com/docs/api/prices/list
 	var f stripe.Form
 	f.Add("expand[]", "data.product")
 	f.Add("expand[]", "data.tiers")
-
-	// https://stripe.com/docs/api/prices/list
-	type T struct {
-		stripe.ID
-		Metadata struct {
-			Plan      string `json:"tier.plan"`
-			PlanTitle string `json:"tier.plan_title"`
-			Feature   string `json:"tier.feature"`
-			Limit     string `json:"tier.limit"`
-			Title     string `json:"tier.title"`
-		}
-		Recurring struct {
-			Interval       string
-			IntervalCount  int    `json:"interval_count"`
-			UsageType      string `json:"usage_type"`
-			AggregateUsage string `json:"aggregate_usage"`
-		}
-		BillingScheme string `json:"billing_scheme"`
-		TiersMode     string `json:"tiers_mode"`
-		UnitAmount    int    `json:"unit_amount"`
-		Tiers         []struct {
-			Upto  int `json:"up_to"`
-			Price int `json:"unit_amount"`
-			Base  int `json:"flat_amount"`
-		}
-		Currency string
-	}
-
-	prices, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/prices", f)
+	prices, err := stripe.Slurp[stripePrice](ctx, c.Stripe, "GET", "/v1/prices", f)
 	if err != nil {
 		return nil, err
 	}
-
 	var fs []Feature
 	for _, p := range prices {
 		if p.Metadata.Feature == "" {
 			continue
 		}
-		f := Feature{
-			ProviderID: p.ProviderID(),
-			Plan:       p.Metadata.Plan,
-			PlanTitle:  p.Metadata.PlanTitle,
-			Name:       p.Metadata.Feature,
-			Title:      p.Metadata.Title,
-			Currency:   p.Currency,
-			Interval:   intervalFromStripe[p.Recurring.Interval],
-			Mode:       p.TiersMode,
-			Aggregate:  aggregateFromStripe[p.Recurring.AggregateUsage],
-			Base:       p.UnitAmount,
-		}
-		for i, t := range p.Tiers {
-			f.Tiers = append(f.Tiers, Tier(t))
-			if i == len(p.Tiers)-1 {
-				f.Tiers[i].Upto = parseLimit(p.Metadata.Limit)
-			}
-		}
-		fs = append(fs, f)
+		fs = append(fs, stripePriceToFeature(p))
 	}
-
 	return fs, nil
+}
+
+type Org struct {
+	ProviderID string
+	ID         string
+	Email      string
+}
+
+// ListCustomers returns a list of all known customers in Stripe.
+func (c *Client) ListOrgs(ctx context.Context) ([]Org, error) {
+	// https://stripe.com/docs/api/customers/list
+	var f stripe.Form
+	f.Add("limit", 100)
+	type T struct {
+		stripe.ID
+		Email    string
+		Metadata struct {
+			Org string `json:"tier.org"`
+		}
+	}
+	customers, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/customers", f)
+	if err != nil {
+		return nil, err
+	}
+	var cs []Org
+	for _, c := range customers {
+		cs = append(cs, Org{
+			ProviderID: c.ProviderID(),
+			ID:         c.Metadata.Org,
+			Email:      c.Email,
+		})
+	}
+	return cs, nil
 }
 
 func makeID(ids ...string) string {

@@ -56,6 +56,7 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	for _, p := range c.Profiles {
 		p.DeviceName = host
 	}

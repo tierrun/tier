@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -44,6 +45,7 @@ var (
 
 // Errors
 var (
+	// TODO(bmizerany): generate subcommand lists from help map
 	//lint:ignore ST1005 this error is not used like normal errors
 	errUsage = errors.New(`Usage:
 
@@ -56,6 +58,8 @@ The commands are:
 	pull       pull pricing plans from Stripe
 	ls         list pricing plans
 	version    print the current CLI version
+	subscribe  subscribe an org to a pricing plan
+	phases     list scheduled phases for an org
 
 The flags are:
 
@@ -81,9 +85,13 @@ func main() {
 		log.Fatalf("%v", errUsage)
 	}
 
-	if err := runTier(args[0], args[1:]); err != nil {
+	cmd := args[0]
+	if err := runTier(cmd, args[1:]); err != nil {
 		if errors.Is(err, errUsage) {
-			log.Fatalf("%v", err)
+			if err := help(stderr, cmd); err != nil {
+				log.Fatalf("%v", err)
+			}
+			return
 		} else {
 			log.Fatalf("tier: %v", err)
 		}
@@ -222,14 +230,14 @@ func runTier(cmd string, args []string) (err error) {
 		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
 		defer tw.Flush()
 
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintln(tw, strings.Join([]string{
 			"PLAN",
 			"FEATURE",
 			"MODE",
 			"AGG",
 			"BASE",
 			"LINK",
-		)
+		}, "\t"))
 
 		for _, f := range fs {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
@@ -249,13 +257,49 @@ func runTier(cmd string, args []string) (err error) {
 		if len(args) < 2 {
 			return errUsage
 		}
-		email := args[0]
+		org := args[0]
 		plans := args[1:]
-		if email == "" || len(plans) == 0 {
+		if org == "" || len(plans) == 0 {
 			return errUsage
 		}
-		log.Printf("subscribing %s to %v", email, plans)
-		return tc().Subscribe(ctx, email, []tier.Phase{{Plans: plans}})
+		plan := plans[0] // TODO(bmizerany): support multiple plans and feature folding
+
+		vlogf("subscribing %s to %v", org, plan)
+		return tc().SubscribeToPlan(ctx, org, plan)
+	case "phases":
+		if len(args) < 1 {
+			return errUsage
+		}
+		org := args[0]
+		ps, err := tc().LookupPhases(ctx, org)
+		if err != nil {
+			return err
+		}
+		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
+		defer tw.Flush()
+		fmt.Fprintln(tw, strings.Join([]string{
+			"ORG",
+			"INDEX",
+			"EFFECTIVE",
+			"FEATURE",
+			"PLAN",
+		}, "\t"))
+		for i, p := range ps {
+			if i > 0 {
+				fmt.Fprintln(tw)
+			}
+			for _, f := range p.Features {
+				line := fmt.Sprintf("%s\t%d\t%s\t%s\t%s",
+					p.Org,
+					i,
+					p.Effective.Format(time.RFC3339),
+					f.Name,
+					f.Plan,
+				)
+				fmt.Fprintln(tw, line)
+			}
+		}
+		return nil
 	default:
 		return errUsage
 	}
@@ -281,7 +325,8 @@ func tc() *tier.Client {
 			os.Exit(1)
 		}
 		sc := &stripe.Client{
-			APIKey: key,
+			APIKey:    key,
+			KeyPrefix: os.Getenv("TIER_KEY_PREFIX"),
 		}
 		tierClient = &tier.Client{
 			Stripe: sc,
