@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kr/pretty"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 	"kr.dev/diff"
 )
@@ -86,6 +87,58 @@ func TestSchedule(t *testing.T) {
 	})
 }
 
+func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
+	c := newTestClient(t)
+	ctx := context.Background()
+
+	fs := []Feature{
+		{
+			Plan:      "plan:test@0",
+			Name:      "feature:10",
+			Interval:  "@daily",
+			Currency:  "usd",
+			Tiers:     []Tier{{Upto: 10}},
+			Mode:      "graduated",
+			Aggregate: "sum",
+		},
+		{
+			Name:      "feature:inf",
+			Plan:      "plan:test@0",
+			Interval:  "@daily",
+			Currency:  "usd",
+			Tiers:     []Tier{{}},
+			Mode:      "graduated",
+			Aggregate: "sum",
+		},
+		{
+			Name:     "feature:lic",
+			Plan:     "plan:test@0",
+			Interval: "@daily",
+			Currency: "usd",
+		},
+	}
+
+	c.setClock(t, t0)
+	c.Push(ctx, fs, pushLogger(t))
+	if err := c.SubscribeTo(ctx, "org:example", fs); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := c.LookupPhases(ctx, "org:example")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []Phase{{
+		Org:       "org:example",
+		Effective: t0,
+		Current:   true,
+		Features:  fs,
+	}}
+
+	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
+}
+
 func TestSubscribeToPlan(t *testing.T) {
 	fs := []Feature{{
 		Plan:     "plan:pro@0",
@@ -141,9 +194,7 @@ func TestDedupCustomer(t *testing.T) {
 	var g errgroup.Group
 	for i := 0; i < 3; i++ {
 		g.Go(func() error {
-			return tc.Subscribe(ctx, "org:example", []Phase{
-				{Features: fs},
-			})
+			return tc.SubscribeTo(ctx, "org:example", fs)
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -174,9 +225,7 @@ func TestLookupPhases(t *testing.T) {
 
 	tc.setClock(t, t0)
 
-	if err := tc.Subscribe(ctx, "org:example", []Phase{
-		{Features: fs},
-	}); err != nil {
+	if err := tc.SubscribeTo(ctx, "org:example", fs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -192,4 +241,62 @@ func TestLookupPhases(t *testing.T) {
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
+}
+
+func TestLookupLimits(t *testing.T) {
+	t.Parallel()
+
+	fs := []Feature{
+		{
+			Plan:      "plan:test@0",
+			Name:      "feature:10",
+			Interval:  "@daily",
+			Currency:  "usd",
+			Tiers:     []Tier{{Upto: 10}},
+			Mode:      "graduated",
+			Aggregate: "sum",
+		},
+		{
+			Name:      "feature:inf",
+			Plan:      "plan:test@0",
+			Interval:  "@daily",
+			Currency:  "usd",
+			Tiers:     []Tier{{Upto: Inf}},
+			Mode:      "graduated",
+			Aggregate: "sum",
+		},
+		{
+			Name:     "feature:lic",
+			Plan:     "plan:test@0",
+			Interval: "@daily",
+			Currency: "usd",
+		},
+	}
+
+	tc := newTestClient(t)
+	ctx := context.Background()
+	tc.Push(ctx, fs, pushLogger(t))
+
+	if err := tc.SubscribeTo(ctx, "org:example", fs); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := tc.LookupLimits(ctx, "org:example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.SortFunc(got, func(a, b Limit) bool {
+		return a.Name < b.Name
+	})
+
+	// pretty print got
+	t.Logf("got: %# v", pretty.Formatter(got))
+
+	want := []Limit{
+		{Name: "feature:10", Limit: 10},
+		{Name: "feature:inf", Limit: Inf},
+		{Name: "feature:lic", Limit: Inf},
+	}
+
+	diff.Test(t, t.Errorf, got, want)
 }

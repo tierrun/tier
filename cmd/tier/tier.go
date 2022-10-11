@@ -306,6 +306,32 @@ func runTier(cmd string, args []string) (err error) {
 			}
 		}
 		return nil
+	case "limits":
+		if len(args) < 1 {
+			return errUsage
+		}
+		org := args[0]
+		limits, err := tc().LookupLimits(ctx, org)
+		if err != nil {
+			return err
+		}
+		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
+		defer tw.Flush()
+		fmt.Fprintln(tw, strings.Join([]string{
+			"FEATURE",
+			"LIMIT",
+		}, "\t"))
+		for _, l := range limits {
+			limit := strconv.Itoa(l.Limit)
+			if l.Limit == tier.Inf {
+				limit = "∞"
+			}
+			fmt.Fprintf(tw, "%s\t%s\n",
+				l.Name,
+				limit,
+			)
+		}
+		return nil
 	default:
 		return errUsage
 	}

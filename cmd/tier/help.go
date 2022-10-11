@@ -80,6 +80,14 @@ the features in the plan.
 
 If the --live flag is provided, your accounts live mode will be used.
 `,
+	"limits": `Usage:
+
+	tier limits [--live] <org>
+
+Tier limits lists the provided orgs limits per feature subscribed to.
+
+If the --live flag is provided, your accounts live mode will be used.
+`,
 }
 
 func help(dst io.Writer, cmd string) error {

@@ -14,7 +14,7 @@ import (
 )
 
 type Phase struct {
-	Org       string
+	Org       string // set on read
 	Effective time.Time
 	Features  []Feature
 	Current   bool
@@ -74,11 +74,11 @@ func (c *Client) createSubscription(ctx context.Context, org string, phases []Ph
 			for _, fe := range p.Features {
 				keys = append(keys, fe.ID())
 			}
-			prices, err := c.lookupPrices(ctx, keys)
+			fs, err := c.lookupFeatures(ctx, keys)
 			if err != nil {
 				return err
 			}
-			if len(prices) == 0 {
+			if len(fs) == 0 {
 				return fmt.Errorf("no prices found for phase %d", i)
 			}
 
@@ -88,9 +88,9 @@ func (c *Client) createSubscription(ctx context.Context, org string, phases []Ph
 				f.Set("phases", i-1, "end_date", nowOrSpecific(p.Effective))
 			}
 
-			for j, pid := range prices {
-				c.Logf("phase %d, item %d: %s", i, j, pid)
-				f.Set("phases", i, "items", j, "price", pid)
+			for j, fe := range fs {
+				c.Logf("phase %d, item %d: %v", i, j, fe)
+				f.Set("phases", i, "items", j, "price", fe.ProviderID)
 			}
 		}
 
@@ -112,11 +112,11 @@ func (c *Client) updateSubscription(ctx context.Context, id string, phases []Pha
 		for _, fe := range p.Features {
 			keys = append(keys, fe.ID())
 		}
-		prices, err := c.lookupPrices(ctx, keys)
+		fs, err := c.lookupFeatures(ctx, keys)
 		if err != nil {
 			return err
 		}
-		if len(prices) == 0 {
+		if len(fs) == 0 {
 			return fmt.Errorf("no prices found for phase %d", i)
 		}
 
@@ -130,8 +130,8 @@ func (c *Client) updateSubscription(ctx context.Context, id string, phases []Pha
 			f.Set("phases", i-1, "end_date", nowOrSpecific(p.Effective))
 			f.Set("phases", i, "start_date", nowOrSpecific(p.Effective))
 		}
-		for j, pid := range prices {
-			f.Set("phases", i, "items", j, "price", pid)
+		for j, fe := range fs {
+			f.Set("phases", i, "items", j, "price", fe.ProviderID)
 		}
 	}
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+id, f, nil)
@@ -170,6 +170,7 @@ func (c *Client) SubscribeTo(ctx context.Context, org string, fs []Feature) erro
 		}
 	}
 	cur.Features = fs
+	c.Logf("current phase: %# v", pretty.Formatter(cur))
 	return c.Subscribe(ctx, org, []Phase{cur})
 }
 
@@ -191,45 +192,23 @@ func (c *Client) SubscribeToPlan(ctx context.Context, org, plan string) error {
 	return c.SubscribeTo(ctx, org, fs)
 }
 
-func (c *Client) lookupPrices(ctx context.Context, keys []string) ([]string, error) {
-	prices := make([]string, 0, len(keys))
-
+func (c *Client) lookupFeatures(ctx context.Context, keys []string) ([]Feature, error) {
+	// TODO(bmizerany): return error if len(keys) == 0. No keys means
+	// stripe returns all known prices.
 	var f stripe.Form
+	f.Add("expand[]", "data.tiers")
 	for _, k := range keys {
-		pid, cacheHit := c.cache.lookupCache("price:" + k)
-		if cacheHit {
-			prices = append(prices, pid)
-		} else {
-			f.Add("lookup_keys[]", k)
-		}
+		f.Add("lookup_keys[]", k)
 	}
-
-	if len(prices) == len(keys) {
-		// All prices were cached, so we're done.
-		//
-		// NOTE: If we keep going below without a list of keys, we'll
-		// get all prices back from Stripe.
-		return prices, nil
-	}
-
-	type T struct {
-		stripe.ID
-		LookupKey string `json:"lookup_key"`
-	}
-
-	pp, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/prices", f)
+	pp, err := stripe.Slurp[stripePrice](ctx, c.Stripe, "GET", "/v1/prices", f)
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range pp {
-		prices = append(prices, p.ProviderID())
-		c.cache.add("price:"+p.LookupKey, p.ProviderID())
+	fs := make([]Feature, len(pp))
+	for i, p := range pp {
+		fs[i] = stripePriceToFeature(p)
 	}
-
-	c.Logf("keys  : %v", keys)
-	c.Logf("prices: %v", prices)
-
-	return prices, nil
+	return fs, nil
 }
 
 func notFoundAsNil(err error) error {
@@ -276,6 +255,25 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		return nil, nil
 	}
 
+	var keys []string
+	for _, s := range ss {
+		for _, p := range s.Phases {
+			for _, i := range p.Items {
+				keys = append(keys, i.Price.LookupKey)
+			}
+		}
+	}
+
+	fs, err := c.lookupFeatures(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	featureByProviderID := make(map[string]Feature)
+	for _, f := range fs {
+		featureByProviderID[f.ProviderID] = f
+	}
+
 	for _, s := range ss {
 		const name = "default" // TODO(bmizerany): support multiple subscriptions by name
 		c.Logf("subscription schedule: %# v", pretty.Formatter(s))
@@ -285,7 +283,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		for _, p := range s.Phases {
 			fs := make([]Feature, 0, len(p.Items))
 			for _, pi := range p.Items {
-				fs = append(fs, stripePriceToFeature(pi.Price))
+				fs = append(fs, featureByProviderID[pi.Price.ID.ProviderID()])
 			}
 			ps = append(ps, Phase{
 				Org:       org,
@@ -301,6 +299,33 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	})
 
 	return ps, nil
+}
+
+type Limit struct {
+	Name  string
+	Limit int
+}
+
+func (c *Client) LookupLimits(ctx context.Context, org string) ([]Limit, error) {
+	ps, err := c.LookupPhases(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	c.Logf("limits: current phases: %# v", pretty.Formatter(ps))
+	for _, p := range ps {
+		if p.Current {
+			var ls []Limit
+			for _, f := range p.Features {
+				c.Logf("limits: feature: %# v", pretty.Formatter(f))
+				ls = append(ls, Limit{
+					Name:  f.Name,
+					Limit: f.Limit(),
+				})
+			}
+			return ls, nil
+		}
+	}
+	return nil, nil // no current phase means no access
 }
 
 // putCustomer safely creates a customer in Stripe for the provided org

@@ -29,12 +29,15 @@ func TestMain(m *testing.M) {
 func newTestClient(t *testing.T) *Client {
 	t.Helper()
 
-	tc := stroke.Client(t)
-	if tc.Live() {
+	sc := stroke.Client(t)
+	if sc.Live() {
 		t.Fatal("expected test key")
 	}
+	if sc.KeyPrefix == "" {
+		t.Fatal("KeyPrefix must be set")
+	}
 	return &Client{
-		Stripe: stroke.WithAccount(t, tc),
+		Stripe: stroke.WithAccount(t, sc),
 		Logf:   t.Logf,
 	}
 }
@@ -109,9 +112,10 @@ func pushLogger(t *testing.T) func(f Feature, err error) {
 	t.Helper()
 	return func(f Feature, err error) {
 		t.Helper()
-		t.Logf("pushed %q: %v", f.Name, err)
-		if err != nil {
-			t.FailNow()
+		if err == nil {
+			t.Logf("pushed %q", f.Name)
+		} else {
+			t.Fatalf("error pushing %q: %v", f.Name, err)
 		}
 	}
 }
