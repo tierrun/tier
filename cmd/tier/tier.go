@@ -280,6 +280,7 @@ func runTier(cmd string, args []string) (err error) {
 		fmt.Fprintln(tw, strings.Join([]string{
 			"ORG",
 			"INDEX",
+			"ACTIVE",
 			"EFFECTIVE",
 			"FEATURE",
 			"PLAN",
@@ -288,10 +289,15 @@ func runTier(cmd string, args []string) (err error) {
 			if i > 0 {
 				fmt.Fprintln(tw)
 			}
+			active := "n"
+			if p.Current {
+				active = "Y"
+			}
 			for _, f := range p.Features {
-				line := fmt.Sprintf("%s\t%d\t%s\t%s\t%s",
+				line := fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s",
 					p.Org,
 					i,
+					active,
 					p.Effective.Format(time.RFC3339),
 					f.Name,
 					f.Plan,
