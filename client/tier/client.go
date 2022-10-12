@@ -92,6 +92,13 @@ func (f *Feature) Version() string {
 	return version
 }
 
+func (f *Feature) Limit() int {
+	if len(f.Tiers) == 0 {
+		return Inf
+	}
+	return f.Tiers[len(f.Tiers)-1].Upto
+}
+
 // Tier holds the pricing information for a single tier.
 type Tier struct {
 	Upto  int // the upper limit of the tier
@@ -210,7 +217,8 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 
 type stripePrice struct {
 	stripe.ID
-	Metadata struct {
+	LookupKey string `json:"lookup_key"`
+	Metadata  struct {
 		Plan      string `json:"tier.plan"`
 		PlanTitle string `json:"tier.plan_title"`
 		Feature   string `json:"tier.feature"`

@@ -208,5 +208,6 @@ func (c *Client) CloneAs(accountID string) *Client {
 		BaseURL:    c.BaseURL,
 		HTTPClient: c.HTTPClient,
 		AccountID:  accountID,
+		KeyPrefix:  c.KeyPrefix,
 	}
 }
