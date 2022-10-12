@@ -1,8 +1,37 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
+)
+
+// Errors
+var (
+	// TODO(bmizerany): generate subcommand lists from help map
+	//lint:ignore ST1005 this error is not used like normal errors
+	errUsage = errors.New(`Usage:
+
+	tier [flags] <command> [arguments]
+
+The commands are:
+
+	connect    connect your Stripe account
+	push       push pricing plans to Stripe
+	pull       pull pricing plans from Stripe
+	ls         list pricing plans
+	version    print the current CLI version
+	subscribe  subscribe an org to a pricing plan
+	phases     list scheduled phases for an org
+	limits     list feature limits for an org
+	whois      get the Stripe customer ID for an org
+
+The flags are:
+
+	-l, -live  use live Stripe key (default is false)
+	-v         verbose output
+	-h         show this message
+`)
 )
 
 var topics = map[string]string{
@@ -15,7 +44,7 @@ Print the version of the Tier CLI.
 
 	"push": `Usage:
 
-	tier push [--live] <filename>
+	tier [--live] push <filename>
 
 Tier push pushes the pricing JSON in the provided filename to Stripe. To learn
 more about how this works, please visit: https://tier.run/docs/cli/push
@@ -25,7 +54,7 @@ If the --live flag is provided, your accounts live mode will be used.
 
 	"pull": `Usage:
 
-	tier pull [--live]
+	tier [--live] pull 
 
 Tier pull pulls the pricing JSON from Stripe and writes it to stdout.
 
@@ -43,7 +72,7 @@ interact with Stripe.
 
 	"ls": `Usage:
 
-	tier ls [--live]
+	tier [--live] ls
 
 Tier ls lists all features in stripe.
 
@@ -58,7 +87,7 @@ The output is in the format:
 `,
 	"phases": `Usage:
 
-	tier phases [--live] <org>
+	tier [--live] phases <org>
 
 Tier phases lists all phases scheduled by Tier for the provided org.
 
@@ -73,7 +102,7 @@ The output is in the format:
 `,
 	"subscribe": `Usage:
 
-	tier subscribe [--live] <org> <phase>...
+	tier [--live] subscribe <org> <phase>...
 
 Tier subscribe creates or updates a subscription for the provided org, applying
 the features in the plan.
@@ -82,9 +111,17 @@ If the --live flag is provided, your accounts live mode will be used.
 `,
 	"limits": `Usage:
 
-	tier limits [--live] <org>
+	tier [--live] limits <org>
 
 Tier limits lists the provided orgs limits per feature subscribed to.
+
+If the --live flag is provided, your accounts live mode will be used.
+`,
+	"whois": `Usage:
+
+	tier [--live] whois <org>
+
+Tier whois reports the Stripe customer ID for the provided org.
 
 If the --live flag is provided, your accounts live mode will be used.
 `,

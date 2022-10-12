@@ -43,32 +43,6 @@ var (
 	stderr io.Writer = os.Stderr
 )
 
-// Errors
-var (
-	// TODO(bmizerany): generate subcommand lists from help map
-	//lint:ignore ST1005 this error is not used like normal errors
-	errUsage = errors.New(`Usage:
-
-	tier [flags] <command> [arguments]
-
-The commands are:
-
-	connect    connect your Stripe account
-	push       push pricing plans to Stripe
-	pull       pull pricing plans from Stripe
-	ls         list pricing plans
-	version    print the current CLI version
-	subscribe  subscribe an org to a pricing plan
-	phases     list scheduled phases for an org
-
-The flags are:
-
-	-l, -live  use live Stripe key (default is false)
-	-v         verbose output
-	-h         show this message
-`)
-)
-
 func main() {
 	log.SetFlags(0)
 	flag.Usage = func() {
@@ -331,6 +305,20 @@ func runTier(cmd string, args []string) (err error) {
 				limit,
 			)
 		}
+		return nil
+	case "whois":
+		if len(args) < 1 {
+			return errUsage
+		}
+		org := args[0]
+		cid, err := tc().WhoIs(ctx, org)
+		if errors.Is(err, stripe.ErrNotFound) {
+			return fmt.Errorf("no customer found for %q", org)
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, cid)
 		return nil
 	default:
 		return errUsage
