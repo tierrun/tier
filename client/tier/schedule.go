@@ -22,7 +22,7 @@ type Phase struct {
 
 func (c *Client) lookupSubscriptionID(ctx context.Context, org string) (string, error) {
 	return c.cache.load("subscription:"+org, func() (string, error) {
-		cid, err := c.lookupCustomer(ctx, org)
+		cid, err := c.WhoIs(ctx, org)
 		if err != nil {
 			return "", err
 		}
@@ -221,7 +221,7 @@ func notFoundAsNil(err error) error {
 func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err error) {
 	defer errorfmt.Handlef("LookupPhase: %w", &err)
 
-	cid, err := c.lookupCustomer(ctx, org)
+	cid, err := c.WhoIs(ctx, org)
 	if err != nil {
 		return nil, notFoundAsNil(err)
 	}
@@ -342,7 +342,7 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Limit, error) 
 //
 // It only returns errors encountered while communicating with Stripe.
 func (c *Client) putCustomer(ctx context.Context, org string) (string, error) {
-	cid, err := c.lookupCustomer(ctx, org)
+	cid, err := c.WhoIs(ctx, org)
 	if err != nil && !errors.Is(err, stripe.ErrNotFound) {
 		return "", err
 	}
@@ -352,7 +352,7 @@ func (c *Client) putCustomer(ctx context.Context, org string) (string, error) {
 	return cid, err
 }
 
-func (c *Client) lookupCustomer(ctx context.Context, org string) (id string, err error) {
+func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 	if !strings.HasPrefix(org, "org:") {
 		return "", errors.New(`org must have prefix "org:"`)
 	}
