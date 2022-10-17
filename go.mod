@@ -10,6 +10,7 @@ require (
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
+	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11
 	golang.org/x/tools v0.1.12
 	honnef.co/go/tools v0.3.3
 	kr.dev/diff v0.2.1-0.20220605072704-63b4f29d6f39

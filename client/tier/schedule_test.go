@@ -2,6 +2,8 @@ package tier
 
 import (
 	"context"
+	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -9,12 +11,14 @@ import (
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 	"kr.dev/diff"
+	"kr.dev/errorfmt"
 )
 
 // interesting times to be in
 var (
-	t0 = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	t1 = time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)
+	t0 = time.Date(2020, 1, 0, 0, 0, 0, 0, time.UTC)
+	t1 = time.Date(2020, 2, 0, 0, 0, 0, 0, time.UTC)
+	t2 = time.Date(2020, 3, 0, 0, 0, 0, 0, time.UTC)
 )
 
 var ignoreProviderIDs = diff.OptionList(
@@ -23,6 +27,8 @@ var ignoreProviderIDs = diff.OptionList(
 )
 
 func TestSchedule(t *testing.T) {
+	ciOnly(t)
+
 	c := newTestClient(t)
 	ctx := context.Background()
 
@@ -54,36 +60,61 @@ func TestSchedule(t *testing.T) {
 		t.Helper()
 		t.Logf("subscribing %s to %# v", org, pretty.Formatter(fs))
 		if err := c.SubscribeTo(ctx, org, fs); err != nil {
-			t.Fatal(err)
+			t.Fatalf("%# v", pretty.Formatter(err))
 		}
 	}
 
-	check := func(org string, want Phase) {
+	check := func(org string, want []Phase) {
 		t.Helper()
-		got, err := c.LookupPhases(ctx, "org:example")
+		got, err := c.LookupPhases(ctx, org)
 		if err != nil {
 			t.Fatal(err)
 		}
-		w := []Phase{want}
-		diff.Test(t, t.Errorf, got, w, ignoreProviderIDs)
+		t.Logf("got phases %# v", pretty.Formatter(got))
+		diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
 	}
 
 	clock := c.setClock(t, t0)
 	sub("org:example", planFree)
-	check("org:example", Phase{
+	check("org:example", []Phase{{
 		Org:       "org:example",
 		Current:   true,
 		Effective: t0,
 		Features:  planFree,
-	})
+	}})
 
 	clock.Advance(t1)
 	sub("org:example", planPro)
-	check("org:example", Phase{
-		Org:       "org:example",
-		Current:   true,
-		Effective: t0, // unchanged by advanced clock
-		Features:  planPro,
+	check("org:example", []Phase{
+		{
+			Org:       "org:example",
+			Current:   false,
+			Effective: t0, // unchanged by advanced clock
+			Features:  planFree,
+		},
+		{
+			Org:       "org:example",
+			Current:   true,
+			Effective: t1, // unchanged by advanced clock
+			Features:  planPro,
+		},
+	})
+
+	// downgrade and check no new phases
+	sub("org:example", planFree)
+	check("org:example", []Phase{
+		{
+			Org:       "org:example",
+			Current:   false,
+			Effective: t0, // unchanged by advanced clock
+			Features:  planFree,
+		},
+		{
+			Org:       "org:example",
+			Current:   true,
+			Effective: t1, // unchanged by advanced clock
+			Features:  planFree,
+		},
 	})
 }
 
@@ -170,7 +201,7 @@ func TestSubscribeToPlan(t *testing.T) {
 	want := []Phase{{
 		Org:       "org:example",
 		Current:   true,
-		Effective: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		Effective: t0,
 		Features:  fs,
 	}}
 
@@ -178,8 +209,6 @@ func TestSubscribeToPlan(t *testing.T) {
 }
 
 func TestDedupCustomer(t *testing.T) {
-	t.Parallel()
-
 	fs := []Feature{{
 		Name:     "feature:x",
 		Plan:     "plan:test@0",
@@ -210,8 +239,6 @@ func TestDedupCustomer(t *testing.T) {
 }
 
 func TestLookupPhases(t *testing.T) {
-	t.Parallel()
-
 	fs := []Feature{{
 		Name:     "feature:x",
 		Plan:     "plan:test@0",
@@ -243,14 +270,12 @@ func TestLookupPhases(t *testing.T) {
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
 }
 
-func TestLookupLimits(t *testing.T) {
-	t.Parallel()
-
+func TestReportUsage(t *testing.T) {
 	fs := []Feature{
 		{
 			Plan:      "plan:test@0",
 			Name:      "feature:10",
-			Interval:  "@daily",
+			Interval:  "@monthly",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: 10}},
 			Mode:      "graduated",
@@ -259,7 +284,7 @@ func TestLookupLimits(t *testing.T) {
 		{
 			Name:      "feature:inf",
 			Plan:      "plan:test@0",
-			Interval:  "@daily",
+			Interval:  "@monthly",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: Inf}},
 			Mode:      "graduated",
@@ -268,7 +293,7 @@ func TestLookupLimits(t *testing.T) {
 		{
 			Name:     "feature:lic",
 			Plan:     "plan:test@0",
-			Interval: "@daily",
+			Interval: "@monthly",
 			Currency: "usd",
 		},
 	}
@@ -276,27 +301,77 @@ func TestLookupLimits(t *testing.T) {
 	tc := newTestClient(t)
 	ctx := context.Background()
 	tc.Push(ctx, fs, pushLogger(t))
+	tc.setClock(t, t0)
 
 	if err := tc.SubscribeTo(ctx, "org:example", fs); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := tc.LookupLimits(ctx, "org:example")
+	g, groupCtx := errgroup.WithContext(ctx)
+	report := func(feature string, n int) {
+		g.Go(func() (err error) {
+			defer errorfmt.Handlef("%s: %w", feature, &err)
+			return tc.ReportUsage(groupCtx, "org:example", feature, Report{
+				N:  n,
+				At: t0,
+			})
+		})
+	}
+
+	report("feature:10", 3)
+	report("feature:inf", 9)
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := tc.LookupUsage(ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	slices.SortFunc(got, func(a, b Limit) bool {
-		return a.Name < b.Name
+
+	slices.SortFunc(got, func(a, b Usage) bool {
+		return a.Feature < b.Feature
 	})
 
-	// pretty print got
-	t.Logf("got: %# v", pretty.Formatter(got))
-
-	want := []Limit{
-		{Name: "feature:10", Limit: 10},
-		{Name: "feature:inf", Limit: Inf},
-		{Name: "feature:lic", Limit: Inf},
+	want := []Usage{
+		{Feature: "feature:10", Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
+		{Feature: "feature:inf", Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
+		{Feature: "feature:lic", Start: t1, End: t2, Used: 1, Limit: Inf},
 	}
 
 	diff.Test(t, t.Errorf, got, want)
+}
+
+func TestReportUsageFeatureNotFound(t *testing.T) {
+	tc := newTestClient(t)
+	ctx := context.Background()
+
+	fs := []Feature{{
+		Name:      "feature:inf",
+		Plan:      "plan:test@0",
+		Interval:  "@monthly",
+		Currency:  "usd",
+		Tiers:     []Tier{{Upto: Inf}},
+		Mode:      "graduated",
+		Aggregate: "sum",
+	}}
+
+	tc.Push(ctx, fs, pushLogger(t))
+	if err := tc.SubscribeTo(ctx, "org:example", fs); err != nil {
+		t.Fatal(err)
+	}
+	got := tc.ReportUsage(ctx, "org:example", "feature:nope", Report{})
+	if !errors.Is(got, ErrFeatureNotFound) {
+		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
+	}
+}
+
+func ciOnly(t *testing.T) {
+	if os.Getenv("CI") == "" {
+		t.Skip("not in CI; skipping long test")
+	}
+}
+
+func endOfStripeMonth(t time.Time) time.Time {
+	return t.AddDate(0, 1, 0).Truncate(time.Minute).Add(-5 * time.Minute)
 }

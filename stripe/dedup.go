@@ -10,7 +10,7 @@ import (
 )
 
 func Dedup(ctx context.Context, key string, logf func(string, ...any), f func(f Form) error) (winner bool, err error) {
-	defer errorfmt.Handlef("stripe: Singleflight(%s): %w", key, &err)
+	defer errorfmt.Handlef("stripe: Dedup(%s): %w", key, &err)
 
 	bo := backoff.NewBackoff("stripe", logf, 5*time.Second)
 	for {

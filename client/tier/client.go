@@ -15,7 +15,8 @@ import (
 
 // Errors
 var (
-	ErrFeatureExists = errors.New("feature already exists")
+	ErrFeatureExists   = errors.New("feature already exists")
+	ErrFeatureNotFound = errors.New("feature not found")
 )
 
 const Inf = 1<<63 - 1
@@ -81,6 +82,9 @@ type Feature struct {
 	// at the end of each billing period based on usage, and at a price
 	// determined by Tiers, Mode, and Aggregate.
 	Tiers []Tier
+
+	// ReportID is the ID for reporting usage to the billing provider.
+	ReportID string
 }
 
 func (f *Feature) ID() string {

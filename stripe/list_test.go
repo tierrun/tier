@@ -122,6 +122,7 @@ func testList(t *testing.T, in string, wantOffsets, wantIDs []string) {
 		APIKey:     "test",
 		BaseURL:    s.URL,
 		HTTPClient: s.Client(),
+		Logf:       t.Logf,
 	}
 
 	ctx := context.Background()

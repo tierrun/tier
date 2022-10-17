@@ -24,6 +24,7 @@ The commands are:
 	subscribe  subscribe an org to a pricing plan
 	phases     list scheduled phases for an org
 	limits     list feature limits for an org
+	report     report usage
 	whois      get the Stripe customer ID for an org
 
 The flags are:
@@ -113,7 +114,17 @@ If the --live flag is provided, your accounts live mode will be used.
 
 	tier [--live] limits <org>
 
-Tier limits lists the provided orgs limits per feature subscribed to.
+Tier limits lists the provided orgs limits and usage per feature subscribed to.
+
+If the --live flag is provided, your accounts live mode will be used.
+`,
+	"report": `Usage:
+
+	tier [--live] report <org> <feature> <n>
+
+Tier report reports that n units of feature were used by org to Stripe.
+
+For a report of usage, see the ("tier limits") command.
 
 If the --live flag is provided, your accounts live mode will be used.
 `,

@@ -23,6 +23,7 @@ func Client(t *testing.T) *stripe.Client {
 		t.Skipf("skipping test: %v", err)
 	}
 	c.KeyPrefix = randomString()
+	c.Logf = t.Logf
 	return c
 }
 
@@ -36,44 +37,48 @@ func randomString() string {
 }
 
 func WithAccount(t *testing.T, c *stripe.Client) *stripe.Client {
-	accountID, err := createAccount(c)
+	accountID, err := createAccount(c, t.Logf)
 	if err != nil {
-		t.Fatalf("error creating account (%s): %v", accountID, err)
+		t.Fatalf("error creating account: %v", err)
 	}
-
-	t.Cleanup(func() {
-		if !t.Failed() {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			if err := c.Do(ctx, "DELETE", "/v1/accounts/"+accountID, stripe.Form{}, nil); err != nil {
-				t.Fatalf("error cleaning up account (%s): %v", accountID, err)
-			}
-		} else {
-			t.Logf("skipping account removal for failed test:\n\thttps://dashboard.stripe.com/%s", accountID)
-		}
-	})
+	t.Logf("test account: \n\thttps://dashboard.stripe.com/%s", accountID)
 	return c.CloneAs(accountID)
 }
 
-func createAccount(c *stripe.Client) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+func createAccount(c *stripe.Client, logf func(string, ...any)) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var v struct {
-		stripe.ID
+	bo := backoff.NewBackoff("stroke: create account backoff", logf, 5*time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+		}
+
+		var v struct {
+			stripe.ID
+		}
+		var f stripe.Form
+		f.Set("type", "standard")
+		err := c.Do(ctx, "POST", "/v1/accounts", f, &v)
+		if err == nil {
+			return v.ProviderID(), nil
+		}
+		bo.BackOff(ctx, err)
 	}
-	var f stripe.Form
-	f.Set("type", "standard")
-	if err := c.Do(ctx, "POST", "/v1/accounts", f, &v); err != nil {
-		return "", err
-	}
-	return v.ID.ProviderID(), nil
+
 }
 
 type Clock struct {
 	id      string
 	advance func(time.Time)
-	now     func() time.Time
+
+	sync   func()
+	now    time.Time
+	status string
+
 	logf    func(string, ...any)
 	dashURL string
 }
@@ -111,17 +116,21 @@ func NewClock(t *testing.T, c *stripe.Client, name string, start time.Time) *Clo
 		panic(err) // should never happen
 	}
 
-	cl := &Clock{
+	var cl *Clock
+	cl = &Clock{
 		id: v.ID,
 		advance: func(now time.Time) {
 			var f stripe.Form
 			f.Set("frozen_time", now)
 			do("POST", path+"/advance", f)
 		},
-		now: func() time.Time {
+		sync: func() {
 			v := do("GET", path, stripe.Form{})
-			return time.Unix(v.Time, 0).UTC()
+			cl.logf("clock: sync: status=%s, time=%v", v.Status, time.Unix(v.Time, 0))
+			cl.now = time.Unix(v.Time, 0).UTC()
+			cl.status = v.Status
 		},
+		now:     start.Truncate(time.Second),
 		logf:    t.Logf,
 		dashURL: dashURL,
 	}
@@ -139,10 +148,8 @@ func (c *Clock) Advance(t time.Time) {
 	c.advance(t)
 	bo := backoff.NewBackoff("stroke: clock: advance backoff", c.logf, 5*time.Second)
 	for {
-		t = t.Truncate(time.Second)
-		now := c.Now()
-		c.logf("stroke: clock: advacing now=%v, want=%v", now, t)
-		if now.After(t) || now.Equal(t) {
+		c.sync()
+		if c.status == "ready" {
 			return
 		}
 		bo.BackOff(context.Background(), errForceBackoff)
@@ -150,4 +157,4 @@ func (c *Clock) Advance(t time.Time) {
 }
 
 // Now retrieves the current time for the clock from Stripe and returns it.
-func (c *Clock) Now() time.Time { return c.now().UTC() }
+func (c *Clock) Now() time.Time { return c.now }

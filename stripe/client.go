@@ -2,9 +2,12 @@ package stripe
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,7 +15,10 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
+	"tier.run/trutil"
 )
+
+var debugMode = os.Getenv("STRIPE_DEBUG") == "1"
 
 type Error struct {
 	AccountID string
@@ -125,6 +131,7 @@ type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
 	AccountID  string
+	Logf       func(format string, args ...any)
 
 	// KeyPrefix is prepended to all idempotentcy keys. Use a new key prefix
 	// after deleting test data. It is not recommended for use with live mode.
@@ -186,18 +193,41 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 	}
 	defer resp.Body.Close()
 
+	body := io.Reader(resp.Body)
+	if debugMode {
+		requestID := resp.Header.Get("Request-Id")
+		traceID := randomString()
+		writeIndentedJSON(&trutil.LineWriter{
+			Prefix:    fmt.Sprintf("STRIPE: >> %s: %s: ", traceID, requestID),
+			Logf:      c.Logf,
+			AutoFlush: true,
+		}, f.v)
+
+		c.Logf("STRIPE: -- %s: %s:", traceID, requestID)
+
+		body = io.TeeReader(body, &trutil.LineWriter{
+			Prefix:    fmt.Sprintf("STRIPE: << %s: %s: ", traceID, requestID),
+			Logf:      c.Logf,
+			AutoFlush: true,
+		})
+		defer func() {
+			io.Copy(io.Discard, body) // flush out any remaining data (e.g. errors or unread body)
+		}()
+	}
+
 	if resp.StatusCode/100 != 2 {
 		var e struct {
 			Error *Error
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&e); err != nil {
+
+		if err := json.NewDecoder(body).Decode(&e); err != nil {
 			return fmt.Errorf("stripe: error parsing error response: %w", err)
 		}
 		e.Error.AccountID = c.AccountID
 		return e.Error
 	}
 	if out != nil {
-		return json.NewDecoder(resp.Body).Decode(out)
+		return json.NewDecoder(body).Decode(out)
 	}
 	return nil
 }
@@ -209,5 +239,23 @@ func (c *Client) CloneAs(accountID string) *Client {
 		HTTPClient: c.HTTPClient,
 		AccountID:  accountID,
 		KeyPrefix:  c.KeyPrefix,
+		Logf:       c.Logf,
 	}
+}
+
+func writeIndentedJSON(w io.Writer, v any) error {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(b)
+	return err
+}
+
+func randomString() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b[:])
 }
