@@ -28,6 +28,7 @@ func TestMain(m *testing.M) {
 
 func newTestClient(t *testing.T) *Client {
 	t.Helper()
+	t.Parallel()
 
 	sc := stroke.Client(t)
 	if sc.Live() {
@@ -49,8 +50,6 @@ func (c *Client) setClock(t *testing.T, now time.Time) *stroke.Clock {
 }
 
 func TestRoundTrip(t *testing.T) {
-	t.Parallel()
-
 	tc := newTestClient(t)
 	ctx := context.Background()
 

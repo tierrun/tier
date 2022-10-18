@@ -93,7 +93,7 @@ func isAlphaNumeric(s string, extra string) bool {
 		if slices.Contains([]rune(extra), r) {
 			continue
 		}
-		if !(unicode.IsDigit(r) || unicode.IsLetter(r)) {
+		if !unicode.IsDigit(r) && !unicode.IsLetter(r) {
 			return false
 		}
 	}

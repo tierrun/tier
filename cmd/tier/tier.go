@@ -201,7 +201,7 @@ func runTier(cmd string, args []string) (err error) {
 			return err
 		}
 
-		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
+		tw := newTabWriter()
 		defer tw.Flush()
 
 		fmt.Fprintln(tw, strings.Join([]string{
@@ -249,7 +249,7 @@ func runTier(cmd string, args []string) (err error) {
 		if err != nil {
 			return err
 		}
-		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
+		tw := newTabWriter()
 		defer tw.Flush()
 		fmt.Fprintln(tw, strings.Join([]string{
 			"ORG",
@@ -285,34 +285,46 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 		org := args[0]
-		limits, err := tc().LookupLimits(ctx, org)
+		use, err := tc().LookupUsage(ctx, org)
 		if err != nil {
 			return err
 		}
-		tw := tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
+		tw := newTabWriter()
 		defer tw.Flush()
-		fmt.Fprintln(tw, strings.Join([]string{
-			"FEATURE",
-			"LIMIT",
-		}, "\t"))
-		for _, l := range limits {
-			limit := strconv.Itoa(l.Limit)
-			if l.Limit == tier.Inf {
+		fmt.Fprintln(tw, "FEATURE\tLIMIT\tUSED")
+		for _, u := range use {
+			limit := strconv.Itoa(u.Limit)
+			if u.Limit == tier.Inf {
 				limit = "∞"
 			}
-			fmt.Fprintf(tw, "%s\t%s\n",
-				l.Name,
+			fmt.Fprintf(tw, "%s\t%s\t%d\n",
+				u.Feature,
 				limit,
+				u.Used,
 			)
 		}
 		return nil
+	case "report":
+		org, feature, sn := getArg(args, 0), getArg(args, 1), getArg(args, 2)
+		if org == "" || feature == "" || sn == "" {
+			return errUsage
+		}
+		n, err := strconv.Atoi(sn)
+		if err != nil {
+			return err
+		}
+		return tc().ReportUsage(ctx, org, feature, tier.Report{
+			At: time.Now(),
+			N:  n,
+			// TODO(bmizerany): suuport Clobber
+		})
 	case "whois":
 		if len(args) < 1 {
 			return errUsage
 		}
 		org := args[0]
 		cid, err := tc().WhoIs(ctx, org)
-		if errors.Is(err, stripe.ErrNotFound) {
+		if errors.Is(err, tier.ErrOrgNotFound) {
 			return fmt.Errorf("no customer found for %q", org)
 		}
 		if err != nil {
@@ -347,6 +359,7 @@ func tc() *tier.Client {
 		sc := &stripe.Client{
 			APIKey:    key,
 			KeyPrefix: os.Getenv("TIER_KEY_PREFIX"),
+			Logf:      vlogf,
 		}
 		tierClient = &tier.Client{
 			Stripe: sc,
@@ -399,4 +412,15 @@ func makeLink(f tier.Feature) string {
 		panic(err)
 	}
 	return link
+}
+
+func newTabWriter() *tabwriter.Writer {
+	return tabwriter.NewWriter(stdout, 0, 2, 2, ' ', 0)
+}
+
+func getArg(args []string, i int) string {
+	if i < len(args) {
+		return args[i]
+	}
+	return ""
 }

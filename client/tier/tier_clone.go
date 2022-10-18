@@ -6,6 +6,24 @@
 
 package tier
 
+// Clone makes a deep copy of Tier.
+// The result aliases no memory with the original.
+func (src *Tier) Clone() *Tier {
+	if src == nil {
+		return nil
+	}
+	dst := new(Tier)
+	*dst = *src
+	return dst
+}
+
+// A compilation failure here means this code must be regenerated, with the command at the top of this file.
+var _TierCloneNeedsRegeneration = Tier(struct {
+	Upto  int
+	Price int
+	Base  int
+}{})
+
 // Clone makes a deep copy of Feature.
 // The result aliases no memory with the original.
 func (src *Feature) Clone() *Feature {
@@ -31,22 +49,5 @@ var _FeatureCloneNeedsRegeneration = Feature(struct {
 	Mode       string
 	Aggregate  string
 	Tiers      []Tier
-}{})
-
-// Clone makes a deep copy of Tier.
-// The result aliases no memory with the original.
-func (src *Tier) Clone() *Tier {
-	if src == nil {
-		return nil
-	}
-	dst := new(Tier)
-	*dst = *src
-	return dst
-}
-
-// A compilation failure here means this code must be regenerated, with the command at the top of this file.
-var _TierCloneNeedsRegeneration = Tier(struct {
-	Upto  int
-	Price int
-	Base  int
+	ReportID   string
 }{})

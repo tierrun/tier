@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptrace"
-	"time"
 
 	"go4.org/types"
 	"golang.org/x/sync/errgroup"
@@ -54,9 +53,6 @@ func (r *reporter) send(ctx context.Context, ev *event) {
 			vvlogf("report: %v", err)
 			return nil
 		}
-
-		ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
-		defer cancel()
 
 		done := make(chan struct{})
 		ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
