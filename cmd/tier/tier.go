@@ -332,6 +332,13 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		fmt.Fprintln(stdout, cid)
 		return nil
+	case "serve":
+		flags := flag.NewFlagSet("serve", flag.ExitOnError)
+		var addr = flags.String("addr", ":8080", "address to listen on")
+		if err := flags.Parse(args); err != nil {
+			return err
+		}
+		return serve(*addr)
 	default:
 		return errUsage
 	}
