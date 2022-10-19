@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"tier.run/api/types"
+	"tier.run/api/apitypes"
 	"tier.run/client/tier"
 	"tier.run/trweb"
 )
@@ -44,29 +44,52 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) error {
 	switch r.URL.Path {
+	case "/v1/whois":
+		return s.serveWhoIs(w, r)
 	case "/v1/limits":
 		return s.serveUsage(w, r)
+	case "/v1/subscribe":
+		// TODO(bmizerany): POST only, info on what is currently
+		// subscribed to, see: /limits.
+		// Also: should only take a list of feature plans nothing more.
+		// Feature definitions are done/found via push/pull.
+		panic("TODO")
+	case "/v1/report":
+		panic("TODO")
 	default:
 		return trweb.NotFound
 	}
 }
 
+func (s *Server) serveWhoIs(w http.ResponseWriter, r *http.Request) error {
+	org := r.FormValue("org")
+	stripeID, err := s.c.WhoIs(r.Context(), org)
+	if err != nil {
+		return err
+	}
+	return httpJSON(w, apitypes.WhoIsResponse{
+		Org:      org,
+		StripeID: stripeID,
+	})
+}
+
 func (s *Server) serveUsage(w http.ResponseWriter, r *http.Request) error {
 	org := r.URL.Query().Get("org")
-	if org == "" {
-		return trweb.InvalidRequest
-	}
-
 	usage, err := s.c.LookupUsage(r.Context(), org)
 	if err != nil {
 		return err
 	}
 
-	var rr types.UsageResponse
+	var rr apitypes.UsageResponse
 	rr.Org = org
 	for _, u := range usage {
-		rr.Usage = append(rr.Usage, types.UsageUsageResponse(u))
+		rr.Usage = append(rr.Usage, apitypes.Usage{
+			Feature: u.Feature,
+			Limit:   u.Limit,
+			Used:    u.Used,
+		})
 	}
+
 	return httpJSON(w, rr)
 }
 
