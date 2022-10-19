@@ -46,6 +46,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) error {
 	switch r.URL.Path {
 	case "/v1/limits":
 		return s.serveUsage(w, r)
+	case "/v1/subscribe":
+		// TODO(bmizerany): POST only, info on what is currently
+		// subscribed to, see: /limits.
+		// Also: should only take a list of feature plans nothing more.
+		// Feature definitions are done/found via push/pull.
+		panic("TODO")
+	case "/v1/report":
+		panic("TODO")
+	case "/v1/whois":
+		panic("TODO")
 	default:
 		return trweb.NotFound
 	}
