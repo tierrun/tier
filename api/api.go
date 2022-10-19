@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"tier.run/api/types"
+	"tier.run/api/apitypes"
 	"tier.run/client/tier"
 	"tier.run/trweb"
 )
@@ -55,7 +55,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) error {
 	case "/v1/report":
 		panic("TODO")
 	case "/v1/whois":
-		panic("TODO")
+		org := r.FormValue("org")
+		stripeID, err := s.c.WhoIs(r.Context(), org)
+		if err != nil {
+			return err
+		}
+		return httpJSON(w, apitypes.WhoIsResponse{
+			StripeID: stripeID,
+		})
 	default:
 		return trweb.NotFound
 	}
@@ -63,20 +70,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) serveUsage(w http.ResponseWriter, r *http.Request) error {
 	org := r.URL.Query().Get("org")
-	if org == "" {
-		return trweb.InvalidRequest
-	}
-
 	usage, err := s.c.LookupUsage(r.Context(), org)
 	if err != nil {
 		return err
 	}
 
-	var rr types.UsageResponse
+	var rr apitypes.UsageResponse
 	rr.Org = org
 	for _, u := range usage {
-		rr.Usage = append(rr.Usage, types.UsageUsageResponse(u))
+		rr.Usage = append(rr.Usage, apitypes.Usage{
+			Feature: u.Feature,
+			Limit:   u.Limit,
+			Used:    u.Used,
+		})
 	}
+
 	return httpJSON(w, rr)
 }
 

@@ -1,11 +1,14 @@
-package types
+package apitypes
+
+type WhoIsResponse struct {
+	StripeID string `json:"stripe_id"`
+}
 
 type UsageResponse struct {
 	Org   string  `json:"org"`
 	Usage []Usage `json:"usage"`
 }
 
-// stutter to avoid conflict with tier.Usage for easier searching
 type Usage struct {
 	Feature string `json:"feature"`
 	Used    int    `json:"used"`
