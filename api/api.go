@@ -168,23 +168,6 @@ func httpJSON(w http.ResponseWriter, v any) error {
 	return enc.Encode(v)
 }
 
-func findFeatures(fs []tier.Feature, names []string) []tier.Feature {
-	if len(names) > 1 {
-		panic("feature folding is not implemented")
-	}
-	var out []tier.Feature
-	for _, f := range fs {
-		for _, n := range names {
-			// TODO(bmizerany): support versioned features, which
-			// would include "plans" like ("feature:x@plan:free@0")
-			if f.Plan == n {
-				out = append(out, f)
-			}
-		}
-	}
-	return out
-}
-
 func invalidRequest(reason string) *trweb.HTTPError {
 	return &trweb.HTTPError{
 		Status:  400,
