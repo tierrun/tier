@@ -67,7 +67,7 @@ func (c *Client) ReportUsage(ctx context.Context, org, feature string, use Repor
 	}
 }
 
-func (c *Client) LookupUsage(ctx context.Context, org string) ([]Usage, error) {
+func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) {
 	cid, err := c.WhoIs(ctx, org)
 	if err != nil {
 		return nil, err

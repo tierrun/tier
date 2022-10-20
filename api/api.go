@@ -91,26 +91,14 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 	var phases []tier.Phase
 	for _, p := range sr.Phases {
 		if len(p.Features) > 1 {
-			return &trweb.HTTPError{
-				Status:  400,
-				Code:    "invalid_phase",
-				Message: "phase must not have more than one plan",
-			}
+			return invalidRequest("phase must not have more than one plan; this constraint will be lifted in the future")
 		}
 		if len(p.Features) == 0 {
-			return &trweb.HTTPError{
-				Status:  400,
-				Code:    "invalid_request",
-				Message: "phase must have at least one feature; this constraint will be lifted in the future",
-			}
+			return invalidRequest("phase must have at least one plan")
 		}
 		fs := findFeatures(m, p.Features)
 		if len(fs) == 0 {
-			return &trweb.HTTPError{
-				Status:  400,
-				Code:    "invalid_request",
-				Message: "no features found for plan",
-			}
+			return invalidRequest("no features found for plan")
 		}
 		phases = append(phases, tier.Phase{
 			Effective: p.Effective,
@@ -145,8 +133,8 @@ func (h *Handler) serveWhoIs(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) serveLimits(w http.ResponseWriter, r *http.Request) error {
-	org := r.URL.Query().Get("org")
-	usage, err := h.c.LookupUsage(r.Context(), org)
+	org := r.FormValue("org")
+	usage, err := h.c.LookupLimits(r.Context(), org)
 	if err != nil {
 		return err
 	}
@@ -186,4 +174,12 @@ func findFeatures(fs []tier.Feature, names []string) []tier.Feature {
 		}
 	}
 	return out
+}
+
+func invalidRequest(reason string) *trweb.HTTPError {
+	return &trweb.HTTPError{
+		Status:  400,
+		Code:    "invalid_request",
+		Message: reason,
+	}
 }

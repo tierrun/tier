@@ -324,7 +324,7 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := tc.LookupUsage(ctx, "org:example")
+	got, err := tc.LookupLimits(ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}

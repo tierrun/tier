@@ -285,7 +285,7 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 		org := args[0]
-		use, err := tc().LookupUsage(ctx, org)
+		use, err := tc().LookupLimits(ctx, org)
 		if err != nil {
 			return err
 		}
