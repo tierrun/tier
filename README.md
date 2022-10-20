@@ -11,7 +11,7 @@
 ### Homebrew (macOS)
 
 ```
-brew install tierrun/tier
+brew install tierrun/tap/tier
 ```
 ### Binary (macOS, linux, Windows)
 
