@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ The commands are:
 	limits     list feature limits for an org
 	report     report usage
 	whois      get the Stripe customer ID for an org
+	help       print this help message
 
 The flags are:
 
@@ -136,16 +138,31 @@ Tier whois reports the Stripe customer ID for the provided org.
 
 If the --live flag is provided, your accounts live mode will be used.
 `,
+	`tier`: errUsage.Error(),
 }
 
 func help(dst io.Writer, cmd string) error {
-	if cmd == "" {
+	switch cmd {
+	case "help":
+		// Prevent exiting with a non-zero stauts if help was
+		// requested.
+		io.WriteString(dst, errUsage.Error())
+		return nil
+	case "helpjson":
+		data, err := json.MarshalIndent(topics, "", "\t")
+		if err != nil {
+			return err
+		}
+		dst.Write(data)
+		return nil
+	case "":
 		return errUsage
+	default:
+		msg := topics[cmd]
+		if msg == "" {
+			return fmt.Errorf("tier: unknown help topic %q; Run 'tier help'", cmd)
+		}
+		io.WriteString(dst, msg)
+		return nil
 	}
-	msg := topics[cmd]
-	if msg == "" {
-		return fmt.Errorf("tier: unknown help topic %q; Run 'tier help'", cmd)
-	}
-	io.WriteString(dst, msg)
-	return nil
 }
