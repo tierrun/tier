@@ -15,8 +15,9 @@ import (
 
 // Errors
 var (
-	ErrFeatureExists   = errors.New("feature already exists")
-	ErrFeatureNotFound = errors.New("feature not found")
+	ErrFeatureExists     = errors.New("feature already exists")
+	ErrFeatureNotFound   = errors.New("feature not found")
+	ErrFeatureNotMetered = errors.New("feature is not metered")
 )
 
 const Inf = 1<<63 - 1
@@ -87,6 +88,15 @@ type Feature struct {
 	ReportID string
 }
 
+// IsMetered reports if the feature is metered.
+func (f *Feature) IsMetered() bool {
+	// checking the mode is more reliable than checking the existence of
+	// tiers becauase not all responses from stripe containing prices
+	// include tiers, but they all include the mode, which is empty for
+	// license prices.
+	return f.Mode != ""
+}
+
 func (f *Feature) ID() string {
 	return makeID(f.Name, f.Plan)
 }
@@ -126,7 +136,9 @@ func (c *Client) Live() bool { return c.Stripe.Live() }
 //
 // Each call to push is subject to rate limiting via the clients shared rate
 // limit.
-func (c *Client) Push(ctx context.Context, fs []Feature, cb func(f Feature, err error)) {
+//
+// It returns the first error encountered if any.
+func (c *Client) Push(ctx context.Context, fs []Feature, cb func(f Feature, err error)) error {
 	var g errgroup.Group
 	g.SetLimit(c.maxWorkers())
 	for _, f := range fs {
@@ -134,12 +146,10 @@ func (c *Client) Push(ctx context.Context, fs []Feature, cb func(f Feature, err 
 		g.Go(func() error {
 			err := c.pushFeature(ctx, f)
 			cb(f, err)
-			return nil
+			return err
 		})
 	}
-	if err := g.Wait(); err != nil {
-		panic(err) // above goroutines should never return errors
-	}
+	return g.Wait()
 }
 
 func (c *Client) maxWorkers() int {
