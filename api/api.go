@@ -84,28 +84,37 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 	if err := trweb.DecodeStrict(r, &sr); err != nil {
 		return err
 	}
-	m, err := h.c.Pull(r.Context(), 0)
-	if err != nil {
-		return err
+
+	// currently /v1/subscribe API only supports updating the current phase
+	// (or starting a new one). In the future, this endpoint will respect a
+	// Currnet field on Phase and go into "advanced" mode allowing the
+	// client to define how to update the schedule in stripe.
+	if len(sr.Phases) != 1 {
+		return invalidRequest("phases must contain exactly one phase; for now")
 	}
-	var phases []tier.Phase
-	for _, p := range sr.Phases {
-		if len(p.Features) > 1 {
-			return invalidRequest("phase must not have more than one plan; this constraint will be lifted in the future")
-		}
-		if len(p.Features) == 0 {
-			return invalidRequest("phase must have at least one plan")
-		}
-		fs := findFeatures(m, p.Features)
-		if len(fs) == 0 {
-			return invalidRequest("no features found for plan")
-		}
-		phases = append(phases, tier.Phase{
-			Effective: p.Effective,
-			Features:  fs,
-		})
+
+	p := sr.Phases[0]
+	if !p.Effective.IsZero() {
+		return invalidRequest("effective must not be specified; for now")
 	}
-	return h.c.Subscribe(r.Context(), sr.Org, phases)
+	if len(p.Features) > 1 {
+		return invalidRequest("phase must not have more than one plan; for now")
+	}
+	if len(p.Features) == 0 {
+		return invalidRequest("phase must have at least one plan")
+	}
+
+	// TODO(bmizerany): decide if we should detach the context here and let
+	// subscribe keep going in the background for some time before a
+	// response is ready.
+	// select {
+	// case <-r.Context().Done():
+	// case <-time.After(1 * time.Second):
+	// 	return 204
+	// }
+
+	plan := p.Features[0]
+	return h.c.SubscribeToPlan(r.Context(), sr.Org, plan)
 }
 
 func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
