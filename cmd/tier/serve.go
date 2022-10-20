@@ -15,7 +15,6 @@ func serve(addr string) error {
 	}
 	fmt.Fprintf(stdout, "listening on %s\n", ln.Addr())
 
-	h := api.New(tc())
-	h.Logf = vlogf
+	h := api.NewHandler(tc(), vlogf)
 	return http.Serve(ln, h)
 }

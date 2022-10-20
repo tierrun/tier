@@ -422,6 +422,7 @@ func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 	}
 
 	cid, err := c.cache.load(org, func() (string, error) {
+		c.Logf("WhoIs: cache miss: looking up customer for %q", org)
 		type T struct {
 			stripe.ID
 			Metadata struct {
@@ -437,7 +438,6 @@ func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 		}
 		return cus.ProviderID(), nil
 	})
-
 	if errors.Is(err, stripe.ErrNotFound) {
 		return "", ErrOrgNotFound
 	}

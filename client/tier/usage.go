@@ -26,9 +26,12 @@ type Usage struct {
 }
 
 func (c *Client) ReportUsage(ctx context.Context, org, feature string, use Report) error {
-	siid, err := c.lookupSubscriptionItemID(ctx, org, scheduleNameTODO, feature)
+	siid, isMetered, err := c.lookupSubscriptionItemID(ctx, org, scheduleNameTODO, feature)
 	if err != nil {
 		return err
+	}
+	if !isMetered {
+		return ErrFeatureNotMetered
 	}
 
 	var f stripe.Form
@@ -105,17 +108,17 @@ func (c *Client) LookupUsage(ctx context.Context, org string) ([]Usage, error) {
 	return maps.Values(seen), nil
 }
 
-func (c *Client) lookupSubscriptionItemID(ctx context.Context, org, name, feature string) (string, error) {
+func (c *Client) lookupSubscriptionItemID(ctx context.Context, org, name, feature string) (id string, isMetered bool, err error) {
 	s, err := c.lookupSubscription(ctx, org, name)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	for _, f := range s.Features {
 		if f.Name == feature {
-			return f.ReportID, nil
+			return f.ReportID, f.IsMetered(), nil
 		}
 	}
-	return "", ErrFeatureNotFound
+	return "", false, ErrFeatureNotFound
 }
 
 func randomString() string {
