@@ -380,8 +380,12 @@ var debugLevel, _ = strconv.Atoi(os.Getenv("TIER_DEBUG"))
 
 func vlogf(format string, args ...any) {
 	if *flagVerbose || debugLevel > 0 {
-		fmt.Fprintf(stderr, format, args...)
-		fmt.Fprintln(stderr)
+		// mimic behavior of log.Printf
+		line := fmt.Sprintf(format, args...)
+		if len(line) > 0 && line[len(line)-1] != '\n' {
+			line = line + "\n"
+		}
+		io.WriteString(stderr, line)
 	}
 }
 
