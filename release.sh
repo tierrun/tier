@@ -1,3 +1,3 @@
 #!/bin/sh
-set -e
-goreleaser release --rm-dist
+set -eu
+goreleaser release --rm-dist "$@"

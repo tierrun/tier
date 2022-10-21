@@ -1,98 +1,115 @@
 project_name: tier
-
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
+release:
+  prerelease: auto # don't publish release with -rc1,-pre, etc suffixes
 before:
   hooks:
-    # You may remove this if you don't use go modules.
     - go mod tidy
-    # you may remove this if you don't need go generate
-    - go generate ./...
-release:
-  # Repo in which the release will be created.
-  # Default is extracted from the origin remote URL or empty if its private hosted.
-  github:
-    owner: tierrun
-    name: tier
+    # - ./script/completions
 builds:
+  - id: darwin-amd64
+    goos:
+      - darwin
+    goarch:
+      - amd64
+    main: ./cmd/tier
+    ldflags:
+      - -s -w
+    flags:
+      - -trimpath
+    binary: "tier"
+  - id: darwin-arm64
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    main: ./cmd/tier
+    ldflags:
+      - -s -w
+    flags:
+      - -trimpath
+    binary: "tier"
   - env:
       - CGO_ENABLED=0
     goos:
       - linux
       - windows
-      - darwin
     goarch:
       - amd64
       - arm64
     main: ./cmd/tier
-    binary: tier
+    ldflags:
+      - -s -w
+    flags:
+      - -trimpath
+    binary: "tier"   
+# dockers:
+#   - image_templates:
+#     - "tier/tier:latest"
+#     - "tier/tier:{{ .Tag }}"
+#     build_flag_templates:
+#     - "--pull"
+#     - "--label=org.opencontainers.image.created={{.Date}}"
+#     - "--label=org.opencontainers.image.title={{.ProjectName}}"
+#     - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+#     - "--label=org.opencontainers.image.version={{.Version}}"
+#     - "--label=org.opencontainers.image.source={{.GitURL}}"
+#     dockerfile: Dockerfile.goreleaser
+nfpms:
+  - maintainer: Tier
+    description: The Tier CLI
+    homepage: https://github.com/tierrun/tier
+    license: BSD-3-Clause
+    # contents:
+    #   - src: ./completions/tier.bash
+    #     dst: /etc/bash_completion.d/tier
+    #   - src: ./completions/tier.fish
+    #     dst: /usr/share/fish/completions/tier.fish
+    #   - src: ./completions/tier.zsh
+    #     dst: /usr/local/share/zsh/site-functions/_tier
+    formats:
+    - deb
+    - rpm
+    replacements:
+      darwin: macOS
+# scoop:
+#   bucket:
+#     owner: tier
+#     name: scoop-bucket
+#   homepage: "https://tier.run/docs"
+#   description: "The Tier CLI"
+#   license: BSD-3-Clause
+brews:
+  - homepage: "https://tier.run/"
+    description: "The Tier CLI"
+    name: "tier"
+    license: BSD-3-Clause
+    tap: 
+      owner: tierrun
+      name: homebrew-tap
+    folder: Formula
+    test: |
+         system "#{bin}/tier --version"
+    # install: |
+    #   bin.install "tier"
+    #   bash_completion.install "completions/tier.bash" => "tier"
+    #   zsh_completion.install "completions/tier.zsh" => "_tier"
+    #   fish_completion.install "completions/tier.fish"
 archives:
   - replacements:
-      darwin: Darwin
-      linux: Linux
-      windows: Windows
-      386: i386
-      amd64: x86_64
-checksum:
-  name_template: 'checksums.txt'
+      darwin: macOS
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      # - completions/*
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  name_template: "{{ .Tag }}-next"
 changelog:
   sort: asc
   filters:
     exclude:
       - '^docs:'
       - '^test:'
-
-# .goreleaser.yaml
-brews:
-  -
-    # Name template of the recipe
-    # Default to project name
-    name: tier
-
-    # NOTE: make sure the url_template, the token and given repo (github or gitlab) owner and name are from the
-    # same kind. We will probably unify this in the next major version like it is done with scoop.
-
-    # GitHub/GitLab repository to push the formula to
-    tap:
-      owner: tierrun
-      name: homebrew-tap
-
-    # Git author used to commit to the repository.
-    # Defaults are shown.
-    commit_author:
-      name: Tier Open-source
-      email: oss@tier.run
-
-    # The project name and current git tag are used in the format string.
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-
-    # Folder inside the repository to put the formula.
-    # Default is the root folder.
-    folder: Formula
-
-    # Caveats for the user of your binary.
-    # Default is empty.
-    caveats: "How to use this binary"
-
-    # Your app's homepage.
-    # Default is empty.
-    homepage: "https://tier.run"
-
-    # Template of your app's description.
-    # Default is empty.
-    description: "Software to create fast and easy drum rolls."
-
-    # Setting this will prevent goreleaser to actually try to commit the updated
-    # formula - instead, the formula file will be stored on the dist folder only,
-    # leaving the responsibility of publishing it to the user.
-    # If set to auto, the release will not be uploaded to the homebrew tap
-    # in case there is an indicator for prerelease in the tag e.g. v1.0.0-rc1
-    # Default is false.
-    skip_upload: false
-
-    # So you can `brew test` your formula.
-    # Default is empty.
-    test: |
-      system "#{bin}/tier version"
+      - Merge pull request
