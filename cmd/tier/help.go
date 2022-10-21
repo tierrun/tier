@@ -68,9 +68,14 @@ If the --live flag is provided, your accounts live mode will be used.
 
 	tier connect
 
-Tier connect creates a Stripe Connect account and writes them to
+Tier connect creates a set of Stripe restricted keys and writes them to
 ~/.config/tier/config.json for use with push, pull, and other commands that
 interact with Stripe.
+
+In order to use the generated restricted key for live mode pushes, it must
+have additional permissions granted on the Stripe dashboard.
+
+See https://www.tier.run/docs/cli/connect for more information.
 `,
 
 	"ls": `Usage:
