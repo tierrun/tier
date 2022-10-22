@@ -65,7 +65,7 @@ func (r *reporter) send(ctx context.Context, ev *event) {
 			},
 		})
 
-		go func() {
+		r.g.Go(func() error {
 			vvlogf("sending event: %v", ev)
 			req, err := http.NewRequestWithContext(ctx, "POST", "https://tele.tier.run/api/t", bytes.NewReader(data))
 			if err != nil {
@@ -76,11 +76,12 @@ func (r *reporter) send(ctx context.Context, ev *event) {
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				vvlogf("error sending events: %v", err)
-				return
+				return nil
 			}
 			resp.Body.Close()
 			vvlogf("sent events: %v", resp.Status)
-		}()
+			return nil
+		})
 
 		select {
 		case <-done:
