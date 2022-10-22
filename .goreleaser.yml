@@ -12,22 +12,18 @@ builds:
     goarch:
       - amd64
     main: ./cmd/tier
-    ldflags:
-      - -s -w
-    flags:
-      - -trimpath
     binary: "tier"
+    ldflags:
+      - -X tier.run/version.Long={{.Env.VERSION_LONG}} -X tier.run/version.Short={{.Env.VERSION_SHORT}} -X tier.run/version.GitCommit={{.Env.VERSION_GIT_HASH}}
   - id: darwin-arm64
     goos:
       - darwin
     goarch:
       - arm64
     main: ./cmd/tier
-    ldflags:
-      - -s -w
-    flags:
-      - -trimpath
     binary: "tier"
+    ldflags:
+      - -X tier.run/version.Long={{.Env.VERSION_LONG}} -X tier.run/version.Short={{.Env.VERSION_SHORT}} -X tier.run/version.GitCommit={{.Env.VERSION_GIT_HASH}}
   - env:
       - CGO_ENABLED=0
     goos:
@@ -37,11 +33,9 @@ builds:
       - amd64
       - arm64
     main: ./cmd/tier
-    ldflags:
-      - -s -w
-    flags:
-      - -trimpath
     binary: "tier"   
+    ldflags:
+      - -X tier.run/version.Long={{.Env.VERSION_LONG}} -X tier.run/version.Short={{.Env.VERSION_SHORT}} -X tier.run/version.GitCommit={{.Env.VERSION_GIT_HASH}}
 # dockers:
 #   - image_templates:
 #     - "tier/tier:latest"
@@ -88,7 +82,7 @@ brews:
       name: homebrew-tap
     folder: Formula
     test: |
-         system "#{bin}/tier --version"
+         system "#{bin}/tier version"
     # install: |
     #   bin.install "tier"
     #   bash_completion.install "completions/tier.bash" => "tier"
