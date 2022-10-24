@@ -363,6 +363,19 @@ func tc() *tier.Client {
 			}
 			os.Exit(1)
 		}
+
+		if stripe.IsLiveKey(key) {
+			if !*flagLive {
+				fmt.Fprintf(stderr, "tier: --live is required if stripe key is a live key\n")
+				os.Exit(1)
+			}
+		} else {
+			if *flagLive {
+				fmt.Fprintf(stderr, "tier: --live provided with test key\n")
+				os.Exit(1)
+			}
+		}
+
 		sc := &stripe.Client{
 			APIKey:    key,
 			KeyPrefix: os.Getenv("TIER_KEY_PREFIX"),
