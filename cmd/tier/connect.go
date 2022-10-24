@@ -112,9 +112,6 @@ func fetchProfile(ctx context.Context, pollURL string) (*profile.Profile, error)
 // order. It returns an error if no key is found.
 func getKey() (string, error) {
 	if envAPIKey != "" {
-		if *flagLive {
-			return "", errors.New("cannot use --live with STRIPE_API_KEY set")
-		}
 		return envAPIKey, nil
 	}
 

@@ -146,8 +146,12 @@ func FromEnv() (*Client, error) {
 	return &Client{APIKey: key}, nil
 }
 
+func IsLiveKey(key string) bool {
+	return !strings.Contains(key, "_test_")
+}
+
 func (c *Client) Live() bool {
-	return !strings.Contains(c.APIKey, "_test_")
+	return IsLiveKey(c.APIKey)
 }
 
 func (c *Client) client() *http.Client {

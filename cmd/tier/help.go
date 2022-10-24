@@ -31,7 +31,7 @@ The commands are:
 
 The flags are:
 
-	-l, -live  use live Stripe key (default is false)
+	-live      use live Stripe key (default is false)
 	-v         verbose output
 	-h         show this message
 `)
