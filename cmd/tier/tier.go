@@ -334,7 +334,7 @@ func runTier(cmd string, args []string) (err error) {
 		return nil
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ExitOnError)
-		addr := fs.String("addr", ":8080", "address to listen on (default ':8080')")
+		addr := fs.String("addr", "localhost:8080", "address to listen on (default ':8080')")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
