@@ -2,6 +2,7 @@ package cline
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"log"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/exp/slices"
 )
@@ -70,8 +72,6 @@ func TestMain(m *testing.M, run func()) {
 	// allow defers to run
 }
 
-var tempDir string
-
 type Data struct {
 	t      *testing.T
 	stdout bytes.Buffer
@@ -81,19 +81,7 @@ type Data struct {
 }
 
 func Test(t *testing.T) *Data {
-	t.Helper()
-
-	if tempDir == "" {
-		var err error
-		tempDir, err = os.MkdirTemp("", "tier-test")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	return &Data{
-		t: t,
-	}
+	return &Data{t: t}
 }
 
 func (d *Data) Setenv(name, value string) {
@@ -135,7 +123,9 @@ func (d *Data) doRun(args ...string) error {
 	d.t.Helper()
 	d.stdout.Reset()
 	d.stderr.Reset()
-	cmd := exec.Command(testTier, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, testTier, args...)
 	cmd.Stdout = &d.stdout
 	cmd.Stderr = &d.stderr
 	cmd.Env = d.env
