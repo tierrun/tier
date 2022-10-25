@@ -81,6 +81,7 @@ func TestSchedule(t *testing.T) {
 		Current:   true,
 		Effective: t0,
 		Features:  planFree,
+		Plans:     []string{"plan:free@0"},
 	}})
 
 	clock.Advance(t1)
@@ -91,12 +92,14 @@ func TestSchedule(t *testing.T) {
 			Current:   false,
 			Effective: t0, // unchanged by advanced clock
 			Features:  planFree,
+			Plans:     []string{"plan:free@0"},
 		},
 		{
 			Org:       "org:example",
 			Current:   true,
 			Effective: t1, // unchanged by advanced clock
 			Features:  planPro,
+			Plans:     []string{"plan:pro@0"},
 		},
 	})
 
@@ -108,12 +111,14 @@ func TestSchedule(t *testing.T) {
 			Current:   false,
 			Effective: t0, // unchanged by advanced clock
 			Features:  planFree,
+			Plans:     []string{"plan:free@0"},
 		},
 		{
 			Org:       "org:example",
 			Current:   true,
 			Effective: t1, // unchanged by advanced clock
 			Features:  planFree,
+			Plans:     []string{"plan:free@0"},
 		},
 	})
 }
@@ -165,6 +170,8 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 		Effective: t0,
 		Current:   true,
 		Features:  fs,
+
+		Plans: []string{"plan:test@0"},
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
@@ -203,6 +210,8 @@ func TestSubscribeToPlan(t *testing.T) {
 		Current:   true,
 		Effective: t0,
 		Features:  fs,
+
+		Plans: []string{"plan:pro@0"},
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
@@ -239,20 +248,28 @@ func TestDedupCustomer(t *testing.T) {
 }
 
 func TestLookupPhases(t *testing.T) {
-	fs := []Feature{{
-		Name:     "feature:x",
-		Plan:     "plan:test@0",
-		Interval: "@daily",
-		Currency: "usd",
-	}}
+	fs0 := []Feature{
+		{
+			Name:     "feature:x",
+			Plan:     "plan:test@0",
+			Interval: "@daily",
+			Currency: "usd",
+		},
+		{
+			Name:     "feature:y",
+			Plan:     "plan:test@0",
+			Interval: "@daily",
+			Currency: "usd",
+		},
+	}
 
 	tc := newTestClient(t)
 	ctx := context.Background()
-	tc.Push(ctx, fs, pushLogger(t))
+	tc.Push(ctx, fs0, pushLogger(t))
 
 	tc.setClock(t, t0)
 
-	if err := tc.SubscribeTo(ctx, "org:example", fs); err != nil {
+	if err := tc.SubscribeTo(ctx, "org:example", fs0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -264,7 +281,58 @@ func TestLookupPhases(t *testing.T) {
 		Org:       "org:example",
 		Current:   true,
 		Effective: t0,
-		Features:  fs,
+		Features:  fs0,
+
+		Plans: []string{"plan:test@0"},
+	}}
+	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
+
+	fs1 := []Feature{
+		{
+			Name:     "feature:x",
+			Plan:     "plan:test@1",
+			Interval: "@daily",
+			Currency: "usd",
+		},
+		{
+			Name:     "feature:y",
+			Plan:     "plan:test@1",
+			Interval: "@daily",
+			Currency: "usd",
+		},
+	}
+	tc.Push(ctx, fs1, pushLogger(t))
+
+	fsFrag := append(fs0, fs1[1:]...)
+	if err := tc.SubscribeTo(ctx, "org:example", fsFrag); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = tc.LookupPhases(ctx, "org:example")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, p := range got {
+		p.Features = slices.Clone(p.Features)
+		slices.SortFunc(p.Features, func(a, b Feature) bool {
+			if a.Plan < b.Plan {
+				return true
+			}
+			return a.Name < b.Name
+		})
+		got[i] = p
+	}
+
+	t.Logf("got: %# v", pretty.Formatter(got))
+
+	want = []Phase{{
+		Org:       "org:example",
+		Current:   true,
+		Effective: t0,
+		Features:  fsFrag,
+
+		Plans: []string{"plan:test@0"},
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)

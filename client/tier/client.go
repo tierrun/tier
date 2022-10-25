@@ -88,6 +88,19 @@ type Feature struct {
 	ReportID string
 }
 
+// TODO(bmizerany): remove FQN and replace with simply adding the version to
+// the Name.
+
+// FQN returns the fully qualified name of the feature which includes the plan
+// as the version if no version is already specified in the name.
+func (f *Feature) FQN() string {
+	var b strings.Builder
+	b.WriteString(f.Name)
+	b.WriteRune('@')
+	b.WriteString(f.Plan)
+	return b.String()
+}
+
 // IsMetered reports if the feature is metered.
 func (f *Feature) IsMetered() bool {
 	// checking the mode is more reliable than checking the existence of
@@ -304,7 +317,7 @@ type Org struct {
 	Email      string
 }
 
-// ListCustomers returns a list of all known customers in Stripe.
+// ListOrgs returns a list of all known customers in Stripe.
 func (c *Client) ListOrgs(ctx context.Context) ([]Org, error) {
 	// https://stripe.com/docs/api/customers/list
 	var f stripe.Form
