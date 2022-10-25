@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"go4.org/types"
+	"golang.org/x/exp/slices"
 	"tier.run/client/tier"
 	"tier.run/materialize"
 	"tier.run/profile"
@@ -124,9 +125,8 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		os.Exit(2)
 	}
-	flagHelp := fs.Bool("h", false, "help")
-	fs.Parse(args)
-	if *flagHelp {
+
+	if slices.Contains(args, "-h") {
 		return help(stdout, cmd)
 	}
 
@@ -333,9 +333,9 @@ func runTier(cmd string, args []string) (err error) {
 		fmt.Fprintln(stdout, cid)
 		return nil
 	case "serve":
-		flags := flag.NewFlagSet("serve", flag.ExitOnError)
-		var addr = flags.String("addr", ":8080", "address to listen on")
-		if err := flags.Parse(args); err != nil {
+		fs := flag.NewFlagSet("serve", flag.ExitOnError)
+		addr := fs.String("addr", ":8080", "address to listen on (default ':8080')")
+		if err := fs.Parse(args); err != nil {
 			return err
 		}
 		return serve(*addr)

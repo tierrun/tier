@@ -143,7 +143,18 @@ Tier whois reports the Stripe customer ID for the provided org.
 
 If the --live flag is provided, your accounts live mode will be used.
 `,
+
 	`tier`: errUsage.Error(),
+
+	`serve`: `Usage:
+
+	tier serve [--addr <addr>]
+
+Tier serve starts a web server that exposes the Tier API over HTTP listening on
+the provided service address.
+
+The default service address is "localhost:8080".
+`,
 }
 
 func help(dst io.Writer, cmd string) error {
