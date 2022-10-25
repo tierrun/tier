@@ -9,6 +9,7 @@ import (
 
 	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
+	"golang.org/x/sync/errgroup"
 	"kr.dev/errorfmt"
 	"tier.run/stripe"
 )
@@ -23,11 +24,34 @@ var (
 	ErrOrgNotFound = errors.New("org not found")
 )
 
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string { return e.Message }
+
 type Phase struct {
 	Org       string // set on read
 	Effective time.Time
 	Features  []Feature
 	Current   bool
+
+	// Plans is the set of plans that are currently active for the phase. A
+	// plan is considered active in a phase if all of its features are
+	// listed in the phase. If any features from a plan is in the phase
+	// without the other features in the plan, this phase is considered
+	// "fragmented".
+	Plans []string
+}
+
+func (p *Phase) Fragments() []Feature {
+	var fs []Feature
+	for _, f := range p.Features {
+		if !slices.Contains(p.Plans, f.Plan) {
+			fs = append(fs, f)
+		}
+	}
+	return fs
 }
 
 type subscription struct {
@@ -318,10 +342,6 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		return nil, notFoundAsNil(err)
 	}
 
-	var f stripe.Form
-	f.Add("expand[]", "data.phases.items.price")
-	f.Set("customer", cid)
-
 	type T struct {
 		stripe.ID
 		Metadata struct {
@@ -339,32 +359,32 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		}
 	}
 
-	ss, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/subscription_schedules", f)
-	if err != nil {
-		return nil, notFoundAsNil(err)
-	}
-	if len(ss) == 0 {
-		return nil, nil
-	}
+	g, ctx := errgroup.WithContext(ctx)
 
-	// TODO(bmizerany): provide option to skip feature detail lookups for
-	// performance; only a few clients need this.
-	var keys []string
-	for _, s := range ss {
-		for _, p := range s.Phases {
-			for _, i := range p.Items {
-				keys = append(keys, i.Price.LookupKey)
-			}
+	var ss []T
+	g.Go(func() error {
+		var f stripe.Form
+		f.Add("expand[]", "data.phases.items.price")
+		f.Set("customer", cid)
+		got, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/subscription_schedules", f)
+		if len(got) > 0 { // preserve nil
+			ss = got
 		}
-	}
+		return notFoundAsNil(err)
+	})
 
-	fs, err := c.lookupFeatures(ctx, keys)
-	if err != nil {
+	var m []Feature
+	g.Go(func() (err error) {
+		m, err = c.Pull(ctx, 0)
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
 	featureByProviderID := make(map[string]Feature)
-	for _, f := range fs {
+	for _, f := range m {
 		featureByProviderID[f.ProviderID] = f
 	}
 
@@ -379,11 +399,27 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 			for _, pi := range p.Items {
 				fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
 			}
+
+			var plans []string
+			for _, f := range fs {
+				if slices.Contains(plans, f.Plan) {
+					continue
+				}
+				inModel := numFeaturesInPlan(m, f.Plan)
+				inPhase := numFeaturesInPlan(fs, f.Plan)
+				if inModel == inPhase {
+					plans = append(plans, f.Plan)
+				}
+
+			}
+
 			ps = append(ps, Phase{
 				Org:       org,
 				Effective: time.Unix(p.Start, 0),
 				Features:  fs,
 				Current:   p.Start == s.Current.Start,
+
+				Plans: plans,
 			})
 		}
 	}
@@ -418,7 +454,7 @@ func (c *Client) putCustomer(ctx context.Context, org string) (string, error) {
 
 func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 	if !strings.HasPrefix(org, "org:") {
-		return "", errors.New(`org must have prefix "org:"`)
+		return "", &ValidationError{Message: "org must be prefixed with \"org:\""}
 	}
 
 	cid, err := c.cache.load(org, func() (string, error) {
@@ -468,4 +504,13 @@ func nowOrSpecific(t time.Time) any {
 		return "now"
 	}
 	return t
+}
+
+func numFeaturesInPlan(fs []Feature, plan string) (n int) {
+	for _, f := range fs {
+		if f.Plan == plan {
+			n++
+		}
+	}
+	return n
 }

@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/kr/pretty"
 	"tier.run/api/apitypes"
 	"tier.run/client/tier"
 	"tier.run/trweb"
@@ -58,6 +60,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if trweb.WriteError(w, lookupErr[err]) || trweb.WriteError(w, err) {
 		return
 	}
+
+	var e *tier.ValidationError
+	if errors.As(err, &e) {
+		trweb.WriteError(w, &trweb.HTTPError{
+			Status:  400,
+			Code:    "invalid_request",
+			Message: e.Message,
+		})
+		return
+	}
+
 	if err != nil {
 		trweb.WriteError(w, trweb.InternalError)
 		return
@@ -74,6 +87,8 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 		return h.serveReport(w, r)
 	case "/v1/subscribe":
 		return h.serveSubscribe(w, r)
+	case "/v1/phase":
+		return h.servePhase(w, r)
 	default:
 		return trweb.NotFound
 	}
@@ -139,6 +154,34 @@ func (h *Handler) serveWhoIs(w http.ResponseWriter, r *http.Request) error {
 		Org:      org,
 		StripeID: stripeID,
 	})
+}
+
+func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
+	org := r.FormValue("org")
+	ps, err := h.c.LookupPhases(r.Context(), org)
+	if err != nil {
+		return err
+	}
+
+	h.Logf("lookup phases: %# v", pretty.Formatter(ps))
+
+	for _, p := range ps {
+		if p.Current {
+			fs := values.MapFunc(p.Features, func(f tier.Feature) string {
+				return f.FQN()
+			})
+			return httpJSON(w, apitypes.PhaseResponse{
+				Effective: p.Effective,
+				Features:  fs,
+				Plans:     p.Plans,
+				Fragments: values.MapFunc(p.Fragments(), func(f tier.Feature) string {
+					return f.FQN()
+				}),
+			})
+		}
+	}
+
+	return trweb.NotFound
 }
 
 func (h *Handler) serveLimits(w http.ResponseWriter, r *http.Request) error {

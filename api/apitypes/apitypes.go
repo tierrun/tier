@@ -7,12 +7,14 @@ type Phase struct {
 	Features  []string
 }
 
-type SubscribeRequest struct {
-	Org    string
-	Phases []Phase
+type PhaseResponse struct {
+	Effective time.Time `json:"effective,omitempty"`
+	Features  []string  `json:"features,omitempty"`
+	Plans     []string  `json:"plans,omitempty"`
+	Fragments []string  `json:"fragments,omitempty"`
 }
 
-type PhasesResponse struct {
+type SubscribeRequest struct {
 	Org    string
 	Phases []Phase
 }

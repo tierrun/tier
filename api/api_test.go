@@ -28,6 +28,8 @@ func newTestClient(t *testing.T) (*http.Client, *tier.Client) {
 }
 
 func TestAPISubscribe(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	c, tc := newTestClient(t)
 
@@ -109,6 +111,23 @@ func TestAPISubscribe(t *testing.T) {
 		})
 	}
 
+	checkPhase := func(org string, want apitypes.PhaseResponse) {
+		t.Helper()
+		got, err := fetch.OK[apitypes.PhaseResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/phase?org="+org, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// actively avoiding a stripe test clock here to keep the test
+		// from being horribly slow, so buying time by spot checking
+		// the Effective field is at least set.
+		if got.Effective.IsZero() {
+			t.Error("unexpected zero effective time")
+		}
+		ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective")
+		diff.Test(t, t.Errorf, got, want, ignore)
+	}
+
 	whoIs("org:test", &trweb.HTTPError{
 		Status:  400,
 		Code:    "org_not_found",
@@ -149,4 +168,91 @@ func TestAPISubscribe(t *testing.T) {
 		Code:    "org_not_found",
 		Message: "org not found",
 	})
+
+	checkPhase("org:test", apitypes.PhaseResponse{
+		Features: []string{"feature:t@plan:test@0", "feature:x@plan:test@0"},
+		Plans:    []string{"plan:test@0"},
+	})
+}
+
+func TestPhaseBadOrg(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c, _ := newTestClient(t)
+
+	_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "GET", "/v1/phase?org=org:nope", nil)
+	diff.Test(t, t.Errorf, err, &trweb.HTTPError{
+		Status:  404,
+		Code:    "not_found",
+		Message: "Not Found",
+	})
+	_, err = fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "GET", "/v1/phase", nil)
+	diff.Test(t, t.Errorf, err, &trweb.HTTPError{
+		Status:  400,
+		Code:    "invalid_request",
+		Message: `org must be prefixed with "org:"`,
+	})
+}
+
+func TestPhaseFragments(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c, tc := newTestClient(t)
+
+	m := []tier.Feature{
+		{
+			Plan:     "plan:test@0",
+			Name:     "feature:x",
+			Interval: "@monthly",
+			Currency: "usd",
+		},
+		{
+			Plan:      "plan:test@0",
+			Name:      "feature:t",
+			Interval:  "@monthly",
+			Currency:  "usd",
+			Aggregate: "sum",
+			Mode:      "graduated",
+			Tiers: []tier.Tier{
+				{Upto: tier.Inf, Price: 100},
+			},
+		},
+	}
+	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
+		if err != nil {
+			t.Logf("error pushing [%q %q]: %v", f.Plan, f.Name, err)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// cheating and using the tier client because ATM the API only supports
+	// subscribing to plans.
+	frag := m[1:]
+	if err := tc.SubscribeTo(ctx, "org:test", frag); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := fetch.OK[apitypes.PhaseResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/phase?org=org:test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := apitypes.PhaseResponse{
+		Features:  []string{"feature:t@plan:test@0"},
+		Plans:     nil,
+		Fragments: []string{"feature:t@plan:test@0"},
+	}
+
+	// actively avoiding a stripe test clock here to keep the test
+	// from being horribly slow, so buying time by spot checking
+	// the Effective field is at least set.
+	if got.Effective.IsZero() {
+		t.Error("unexpected zero effective time")
+	}
+	ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective")
+	diff.Test(t, t.Errorf, got, want, ignore)
+
 }
