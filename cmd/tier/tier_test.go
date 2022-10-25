@@ -47,3 +47,9 @@ func TestLiveFlag(t *testing.T) {
 	tt.RunFail("-l", "pull") // fails due to invalid key only
 	tt.GrepStderr("Usage", "-l did not produce usage")
 }
+
+func TestServeAddrFlag(t *testing.T) {
+	tt := testtier(t)
+	tt.RunFail("serve", "--addr", ":-1")
+	tt.GrepBoth("invalid port", "bad port accepted or ignored")
+}
