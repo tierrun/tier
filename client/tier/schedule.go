@@ -47,7 +47,7 @@ type Phase struct {
 func (p *Phase) Fragments() []Feature {
 	var fs []Feature
 	for _, f := range p.Features {
-		if !slices.Contains(p.Plans, f.Plan) {
+		if !slices.Contains(p.Plans, f.Plan()) {
 			fs = append(fs, f)
 		}
 	}
@@ -296,7 +296,7 @@ func (c *Client) SubscribeToPlan(ctx context.Context, org, plan string) error {
 	}
 	var fs []Feature
 	for _, f := range all {
-		if f.Plan == plan {
+		if f.Plan() == plan {
 			fs = append(fs, f)
 		}
 	}
@@ -402,13 +402,13 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 
 			var plans []string
 			for _, f := range fs {
-				if slices.Contains(plans, f.Plan) {
+				if slices.Contains(plans, f.Plan()) {
 					continue
 				}
-				inModel := numFeaturesInPlan(m, f.Plan)
-				inPhase := numFeaturesInPlan(fs, f.Plan)
+				inModel := numFeaturesInPlan(m, f.Plan())
+				inPhase := numFeaturesInPlan(fs, f.Plan())
 				if inModel == inPhase {
-					plans = append(plans, f.Plan)
+					plans = append(plans, f.Plan())
 				}
 
 			}
@@ -508,7 +508,7 @@ func nowOrSpecific(t time.Time) any {
 
 func numFeaturesInPlan(fs []Feature, plan string) (n int) {
 	for _, f := range fs {
-		if f.Plan == plan {
+		if f.Plan() == plan {
 			n++
 		}
 	}

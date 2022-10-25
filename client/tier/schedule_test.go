@@ -35,7 +35,7 @@ func TestSchedule(t *testing.T) {
 	var model []Feature
 	plan := func(name string, ff []Feature) []Feature {
 		for i := range ff {
-			ff[i].Plan = name
+			ff[i].Name = "feature:" + ff[i].Name + "@" + name
 		}
 		model = append(model, ff...)
 		return ff
@@ -129,8 +129,8 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 
 	fs := []Feature{
 		{
-			Plan:      "plan:test@0",
-			Name:      "feature:10",
+			// TODO(bmizerany): G: check/test plan name formats
+			Name:      "feature:10@plan:test@0",
 			Interval:  "@daily",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: 10}},
@@ -138,8 +138,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:      "feature:inf",
-			Plan:      "plan:test@0",
+			Name:      "feature:inf@plan:test@0",
 			Interval:  "@daily",
 			Currency:  "usd",
 			Tiers:     []Tier{{}},
@@ -147,8 +146,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:     "feature:lic",
-			Plan:     "plan:test@0",
+			Name:     "feature:lic@plan:test@0",
 			Interval: "@daily",
 			Currency: "usd",
 		},
@@ -179,14 +177,12 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 
 func TestSubscribeToPlan(t *testing.T) {
 	fs := []Feature{{
-		Plan:     "plan:pro@0",
-		Name:     "feature:x",
+		Name:     "feature:x@plan:pro@0",
 		Interval: "@monthly",
 		Base:     100,
 		Currency: "usd",
 	}, {
-		Plan:     "plan:pro@0",
-		Name:     "feature:y",
+		Name:     "feature:y@plan:pro@0",
 		Interval: "@monthly",
 		Base:     1000,
 		Currency: "usd",
@@ -219,8 +215,7 @@ func TestSubscribeToPlan(t *testing.T) {
 
 func TestDedupCustomer(t *testing.T) {
 	fs := []Feature{{
-		Name:     "feature:x",
-		Plan:     "plan:test@0",
+		Name:     "feature:x@plan:test@0",
 		Interval: "@daily",
 		Currency: "usd",
 	}}
@@ -250,14 +245,12 @@ func TestDedupCustomer(t *testing.T) {
 func TestLookupPhases(t *testing.T) {
 	fs0 := []Feature{
 		{
-			Name:     "feature:x",
-			Plan:     "plan:test@0",
+			Name:     "feature:x@plan:test@0",
 			Interval: "@daily",
 			Currency: "usd",
 		},
 		{
-			Name:     "feature:y",
-			Plan:     "plan:test@0",
+			Name:     "feature:y@plan:test@0",
 			Interval: "@daily",
 			Currency: "usd",
 		},
@@ -289,14 +282,12 @@ func TestLookupPhases(t *testing.T) {
 
 	fs1 := []Feature{
 		{
-			Name:     "feature:x",
-			Plan:     "plan:test@1",
+			Name:     "feature:x@plan:test@1",
 			Interval: "@daily",
 			Currency: "usd",
 		},
 		{
-			Name:     "feature:y",
-			Plan:     "plan:test@1",
+			Name:     "feature:y@plan:test@1",
 			Interval: "@daily",
 			Currency: "usd",
 		},
@@ -316,7 +307,7 @@ func TestLookupPhases(t *testing.T) {
 	for i, p := range got {
 		p.Features = slices.Clone(p.Features)
 		slices.SortFunc(p.Features, func(a, b Feature) bool {
-			if a.Plan < b.Plan {
+			if a.Plan() < b.Plan() {
 				return true
 			}
 			return a.Name < b.Name
@@ -341,8 +332,7 @@ func TestLookupPhases(t *testing.T) {
 func TestReportUsage(t *testing.T) {
 	fs := []Feature{
 		{
-			Plan:      "plan:test@0",
-			Name:      "feature:10",
+			Name:      "feature:10@plan:test@0",
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: 10}},
@@ -350,8 +340,7 @@ func TestReportUsage(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:      "feature:inf",
-			Plan:      "plan:test@0",
+			Name:      "feature:inf@plan:test@0",
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: Inf}},
@@ -359,8 +348,7 @@ func TestReportUsage(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:     "feature:lic",
-			Plan:     "plan:test@0",
+			Name:     "feature:lic@plan:test@0",
 			Interval: "@monthly",
 			Currency: "usd",
 		},
@@ -402,9 +390,9 @@ func TestReportUsage(t *testing.T) {
 	})
 
 	want := []Usage{
-		{Feature: "feature:10", Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
-		{Feature: "feature:inf", Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
-		{Feature: "feature:lic", Start: t1, End: t2, Used: 1, Limit: Inf},
+		{Feature: "feature:10@plan:test@0", Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
+		{Feature: "feature:inf@plan:test@0", Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
+		{Feature: "feature:lic@plan:test@0", Start: t1, End: t2, Used: 1, Limit: Inf},
 	}
 
 	diff.Test(t, t.Errorf, got, want)
@@ -415,8 +403,7 @@ func TestReportUsageFeatureNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	fs := []Feature{{
-		Name:      "feature:inf",
-		Plan:      "plan:test@0",
+		Name:      "feature:inf@plan:test@0",
 		Interval:  "@monthly",
 		Currency:  "usd",
 		Tiers:     []Tier{{Upto: Inf}},

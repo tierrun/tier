@@ -44,10 +44,16 @@ var (
 	aggregateFromStripe = values.Invert(aggregateToStripe)
 )
 
+func IsPlan(s string) (ok, hasVersion bool) {
+	// TODO(bmizerany): check version too?
+	ok = strings.HasPrefix(s, "plan:")
+	_, _, hasVersion = strings.Cut(s, "@")
+	return
+}
+
 // Feature holds identifying, pricing, and billing information for a feature.
 type Feature struct {
 	ProviderID string // identifier set by the billing engine provider
-	Plan       string // the plan ID prefixed with ("plan:")
 	PlanTitle  string // a human readable title for the plan
 	Name       string // the feature name prefixed with ("feature:")
 	Title      string // a human readable title for the feature
@@ -88,18 +94,25 @@ type Feature struct {
 	ReportID string
 }
 
+func (f *Feature) Basename() string {
+	name, _, _ := strings.Cut(f.Name, "@")
+	return name
+}
+
+func (f *Feature) Plan() string {
+	_, ver, _ := strings.Cut(f.Name, "@")
+	if ok, _ := IsPlan(ver); ok {
+		return ver
+	}
+	return ""
+}
+
+func (f *Feature) Is(name string) bool {
+	return strings.HasPrefix(f.Name, name)
+}
+
 // TODO(bmizerany): remove FQN and replace with simply adding the version to
 // the Name.
-
-// FQN returns the fully qualified name of the feature which includes the plan
-// as the version if no version is already specified in the name.
-func (f *Feature) FQN() string {
-	var b strings.Builder
-	b.WriteString(f.Name)
-	b.WriteRune('@')
-	b.WriteString(f.Plan)
-	return b.String()
-}
 
 // IsMetered reports if the feature is metered.
 func (f *Feature) IsMetered() bool {
@@ -111,12 +124,7 @@ func (f *Feature) IsMetered() bool {
 }
 
 func (f *Feature) ID() string {
-	return makeID(f.Name, f.Plan)
-}
-
-func (f *Feature) Version() string {
-	_, version, _ := strings.Cut(f.Plan, "@")
-	return version
+	return makeID(f.Name)
 }
 
 func (f *Feature) Limit() int {
@@ -175,7 +183,6 @@ func (c *Client) maxWorkers() int {
 func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	// https://stripe.com/docs/api/prices/create
 	var data stripe.Form
-	data.Set("metadata", "tier.plan", f.Plan)
 	data.Set("metadata", "tier.plan_title", f.PlanTitle)
 	data.Set("metadata", "tier.title", f.Title)
 	data.Set("metadata", "tier.feature", f.Name)
@@ -187,7 +194,7 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	// This will appear as the line item description in the Stripe dashboard
 	// and customer invoices.
 	data.Set("product_data", "name", fmt.Sprintf("%s - %s",
-		values.Coalesce(f.PlanTitle, f.Plan),
+		values.Coalesce(f.PlanTitle, f.Name),
 		values.Coalesce(f.Title, f.Name),
 	))
 
@@ -272,7 +279,6 @@ type stripePrice struct {
 func stripePriceToFeature(p stripePrice) Feature {
 	f := Feature{
 		ProviderID: p.ProviderID(),
-		Plan:       p.Metadata.Plan,
 		PlanTitle:  p.Metadata.PlanTitle,
 		Name:       p.Metadata.Feature,
 		Title:      p.Metadata.Title,

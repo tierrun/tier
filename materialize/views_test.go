@@ -43,15 +43,14 @@ func TestPricingHuJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	slices.SortFunc(got, func(a, b tier.Feature) bool {
-		return a.Plan < b.Plan
+		return a.Plan() < b.Plan()
 	})
 
 	want := []tier.Feature{
 		{
 			PlanTitle: "Just an example plan to show off features",
-			Plan:      "plan:example@1",
-			Title:     "feature:graduated",
-			Name:      "feature:graduated",
+			Title:     "feature:graduated@plan:example@1",
+			Name:      "feature:graduated@plan:example@1",
 			Currency:  "usd",
 			Interval:  "@monthly",
 			Mode:      "graduated",
@@ -64,9 +63,8 @@ func TestPricingHuJSON(t *testing.T) {
 		},
 		{
 			PlanTitle: "Just an example plan to show off features part duex",
-			Plan:      "plan:example@2",
-			Title:     "feature:base",
-			Name:      "feature:base",
+			Title:     "feature:base@plan:example@2",
+			Name:      "feature:base@plan:example@2",
 			Currency:  "usd",
 			Interval:  "@monthly",
 			Mode:      "graduated", // defaults

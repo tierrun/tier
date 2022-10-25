@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"golang.org/x/exp/maps"
+	"kr.dev/errorfmt"
 	"tailscale.com/logtail/backoff"
 	"tier.run/stripe"
 )
@@ -109,16 +111,17 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) 
 }
 
 func (c *Client) lookupSubscriptionItemID(ctx context.Context, org, name, feature string) (id string, isMetered bool, err error) {
+	defer errorfmt.Handlef("lookupSubscriptionItemID: %w", &err)
 	s, err := c.lookupSubscription(ctx, org, name)
 	if err != nil {
 		return "", false, err
 	}
 	for _, f := range s.Features {
-		if f.Name == feature {
+		if f.Is(feature) {
 			return f.ReportID, f.IsMetered(), nil
 		}
 	}
-	return "", false, ErrFeatureNotFound
+	return "", false, fmt.Errorf("%w: %q", ErrFeatureNotFound, feature)
 }
 
 func randomString() string {

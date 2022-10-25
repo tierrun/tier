@@ -14,7 +14,7 @@ import (
 )
 
 // HTTP Errors
-var lookupErr = map[error]error{
+var errorLookup = map[error]error{
 	tier.ErrOrgNotFound: &trweb.HTTPError{
 		Status:  400,
 		Code:    "org_not_found",
@@ -32,6 +32,17 @@ var lookupErr = map[error]error{
 	},
 }
 
+func lookupErr(err error) error {
+	for {
+		if e, ok := errorLookup[err]; ok {
+			return e
+		}
+		if err = errors.Unwrap(err); err == nil {
+			return nil
+		}
+	}
+}
+
 type Handler struct {
 	Logf   func(format string, args ...any)
 	c      *tier.Client
@@ -39,30 +50,37 @@ type Handler struct {
 }
 
 func NewHandler(c *tier.Client, logf func(string, ...any)) *Handler {
-	return &Handler{c: c, Logf: logf}
+	return &Handler{c: c, Logf: logf, helper: func() {}}
 }
 
 func (h *Handler) logf(format string, args ...interface{}) {
-	if h.helper != nil {
-		h.helper()
-	}
+	h.helper()
 	if h.Logf != nil {
-		h.Logf(format, args...)
+		h.Logf("api:"+format, args...)
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := h.serve(w, r)
-	if err != nil {
-		h.logf("error: %v", err)
-		// continue processing error below
+	var err error
+	var debug []string // TODO(bmizerany): pool to remove allocs
+	dbg := func(msg string) {
+		debug = append(debug, msg)
 	}
-	if trweb.WriteError(w, lookupErr[err]) || trweb.WriteError(w, err) {
+	defer func() {
+		h.logf("%s %s %s: %# v", r.Method, r.URL.Path, debug, pretty.Formatter(err))
+	}()
+
+	dbg("serve")
+	err = h.serve(w, r)
+
+	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
+		dbg("writeerr")
 		return
 	}
 
 	var e *tier.ValidationError
 	if errors.As(err, &e) {
+		dbg("validationerr")
 		trweb.WriteError(w, &trweb.HTTPError{
 			Status:  400,
 			Code:    "invalid_request",
@@ -72,9 +90,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		dbg("catchallerr")
 		trweb.WriteError(w, trweb.InternalError)
 		return
 	}
+
+	dbg("writeok")
 }
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
@@ -168,14 +189,14 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 	for _, p := range ps {
 		if p.Current {
 			fs := values.MapFunc(p.Features, func(f tier.Feature) string {
-				return f.FQN()
+				return f.Name
 			})
 			return httpJSON(w, apitypes.PhaseResponse{
 				Effective: p.Effective,
 				Features:  fs,
 				Plans:     p.Plans,
 				Fragments: values.MapFunc(p.Fragments(), func(f tier.Feature) string {
-					return f.FQN()
+					return f.Name
 				}),
 			})
 		}

@@ -11,7 +11,7 @@ require (
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/tools v0.1.12
 	honnef.co/go/tools v0.3.3
-	kr.dev/diff v0.2.1-0.20220605072704-63b4f29d6f39
+	kr.dev/diff v0.3.1-0.20221025214654-4c9427f2d4d4
 	kr.dev/errorfmt v0.1.1
 	tailscale.com v1.22.2
 )

@@ -35,14 +35,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			Plan:     "plan:test@0",
-			Name:     "feature:x",
+			Name:     "feature:x@plan:test@0",
 			Interval: "@monthly",
 			Currency: "usd",
 		},
 		{
-			Plan:      "plan:test@0",
-			Name:      "feature:t",
+			Name:      "feature:t@plan:test@0",
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Aggregate: "sum",
@@ -54,7 +52,7 @@ func TestAPISubscribe(t *testing.T) {
 	}
 	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
 		if err != nil {
-			t.Logf("error pushing [%q %q]: %v", f.Plan, f.Name, err)
+			t.Logf("error pushing %q: %v", f.Name, err)
 		}
 	}); err != nil {
 		t.Fatal(err)
@@ -146,12 +144,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	checkUsage("org:test", []apitypes.Usage{
 		{
-			Feature: "feature:t",
+			Feature: "feature:t@plan:test@0",
 			Used:    10,
 			Limit:   tier.Inf,
 		},
 		{
-			Feature: "feature:x",
+			Feature: "feature:x@plan:test@0",
 			Used:    1,
 			Limit:   tier.Inf,
 		},
@@ -203,14 +201,12 @@ func TestPhaseFragments(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			Plan:     "plan:test@0",
-			Name:     "feature:x",
+			Name:     "feature:x@plan:test@0",
 			Interval: "@monthly",
 			Currency: "usd",
 		},
 		{
-			Plan:      "plan:test@0",
-			Name:      "feature:t",
+			Name:      "feature:t@plan:test@0",
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Aggregate: "sum",
@@ -222,7 +218,7 @@ func TestPhaseFragments(t *testing.T) {
 	}
 	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
 		if err != nil {
-			t.Logf("error pushing [%q %q]: %v", f.Plan, f.Name, err)
+			t.Logf("error pushing %q: %v", f.Name, err)
 		}
 	}); err != nil {
 		t.Fatal(err)
