@@ -9,6 +9,7 @@ import (
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/client/tier"
+	"tier.run/refs"
 )
 
 func TestPricingHuJSON(t *testing.T) {
@@ -43,15 +44,24 @@ func TestPricingHuJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	slices.SortFunc(got, func(a, b tier.Feature) bool {
-		return a.Plan < b.Plan
+		return a.Name.String() < b.Name.String()
 	})
 
 	want := []tier.Feature{
 		{
+			PlanTitle: "Just an example plan to show off features part duex",
+			Title:     "feature:base@plan:example@2",
+			Name:      refs.MustParseFeaturePlan("feature:base@plan:example@2"),
+			Currency:  "usd",
+			Interval:  "@monthly",
+			Mode:      "graduated", // defaults
+			Aggregate: "sum",       // defaults
+			Base:      100,
+		},
+		{
 			PlanTitle: "Just an example plan to show off features",
-			Plan:      "plan:example@1",
-			Title:     "feature:graduated",
-			Name:      "feature:graduated",
+			Title:     "feature:graduated@plan:example@1",
+			Name:      refs.MustParseFeaturePlan("feature:graduated@plan:example@1"),
 			Currency:  "usd",
 			Interval:  "@monthly",
 			Mode:      "graduated",
@@ -62,20 +72,9 @@ func TestPricingHuJSON(t *testing.T) {
 				{Upto: tier.Inf, Price: 50, Base: 0},
 			},
 		},
-		{
-			PlanTitle: "Just an example plan to show off features part duex",
-			Plan:      "plan:example@2",
-			Title:     "feature:base",
-			Name:      "feature:base",
-			Currency:  "usd",
-			Interval:  "@monthly",
-			Mode:      "graduated", // defaults
-			Aggregate: "sum",       // defaults
-			Base:      100,
-		},
 	}
 
-	diff.Test(t, t.Errorf, got, want, diff.EmitFull)
+	diff.Test(t, t.Errorf, got, want)
 
 	gotJSON, err := ToPricingJSON(got)
 	if err != nil {

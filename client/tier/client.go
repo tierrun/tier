@@ -5,10 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
-	"unicode"
 
 	"golang.org/x/sync/errgroup"
+	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/values"
 )
@@ -44,12 +43,19 @@ var (
 	aggregateFromStripe = values.Invert(aggregateToStripe)
 )
 
-// Feature holds identifying, pricing, and billing information for a feature.
+func FeaturePlans(fs []Feature) []refs.FeaturePlan {
+	ns := make([]refs.FeaturePlan, len(fs))
+	for i, f := range fs {
+		ns[i] = f.Name
+	}
+	return ns
+}
+
 type Feature struct {
+	Name refs.FeaturePlan // the feature name prefixed with ("feature:")
+
 	ProviderID string // identifier set by the billing engine provider
-	Plan       string // the plan ID prefixed with ("plan:")
 	PlanTitle  string // a human readable title for the plan
-	Name       string // the feature name prefixed with ("feature:")
 	Title      string // a human readable title for the feature
 
 	// Interval specifies the billing interval for the feature.
@@ -91,16 +97,6 @@ type Feature struct {
 // TODO(bmizerany): remove FQN and replace with simply adding the version to
 // the Name.
 
-// FQN returns the fully qualified name of the feature which includes the plan
-// as the version if no version is already specified in the name.
-func (f *Feature) FQN() string {
-	var b strings.Builder
-	b.WriteString(f.Name)
-	b.WriteRune('@')
-	b.WriteString(f.Plan)
-	return b.String()
-}
-
 // IsMetered reports if the feature is metered.
 func (f *Feature) IsMetered() bool {
 	// checking the mode is more reliable than checking the existence of
@@ -111,12 +107,7 @@ func (f *Feature) IsMetered() bool {
 }
 
 func (f *Feature) ID() string {
-	return makeID(f.Name, f.Plan)
-}
-
-func (f *Feature) Version() string {
-	_, version, _ := strings.Cut(f.Plan, "@")
-	return version
+	return stripe.MakeID(f.Name.String())
 }
 
 func (f *Feature) Limit() int {
@@ -175,7 +166,6 @@ func (c *Client) maxWorkers() int {
 func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	// https://stripe.com/docs/api/prices/create
 	var data stripe.Form
-	data.Set("metadata", "tier.plan", f.Plan)
 	data.Set("metadata", "tier.plan_title", f.PlanTitle)
 	data.Set("metadata", "tier.title", f.Title)
 	data.Set("metadata", "tier.feature", f.Name)
@@ -187,8 +177,8 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	// This will appear as the line item description in the Stripe dashboard
 	// and customer invoices.
 	data.Set("product_data", "name", fmt.Sprintf("%s - %s",
-		values.Coalesce(f.PlanTitle, f.Plan),
-		values.Coalesce(f.Title, f.Name),
+		values.Coalesce(f.PlanTitle, f.Name.String()),
+		values.Coalesce(f.Title, f.Name.String()),
 	))
 
 	// secondary composite key in schedules:
@@ -246,11 +236,11 @@ type stripePrice struct {
 	stripe.ID
 	LookupKey string `json:"lookup_key"`
 	Metadata  struct {
-		Plan      string `json:"tier.plan"`
-		PlanTitle string `json:"tier.plan_title"`
-		Feature   string `json:"tier.feature"`
-		Limit     string `json:"tier.limit"`
-		Title     string `json:"tier.title"`
+		Plan      string           `json:"tier.plan"`
+		PlanTitle string           `json:"tier.plan_title"`
+		Feature   refs.FeaturePlan `json:"tier.feature"`
+		Limit     string           `json:"tier.limit"`
+		Title     string           `json:"tier.title"`
 	}
 	Recurring struct {
 		Interval       string
@@ -272,7 +262,6 @@ type stripePrice struct {
 func stripePriceToFeature(p stripePrice) Feature {
 	f := Feature{
 		ProviderID: p.ProviderID(),
-		Plan:       p.Metadata.Plan,
 		PlanTitle:  p.Metadata.PlanTitle,
 		Name:       p.Metadata.Feature,
 		Title:      p.Metadata.Title,
@@ -303,7 +292,7 @@ func (c *Client) Pull(ctx context.Context, limit int) ([]Feature, error) {
 	}
 	var fs []Feature
 	for _, p := range prices {
-		if p.Metadata.Feature == "" {
+		if p.Metadata.Feature.IsZero() {
 			continue
 		}
 		fs = append(fs, stripePriceToFeature(p))
@@ -342,16 +331,6 @@ func (c *Client) ListOrgs(ctx context.Context) ([]Org, error) {
 		})
 	}
 	return cs, nil
-}
-
-func makeID(ids ...string) string {
-	id := []rune(strings.Join(ids, "__"))
-	for i, r := range id {
-		if r != '_' && !unicode.IsDigit(r) && !unicode.IsLetter(r) {
-			id[i] = '-'
-		}
-	}
-	return "tier__" + string(id)
 }
 
 func parseLimit(s string) int {

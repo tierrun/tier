@@ -3,18 +3,20 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/kr/pretty"
 	"tier.run/api/apitypes"
 	"tier.run/client/tier"
+	"tier.run/refs"
 	"tier.run/trweb"
 	"tier.run/values"
 )
 
 // HTTP Errors
-var lookupErr = map[error]error{
+var errorLookup = map[error]error{
 	tier.ErrOrgNotFound: &trweb.HTTPError{
 		Status:  400,
 		Code:    "org_not_found",
@@ -32,6 +34,17 @@ var lookupErr = map[error]error{
 	},
 }
 
+func lookupErr(err error) error {
+	for {
+		if e, ok := errorLookup[err]; ok {
+			return e
+		}
+		if err = errors.Unwrap(err); err == nil {
+			return nil
+		}
+	}
+}
+
 type Handler struct {
 	Logf   func(format string, args ...any)
 	c      *tier.Client
@@ -39,30 +52,37 @@ type Handler struct {
 }
 
 func NewHandler(c *tier.Client, logf func(string, ...any)) *Handler {
-	return &Handler{c: c, Logf: logf}
+	return &Handler{c: c, Logf: logf, helper: func() {}}
 }
 
 func (h *Handler) logf(format string, args ...interface{}) {
-	if h.helper != nil {
-		h.helper()
-	}
+	h.helper()
 	if h.Logf != nil {
-		h.Logf(format, args...)
+		h.Logf("api:"+format, args...)
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := h.serve(w, r)
-	if err != nil {
-		h.logf("error: %v", err)
-		// continue processing error below
+	var err error
+	var debug []string // TODO(bmizerany): pool to remove allocs
+	dbg := func(msg string) {
+		debug = append(debug, msg)
 	}
-	if trweb.WriteError(w, lookupErr[err]) || trweb.WriteError(w, err) {
+	defer func() {
+		h.logf("%s %s %s: %# v", r.Method, r.URL.Path, debug, pretty.Formatter(err))
+	}()
+
+	dbg("serve")
+	err = h.serve(w, r)
+
+	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
+		dbg("writeerr")
 		return
 	}
 
 	var e *tier.ValidationError
 	if errors.As(err, &e) {
+		dbg("validationerr")
 		trweb.WriteError(w, &trweb.HTTPError{
 			Status:  400,
 			Code:    "invalid_request",
@@ -72,9 +92,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		dbg("catchallerr")
 		trweb.WriteError(w, trweb.InternalError)
 		return
 	}
+
+	dbg("writeok")
 }
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
@@ -100,36 +123,48 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// currently /v1/subscribe API only supports updating the current phase
-	// (or starting a new one). In the future, this endpoint will respect a
-	// Currnet field on Phase and go into "advanced" mode allowing the
-	// client to define how to update the schedule in stripe.
-	if len(sr.Phases) != 1 {
-		return invalidRequest("phases must contain exactly one phase; for now")
+	if len(sr.Phases) == 0 {
+		return invalidRequestf("a minimum of one phase is required")
 	}
 
-	p := sr.Phases[0]
-	if !p.Effective.IsZero() {
-		return invalidRequest("effective must not be specified; for now")
-	}
-	if len(p.Features) > 1 {
-		return invalidRequest("phase must not have more than one plan; for now")
-	}
-	if len(p.Features) == 0 {
-		return invalidRequest("phase must have at least one plan")
+	expand := func(rs []string) ([]refs.FeaturePlan, error) {
+		var expanded []refs.FeaturePlan
+		for _, s := range rs {
+			fp, err := refs.ParseFeaturePlan(s)
+			if err != nil {
+				pl, err := refs.ParsePlan(s)
+				if err != nil {
+					return nil, invalidRequestf("invalid feature plan: %q", s)
+				}
+				fps, err := h.c.ExpandPlan(r.Context(), pl)
+				if err != nil {
+					return nil, err
+				}
+				expanded = append(expanded, fps...)
+			} else {
+				expanded = append(expanded, fp)
+			}
+		}
+		return expanded, nil
 	}
 
-	// TODO(bmizerany): decide if we should detach the context here and let
-	// subscribe keep going in the background for some time before a
-	// response is ready.
-	// select {
-	// case <-r.Context().Done():
-	// case <-time.After(1 * time.Second):
-	// 	return 204
-	// }
+	if !sr.Phases[0].Effective.IsZero() {
+		return invalidRequestf("effective must not be specified for the first phase; for now")
+	}
 
-	plan := p.Features[0]
-	return h.c.SubscribeToPlan(r.Context(), sr.Org, plan)
+	var phases []tier.Phase
+	for _, p := range sr.Phases {
+		fps, err := expand(p.Features)
+		if err != nil {
+			return err
+		}
+		phases = append(phases, tier.Phase{
+			Effective: p.Effective,
+			Features:  fps,
+		})
+	}
+
+	return h.c.Subscribe(r.Context(), sr.Org, phases)
 }
 
 func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
@@ -137,7 +172,13 @@ func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
 	if err := trweb.DecodeStrict(r, &rr); err != nil {
 		return err
 	}
-	return h.c.ReportUsage(r.Context(), rr.Org, rr.Feature, tier.Report{
+
+	fn, err := refs.ParseName(rr.Feature)
+	if err != nil {
+		return err
+	}
+
+	return h.c.ReportUsage(r.Context(), rr.Org, fn, tier.Report{
 		N:       rr.N,
 		At:      values.Coalesce(rr.At, time.Now()),
 		Clobber: rr.Clobber,
@@ -167,21 +208,25 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 
 	for _, p := range ps {
 		if p.Current {
-			fs := values.MapFunc(p.Features, func(f tier.Feature) string {
-				return f.FQN()
-			})
+			fs := featureNames(p.Features)
 			return httpJSON(w, apitypes.PhaseResponse{
 				Effective: p.Effective,
 				Features:  fs,
-				Plans:     p.Plans,
-				Fragments: values.MapFunc(p.Fragments(), func(f tier.Feature) string {
-					return f.FQN()
-				}),
+				Plans:     planNames(p.Plans),
+				Fragments: featureNames(p.Fragments()),
 			})
 		}
 	}
 
 	return trweb.NotFound
+}
+
+func featureNames(fs []refs.FeaturePlan) []string {
+	return values.MapFunc(fs, (refs.FeaturePlan).String)
+}
+
+func planNames(fs []refs.Plan) []string {
+	return values.MapFunc(fs, (refs.Plan).String)
 }
 
 func (h *Handler) serveLimits(w http.ResponseWriter, r *http.Request) error {
@@ -195,7 +240,7 @@ func (h *Handler) serveLimits(w http.ResponseWriter, r *http.Request) error {
 	rr.Org = org
 	for _, u := range usage {
 		rr.Usage = append(rr.Usage, apitypes.Usage{
-			Feature: u.Feature,
+			Feature: u.Feature.String(),
 			Limit:   u.Limit,
 			Used:    u.Used,
 		})
@@ -211,10 +256,10 @@ func httpJSON(w http.ResponseWriter, v any) error {
 	return enc.Encode(v)
 }
 
-func invalidRequest(reason string) *trweb.HTTPError {
+func invalidRequestf(reason string, args ...any) *trweb.HTTPError {
 	return &trweb.HTTPError{
 		Status:  400,
 		Code:    "invalid_request",
-		Message: reason,
+		Message: fmt.Sprintf(reason, args...),
 	}
 }

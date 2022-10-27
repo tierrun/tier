@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"kr.dev/diff"
 	"kr.dev/errorfmt"
+	"tier.run/refs"
 )
 
 // interesting times to be in
@@ -33,22 +34,23 @@ func TestSchedule(t *testing.T) {
 	ctx := context.Background()
 
 	var model []Feature
-	plan := func(name string, ff []Feature) []Feature {
-		for i := range ff {
-			ff[i].Plan = name
-		}
+	plan := func(name string, ff []Feature) []refs.FeaturePlan {
 		model = append(model, ff...)
-		return ff
+		var fps []refs.FeaturePlan
+		for _, f := range ff {
+			fps = append(fps, f.Name)
+		}
+		return fps
 	}
 
 	planFree := plan("plan:free@0", []Feature{{
-		Name:     "feature:x",
+		Name:     must(refs.ParseFeaturePlan("feature:x@plan:free@0")),
 		Interval: "@monthly",
 		Currency: "usd",
 	}})
 
 	planPro := plan("plan:pro@0", []Feature{{
-		Name:     "feature:x",
+		Name:     refs.MustParseFeaturePlan("feature:x@plan:pro@0"),
 		Interval: "@monthly",
 		Base:     100,
 		Currency: "usd",
@@ -56,9 +58,10 @@ func TestSchedule(t *testing.T) {
 
 	c.Push(ctx, model, pushLogger(t))
 
-	sub := func(org string, fs []Feature) {
+	sub := func(org string, fs []refs.FeaturePlan) {
 		t.Helper()
 		t.Logf("subscribing %s to %# v", org, pretty.Formatter(fs))
+
 		if err := c.SubscribeTo(ctx, org, fs); err != nil {
 			t.Fatalf("%# v", pretty.Formatter(err))
 		}
@@ -81,7 +84,7 @@ func TestSchedule(t *testing.T) {
 		Current:   true,
 		Effective: t0,
 		Features:  planFree,
-		Plans:     []string{"plan:free@0"},
+		Plans:     plans("plan:free@0"),
 	}})
 
 	clock.Advance(t1)
@@ -92,14 +95,14 @@ func TestSchedule(t *testing.T) {
 			Current:   false,
 			Effective: t0, // unchanged by advanced clock
 			Features:  planFree,
-			Plans:     []string{"plan:free@0"},
+			Plans:     plans("plan:free@0"),
 		},
 		{
 			Org:       "org:example",
 			Current:   true,
 			Effective: t1, // unchanged by advanced clock
 			Features:  planPro,
-			Plans:     []string{"plan:pro@0"},
+			Plans:     plans("plan:pro@0"),
 		},
 	})
 
@@ -111,14 +114,14 @@ func TestSchedule(t *testing.T) {
 			Current:   false,
 			Effective: t0, // unchanged by advanced clock
 			Features:  planFree,
-			Plans:     []string{"plan:free@0"},
+			Plans:     plans("plan:free@0"),
 		},
 		{
 			Org:       "org:example",
 			Current:   true,
 			Effective: t1, // unchanged by advanced clock
 			Features:  planFree,
-			Plans:     []string{"plan:free@0"},
+			Plans:     plans("plan:free@0"),
 		},
 	})
 }
@@ -129,8 +132,8 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 
 	fs := []Feature{
 		{
-			Plan:      "plan:test@0",
-			Name:      "feature:10",
+			// TODO(bmizerany): G: check/test plan name formats
+			Name:      featurePlan("feature:10@plan:test@0"),
 			Interval:  "@daily",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: 10}},
@@ -138,8 +141,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:      "feature:inf",
-			Plan:      "plan:test@0",
+			Name:      featurePlan("feature:inf@plan:test@0"),
 			Interval:  "@daily",
 			Currency:  "usd",
 			Tiers:     []Tier{{}},
@@ -147,16 +149,20 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:     "feature:lic",
-			Plan:     "plan:test@0",
+			Name:     featurePlan("feature:lic@plan:test@0"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
 	}
 
+	fps := make([]refs.FeaturePlan, len(fs))
+	for i, f := range fs {
+		fps[i] = f.Name
+	}
+
 	c.setClock(t, t0)
 	c.Push(ctx, fs, pushLogger(t))
-	if err := c.SubscribeTo(ctx, "org:example", fs); err != nil {
+	if err := c.SubscribeTo(ctx, "org:example", fps); err != nil {
 		t.Fatal(err)
 	}
 
@@ -169,9 +175,9 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 		Org:       "org:example",
 		Effective: t0,
 		Current:   true,
-		Features:  fs,
+		Features:  fps,
 
-		Plans: []string{"plan:test@0"},
+		Plans: plans("plan:test@0"),
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
@@ -179,14 +185,12 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 
 func TestSubscribeToPlan(t *testing.T) {
 	fs := []Feature{{
-		Plan:     "plan:pro@0",
-		Name:     "feature:x",
+		Name:     featurePlan("feature:x@plan:pro@0"),
 		Interval: "@monthly",
 		Base:     100,
 		Currency: "usd",
 	}, {
-		Plan:     "plan:pro@0",
-		Name:     "feature:y",
+		Name:     featurePlan("feature:y@plan:pro@0"),
 		Interval: "@monthly",
 		Base:     1000,
 		Currency: "usd",
@@ -197,7 +201,8 @@ func TestSubscribeToPlan(t *testing.T) {
 	tc.Push(ctx, fs, pushLogger(t))
 	tc.setClock(t, t0)
 
-	if err := tc.SubscribeToPlan(ctx, "org:example", "plan:pro@0"); err != nil {
+	p := plans("plan:pro@0")[0]
+	if err := tc.SubscribeToPlan(ctx, "org:example", p); err != nil {
 		t.Fatal(err)
 	}
 
@@ -209,9 +214,9 @@ func TestSubscribeToPlan(t *testing.T) {
 		Org:       "org:example",
 		Current:   true,
 		Effective: t0,
-		Features:  fs,
+		Features:  FeaturePlans(fs),
 
-		Plans: []string{"plan:pro@0"},
+		Plans: plans("plan:pro@0"),
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
@@ -219,8 +224,7 @@ func TestSubscribeToPlan(t *testing.T) {
 
 func TestDedupCustomer(t *testing.T) {
 	fs := []Feature{{
-		Name:     "feature:x",
-		Plan:     "plan:test@0",
+		Name:     featurePlan("feature:x@plan:test@0"),
 		Interval: "@daily",
 		Currency: "usd",
 	}}
@@ -232,7 +236,7 @@ func TestDedupCustomer(t *testing.T) {
 	var g errgroup.Group
 	for i := 0; i < 3; i++ {
 		g.Go(func() error {
-			return tc.SubscribeTo(ctx, "org:example", fs)
+			return tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs))
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -250,14 +254,12 @@ func TestDedupCustomer(t *testing.T) {
 func TestLookupPhases(t *testing.T) {
 	fs0 := []Feature{
 		{
-			Name:     "feature:x",
-			Plan:     "plan:test@0",
+			Name:     featurePlan("feature:x@plan:test@0"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
 		{
-			Name:     "feature:y",
-			Plan:     "plan:test@0",
+			Name:     featurePlan("feature:y@plan:test@0"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
@@ -269,7 +271,7 @@ func TestLookupPhases(t *testing.T) {
 
 	tc.setClock(t, t0)
 
-	if err := tc.SubscribeTo(ctx, "org:example", fs0); err != nil {
+	if err := tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs0)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -281,30 +283,28 @@ func TestLookupPhases(t *testing.T) {
 		Org:       "org:example",
 		Current:   true,
 		Effective: t0,
-		Features:  fs0,
+		Features:  FeaturePlans(fs0),
 
-		Plans: []string{"plan:test@0"},
+		Plans: plans("plan:test@0"),
 	}}
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
 
 	fs1 := []Feature{
 		{
-			Name:     "feature:x",
-			Plan:     "plan:test@1",
+			Name:     featurePlan("feature:x@plan:test@1"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
 		{
-			Name:     "feature:y",
-			Plan:     "plan:test@1",
+			Name:     featurePlan("feature:y@plan:test@1"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
 	}
 	tc.Push(ctx, fs1, pushLogger(t))
 
-	fsFrag := append(fs0, fs1[1:]...)
-	if err := tc.SubscribeTo(ctx, "org:example", fsFrag); err != nil {
+	fpsFrag := FeaturePlans(append(fs0, fs1[1:]...))
+	if err := tc.SubscribeTo(ctx, "org:example", fpsFrag); err != nil {
 		t.Fatal(err)
 	}
 
@@ -315,11 +315,11 @@ func TestLookupPhases(t *testing.T) {
 
 	for i, p := range got {
 		p.Features = slices.Clone(p.Features)
-		slices.SortFunc(p.Features, func(a, b Feature) bool {
-			if a.Plan < b.Plan {
+		slices.SortFunc(p.Features, func(a, b refs.FeaturePlan) bool {
+			if a.Version() < b.Version() {
 				return true
 			}
-			return a.Name < b.Name
+			return a.String() < b.String()
 		})
 		got[i] = p
 	}
@@ -330,9 +330,9 @@ func TestLookupPhases(t *testing.T) {
 		Org:       "org:example",
 		Current:   true,
 		Effective: t0,
-		Features:  fsFrag,
+		Features:  fpsFrag,
 
-		Plans: []string{"plan:test@0"},
+		Plans: plans("plan:test@0"),
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
@@ -341,8 +341,7 @@ func TestLookupPhases(t *testing.T) {
 func TestReportUsage(t *testing.T) {
 	fs := []Feature{
 		{
-			Plan:      "plan:test@0",
-			Name:      "feature:10",
+			Name:      featurePlan("feature:10@plan:test@0"),
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: 10}},
@@ -350,8 +349,7 @@ func TestReportUsage(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:      "feature:inf",
-			Plan:      "plan:test@0",
+			Name:      featurePlan("feature:inf@plan:test@0"),
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: Inf}},
@@ -359,8 +357,7 @@ func TestReportUsage(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:     "feature:lic",
-			Plan:     "plan:test@0",
+			Name:     featurePlan("feature:lic@plan:test@0"),
 			Interval: "@monthly",
 			Currency: "usd",
 		},
@@ -371,15 +368,19 @@ func TestReportUsage(t *testing.T) {
 	tc.Push(ctx, fs, pushLogger(t))
 	tc.setClock(t, t0)
 
-	if err := tc.SubscribeTo(ctx, "org:example", fs); err != nil {
+	if err := tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs)); err != nil {
 		t.Fatal(err)
 	}
 
 	g, groupCtx := errgroup.WithContext(ctx)
 	report := func(feature string, n int) {
+		fn, err := refs.ParseName(feature)
+		if err != nil {
+			t.Fatal(err)
+		}
 		g.Go(func() (err error) {
 			defer errorfmt.Handlef("%s: %w", feature, &err)
-			return tc.ReportUsage(groupCtx, "org:example", feature, Report{
+			return tc.ReportUsage(groupCtx, "org:example", fn, Report{
 				N:  n,
 				At: t0,
 			})
@@ -398,13 +399,13 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	slices.SortFunc(got, func(a, b Usage) bool {
-		return a.Feature < b.Feature
+		return refs.ByName(a.Feature, b.Feature)
 	})
 
 	want := []Usage{
-		{Feature: "feature:10", Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
-		{Feature: "feature:inf", Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
-		{Feature: "feature:lic", Start: t1, End: t2, Used: 1, Limit: Inf},
+		{Feature: featurePlan("feature:10@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
+		{Feature: featurePlan("feature:inf@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
+		{Feature: featurePlan("feature:lic@plan:test@0"), Start: t1, End: t2, Used: 1, Limit: Inf},
 	}
 
 	diff.Test(t, t.Errorf, got, want)
@@ -415,8 +416,7 @@ func TestReportUsageFeatureNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	fs := []Feature{{
-		Name:      "feature:inf",
-		Plan:      "plan:test@0",
+		Name:      featurePlan("feature:inf@plan:test@0"),
 		Interval:  "@monthly",
 		Currency:  "usd",
 		Tiers:     []Tier{{Upto: Inf}},
@@ -425,13 +425,21 @@ func TestReportUsageFeatureNotFound(t *testing.T) {
 	}}
 
 	tc.Push(ctx, fs, pushLogger(t))
-	if err := tc.SubscribeTo(ctx, "org:example", fs); err != nil {
+	if err := tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs)); err != nil {
 		t.Fatal(err)
 	}
-	got := tc.ReportUsage(ctx, "org:example", "feature:nope", Report{})
+	fn := refs.MustParseName("feature:nope")
+	got := tc.ReportUsage(ctx, "org:example", fn, Report{})
 	if !errors.Is(got, ErrFeatureNotFound) {
 		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
 	}
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
 
 func ciOnly(t *testing.T) {
@@ -442,4 +450,29 @@ func ciOnly(t *testing.T) {
 
 func endOfStripeMonth(t time.Time) time.Time {
 	return t.AddDate(0, 1, 0).Truncate(time.Minute).Add(-5 * time.Minute)
+}
+
+func featurePlan(s string) refs.FeaturePlan {
+	return must(refs.ParseFeaturePlan(s))
+}
+
+func featurePlans(t *testing.T, fps ...string) []refs.FeaturePlan {
+	t.Helper()
+	var fs []refs.FeaturePlan
+	for _, fp := range fps {
+		f, err := refs.ParseFeaturePlan(fp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs = append(fs, f)
+	}
+	return fs
+}
+
+func plans(ss ...string) []refs.Plan {
+	var ps []refs.Plan
+	for _, s := range ss {
+		ps = append(ps, refs.MustParsePlan(s))
+	}
+	return ps
 }

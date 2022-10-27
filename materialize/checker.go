@@ -12,13 +12,10 @@ import (
 func validate(m jsonModel) error {
 	var e errors
 	for plan, p := range m.Plans {
-		e.report(validatePlanID(plan))
 		if len(p.Features) == 0 {
 			e.reportf("plans[%q]: plans must have at least one feature", plan)
 		}
 		for feature, f := range p.Features {
-			e.report(validateFeatureID(plan, feature))
-
 			if f.Base > 0 && len(f.Tiers) > 0 {
 				e.reportf("plans[%q].features[%q]: base must be zero with tiers", plan, feature)
 			}

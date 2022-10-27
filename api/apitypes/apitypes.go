@@ -1,6 +1,8 @@
 package apitypes
 
-import "time"
+import (
+	"time"
+)
 
 type Phase struct {
 	Effective time.Time
@@ -41,4 +43,8 @@ type Usage struct {
 	Feature string `json:"feature"`
 	Used    int    `json:"used"`
 	Limit   int    `json:"limit"`
+}
+
+func UsageByFeature(a, b Usage) bool {
+	return a.Feature < b.Feature
 }
