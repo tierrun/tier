@@ -257,31 +257,6 @@ func TestPhaseFragments(t *testing.T) {
 
 }
 
-func featurePlans(t *testing.T, fps ...string) []refs.FeaturePlan {
-	t.Helper()
-	var fs []refs.FeaturePlan
-	for _, fp := range fps {
-		f, err := refs.ParseFeaturePlan(fp)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fs = append(fs, f)
-	}
-	return fs
-}
-
-func plans(ps ...string) []refs.Plan {
-	var fs []refs.Plan
-	for _, p := range ps {
-		f, err := refs.ParsePlan(p)
-		if err != nil {
-			panic(err)
-		}
-		fs = append(fs, f)
-	}
-	return fs
-}
-
 func maybeFailNow(t *testing.T) {
 	t.Helper()
 	if t.Failed() {

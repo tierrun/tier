@@ -456,19 +456,6 @@ func featurePlan(s string) refs.FeaturePlan {
 	return must(refs.ParseFeaturePlan(s))
 }
 
-func featurePlans(t *testing.T, fps ...string) []refs.FeaturePlan {
-	t.Helper()
-	var fs []refs.FeaturePlan
-	for _, fp := range fps {
-		f, err := refs.ParseFeaturePlan(fp)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fs = append(fs, f)
-	}
-	return fs
-}
-
 func plans(ss ...string) []refs.Plan {
 	var ps []refs.Plan
 	for _, s := range ss {
