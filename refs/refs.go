@@ -192,7 +192,6 @@ func (fp *FeaturePlan) UnmarshalJSON(b []byte) error {
 }
 
 func (fp *FeaturePlan) UnmarshalText(b []byte) error {
-	panic("not skdjf")
 	p, err := ParseFeaturePlan(string(b))
 	if err != nil {
 		return err
