@@ -1,5 +1,7 @@
 package values
 
+import "fmt"
+
 // Coalesce returns the first non-zero value in a, if any; otherwise it returns
 // the zero value of T.
 func Coalesce[T comparable](a ...T) T {
@@ -38,6 +40,10 @@ func MapFunc[F, T any](s []F, f func(F) T) []T {
 		tt[i] = f(v)
 	}
 	return tt
+}
+
+func Strings[S fmt.Stringer](s []S) []string {
+	return MapFunc(s, (S).String)
 }
 
 func Invert[K, V comparable](m map[K]V) map[V]K {

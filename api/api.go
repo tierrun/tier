@@ -208,25 +208,16 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 
 	for _, p := range ps {
 		if p.Current {
-			fs := featureNames(p.Features)
 			return httpJSON(w, apitypes.PhaseResponse{
 				Effective: p.Effective,
-				Features:  fs,
-				Plans:     planNames(p.Plans),
-				Fragments: featureNames(p.Fragments()),
+				Features:  values.Strings(p.Features),
+				Plans:     values.Strings(p.Plans),
+				Fragments: values.Strings(p.Fragments()),
 			})
 		}
 	}
 
 	return trweb.NotFound
-}
-
-func featureNames(fs []refs.FeaturePlan) []string {
-	return values.MapFunc(fs, (refs.FeaturePlan).String)
-}
-
-func planNames(fs []refs.Plan) []string {
-	return values.MapFunc(fs, (refs.Plan).String)
 }
 
 func (h *Handler) serveLimits(w http.ResponseWriter, r *http.Request) error {
