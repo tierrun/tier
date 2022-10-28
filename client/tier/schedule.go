@@ -284,13 +284,16 @@ func (c *Client) SubscribeNow(ctx context.Context, org string, phases []Phase) e
 	if !phases[0].Effective.IsZero() {
 		return errors.New("first phase must be effective now")
 	}
-	curPhases, err := c.LookupPhases(ctx, org)
+	cps, err := c.LookupPhases(ctx, org)
 	if err != nil && !errors.Is(err, ErrOrgNotFound) {
 		return err
 	}
-	for i := range curPhases {
-		if curPhases[i].Current {
-			phases[0].Effective = curPhases[i].Effective
+	for _, p := range cps {
+		if p.Current {
+			p0 := phases[0]
+			p.Features = p0.Features
+			phases[0] = p
+			break
 		}
 	}
 	return c.Subscribe(ctx, org, phases)
@@ -305,25 +308,24 @@ func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeatureP
 	}})
 }
 
-func (c *Client) ExpandPlan(ctx context.Context, p refs.Plan) ([]refs.FeaturePlan, error) {
-	all, err := c.Pull(ctx, 0)
+func (c *Client) SubscribeToRefs(ctx context.Context, org string, refs []string) error {
+	m, err := c.Pull(ctx, 0)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var fs []refs.FeaturePlan
-	for _, f := range all {
-		if f.Name.Plan() == p {
-			fs = append(fs, f.Name)
-		}
+	fs, err := Expand(m, refs...)
+	if err != nil {
+		return err
 	}
-	if len(fs) == 0 {
-		return nil, fmt.Errorf("no features found for plan %q", p)
-	}
-	return fs, nil
+	return c.SubscribeTo(ctx, org, fs)
 }
 
-func (c *Client) SubscribeToPlan(ctx context.Context, org string, p refs.Plan) error {
-	fs, err := c.ExpandPlan(ctx, p)
+func (c *Client) SubscribeToPlan(ctx context.Context, org string, plan refs.Plan) error {
+	m, err := c.Pull(ctx, 0)
+	if err != nil {
+		return err
+	}
+	fs, err := Expand(m, plan.String())
 	if err != nil {
 		return err
 	}

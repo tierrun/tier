@@ -233,19 +233,12 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 		org := args[0]
-		plans := args[1:]
-		if org == "" || len(plans) == 0 {
+		refs := args[1:]
+		if org == "" || len(refs) == 0 {
 			return errUsage
 		}
-		plan := plans[0] // TODO(bmizerany): support multiple plans and feature folding
-
-		p, err := refs.ParsePlan(plan)
-		if err != nil {
-			return err
-		}
-
-		vlogf("subscribing %s to %v", org, plan)
-		return tc().SubscribeToPlan(ctx, org, p)
+		vlogf("subscribing %s to %v", org, refs)
+		return tc().SubscribeToRefs(ctx, org, refs)
 	case "phases":
 		if len(args) < 1 {
 			return errUsage
@@ -304,7 +297,7 @@ func runTier(cmd string, args []string) (err error) {
 				limit = "∞"
 			}
 			fmt.Fprintf(tw, "%s\t%s\t%d\n",
-				u.Feature.Name(),
+				u.Feature,
 				limit,
 				u.Used,
 			)

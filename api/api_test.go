@@ -183,6 +183,8 @@ func TestAPISubscribe(t *testing.T) {
 		Features: []string{"feature:t@plan:test@0", "feature:x@plan:test@0"},
 		Plans:    []string{"plan:test@0"},
 	})
+
+	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, nil)
 }
 
 func TestPhaseBadOrg(t *testing.T) {
@@ -262,7 +264,6 @@ func TestPhaseFragments(t *testing.T) {
 	}
 	ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective")
 	diff.Test(t, t.Errorf, got, want, ignore)
-
 }
 
 func TestTierPull(t *testing.T) {
