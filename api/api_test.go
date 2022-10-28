@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"golang.org/x/exp/slices"
@@ -255,6 +257,21 @@ func TestPhaseFragments(t *testing.T) {
 	ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective")
 	diff.Test(t, t.Errorf, got, want, ignore)
 
+}
+
+func TestTierPull(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c, _ := newTestClient(t)
+
+	got, err := fetch.OK[json.RawMessage, *trweb.HTTPError](ctx, c, "GET", "/v1/pull", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(got), "{") {
+		t.Errorf("expected json, got:\n%s", got)
+	}
 }
 
 func maybeFailNow(t *testing.T) {
