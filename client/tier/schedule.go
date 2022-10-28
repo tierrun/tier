@@ -535,7 +535,7 @@ func nowOrSpecific(t time.Time) any {
 
 func numFeaturesInPlan(fs []refs.FeaturePlan, plan refs.Plan) (n int) {
 	for _, f := range fs {
-		if f.Plan() == plan {
+		if f.InPlan(plan) {
 			n++
 		}
 	}

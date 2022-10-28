@@ -319,7 +319,7 @@ func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
 			}
 			n := len(out)
 			for _, f := range fs {
-				if f.Name.Plan() == p {
+				if f.Name.InPlan(p) {
 					out = append(out, f.Name)
 				}
 			}
