@@ -15,6 +15,12 @@ import (
 	"tier.run/refs"
 )
 
+var (
+	mpf = refs.MustParseFeaturePlan
+	mpp = refs.MustParsePlan
+	mpn = refs.MustParseName
+)
+
 // interesting times to be in
 var (
 	t0 = time.Date(2020, 1, 0, 0, 0, 0, 0, time.UTC)
@@ -34,7 +40,7 @@ func TestSchedule(t *testing.T) {
 	ctx := context.Background()
 
 	var model []Feature
-	plan := func(name string, ff []Feature) []refs.FeaturePlan {
+	plan := func(ff []Feature) []refs.FeaturePlan {
 		model = append(model, ff...)
 		var fps []refs.FeaturePlan
 		for _, f := range ff {
@@ -43,13 +49,13 @@ func TestSchedule(t *testing.T) {
 		return fps
 	}
 
-	planFree := plan("plan:free@0", []Feature{{
-		Name:     must(refs.ParseFeaturePlan("feature:x@plan:free@0")),
+	planFree := plan([]Feature{{
+		Name:     refs.MustParseFeaturePlan("feature:x@plan:free@0"),
 		Interval: "@monthly",
 		Currency: "usd",
 	}})
 
-	planPro := plan("plan:pro@0", []Feature{{
+	planPro := plan([]Feature{{
 		Name:     refs.MustParseFeaturePlan("feature:x@plan:pro@0"),
 		Interval: "@monthly",
 		Base:     100,
@@ -133,7 +139,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 	fs := []Feature{
 		{
 			// TODO(bmizerany): G: check/test plan name formats
-			Name:      featurePlan("feature:10@plan:test@0"),
+			Name:      mpf("feature:10@plan:test@0"),
 			Interval:  "@daily",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: 10}},
@@ -141,7 +147,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:      featurePlan("feature:inf@plan:test@0"),
+			Name:      mpf("feature:inf@plan:test@0"),
 			Interval:  "@daily",
 			Currency:  "usd",
 			Tiers:     []Tier{{}},
@@ -149,7 +155,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:     featurePlan("feature:lic@plan:test@0"),
+			Name:     mpf("feature:lic@plan:test@0"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
@@ -185,12 +191,12 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 
 func TestSubscribeToPlan(t *testing.T) {
 	fs := []Feature{{
-		Name:     featurePlan("feature:x@plan:pro@0"),
+		Name:     mpf("feature:x@plan:pro@0"),
 		Interval: "@monthly",
 		Base:     100,
 		Currency: "usd",
 	}, {
-		Name:     featurePlan("feature:y@plan:pro@0"),
+		Name:     mpf("feature:y@plan:pro@0"),
 		Interval: "@monthly",
 		Base:     1000,
 		Currency: "usd",
@@ -224,7 +230,7 @@ func TestSubscribeToPlan(t *testing.T) {
 
 func TestDedupCustomer(t *testing.T) {
 	fs := []Feature{{
-		Name:     featurePlan("feature:x@plan:test@0"),
+		Name:     mpf("feature:x@plan:test@0"),
 		Interval: "@daily",
 		Currency: "usd",
 	}}
@@ -254,12 +260,12 @@ func TestDedupCustomer(t *testing.T) {
 func TestLookupPhases(t *testing.T) {
 	fs0 := []Feature{
 		{
-			Name:     featurePlan("feature:x@plan:test@0"),
+			Name:     mpf("feature:x@plan:test@0"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
 		{
-			Name:     featurePlan("feature:y@plan:test@0"),
+			Name:     mpf("feature:y@plan:test@0"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
@@ -291,12 +297,12 @@ func TestLookupPhases(t *testing.T) {
 
 	fs1 := []Feature{
 		{
-			Name:     featurePlan("feature:x@plan:test@1"),
+			Name:     mpf("feature:x@plan:test@1"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
 		{
-			Name:     featurePlan("feature:y@plan:test@1"),
+			Name:     mpf("feature:y@plan:test@1"),
 			Interval: "@daily",
 			Currency: "usd",
 		},
@@ -341,7 +347,7 @@ func TestLookupPhases(t *testing.T) {
 func TestReportUsage(t *testing.T) {
 	fs := []Feature{
 		{
-			Name:      featurePlan("feature:10@plan:test@0"),
+			Name:      mpf("feature:10@plan:test@0"),
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: 10}},
@@ -349,7 +355,7 @@ func TestReportUsage(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:      featurePlan("feature:inf@plan:test@0"),
+			Name:      mpf("feature:inf@plan:test@0"),
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Tiers:     []Tier{{Upto: Inf}},
@@ -357,7 +363,7 @@ func TestReportUsage(t *testing.T) {
 			Aggregate: "sum",
 		},
 		{
-			Name:     featurePlan("feature:lic@plan:test@0"),
+			Name:     mpf("feature:lic@plan:test@0"),
 			Interval: "@monthly",
 			Currency: "usd",
 		},
@@ -403,9 +409,9 @@ func TestReportUsage(t *testing.T) {
 	})
 
 	want := []Usage{
-		{Feature: featurePlan("feature:10@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
-		{Feature: featurePlan("feature:inf@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
-		{Feature: featurePlan("feature:lic@plan:test@0"), Start: t1, End: t2, Used: 1, Limit: Inf},
+		{Feature: mpf("feature:10@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
+		{Feature: mpf("feature:inf@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
+		{Feature: mpf("feature:lic@plan:test@0"), Start: t1, End: t2, Used: 1, Limit: Inf},
 	}
 
 	diff.Test(t, t.Errorf, got, want)
@@ -416,7 +422,7 @@ func TestReportUsageFeatureNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	fs := []Feature{{
-		Name:      featurePlan("feature:inf@plan:test@0"),
+		Name:      mpf("feature:inf@plan:test@0"),
 		Interval:  "@monthly",
 		Currency:  "usd",
 		Tiers:     []Tier{{Upto: Inf}},
@@ -428,18 +434,41 @@ func TestReportUsageFeatureNotFound(t *testing.T) {
 	if err := tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs)); err != nil {
 		t.Fatal(err)
 	}
-	fn := refs.MustParseName("feature:nope")
+	fn := mpn("feature:nope")
 	got := tc.ReportUsage(ctx, "org:example", fn, Report{})
 	if !errors.Is(got, ErrFeatureNotFound) {
 		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
 	}
 }
 
-func must[T any](v T, err error) T {
-	if err != nil {
-		panic(err)
+func TestSubscribeToUnknownFeatures(t *testing.T) {
+	tc := newTestClient(t)
+	ctx := context.Background()
+
+	fs := refs.MustParseFeaturePlans(
+		"feature:A@plan:a@0",
+		"feature:B@plan:b@0",
+	)
+
+	got := tc.SubscribeTo(ctx, "org:example", fs)
+	if !errors.Is(got, ErrFeatureNotFound) {
+		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
 	}
-	return v
+
+	// make only plan:a valid
+	tc.Push(ctx, []Feature{{
+		Name:      mpf("feature:A@plan:a@0"),
+		Interval:  "@monthly",
+		Currency:  "usd",
+		Tiers:     []Tier{{Upto: Inf}},
+		Mode:      "graduated",
+		Aggregate: "sum",
+	}}, pushLogger(t))
+
+	got = tc.SubscribeTo(ctx, "org:example", fs)
+	if !errors.Is(got, ErrFeatureNotFound) {
+		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
+	}
 }
 
 func ciOnly(t *testing.T) {
@@ -452,14 +481,10 @@ func endOfStripeMonth(t time.Time) time.Time {
 	return t.AddDate(0, 1, 0).Truncate(time.Minute).Add(-5 * time.Minute)
 }
 
-func featurePlan(s string) refs.FeaturePlan {
-	return must(refs.ParseFeaturePlan(s))
-}
-
 func plans(ss ...string) []refs.Plan {
 	var ps []refs.Plan
 	for _, s := range ss {
-		ps = append(ps, refs.MustParsePlan(s))
+		ps = append(ps, mpp(s))
 	}
 	return ps
 }

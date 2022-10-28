@@ -156,16 +156,9 @@ func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub s
 		f.Set("customer", cid)
 		f.Set("metadata[tier.subscription]", name)
 		for i, p := range phases {
-			var keys []string
-			for _, fe := range p.Features {
-				keys = append(keys, stripe.MakeID(fe.String()))
-			}
-			fs, err := c.lookupFeatures(ctx, keys)
+			fs, err := c.lookupFeatures(ctx, p.Features)
 			if err != nil {
 				return err
-			}
-			if len(fs) == 0 {
-				return fmt.Errorf("no prices found for phase %d", i)
 			}
 
 			if i == 0 {
@@ -204,16 +197,16 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 		f.Set("metadata[tier.subscription]", name)
 	}
 	for i, p := range phases {
-		var keys []string
-		for _, fe := range p.Features {
-			keys = append(keys, stripe.MakeID(fe.String()))
+		if len(p.Features) == 0 {
+			return fmt.Errorf("phase %d must contain at least one feature", i)
 		}
-		fs, err := c.lookupFeatures(ctx, keys)
+
+		fs, err := c.lookupFeatures(ctx, p.Features)
 		if err != nil {
 			return err
 		}
-		if len(fs) == 0 {
-			return fmt.Errorf("no prices found for phase %d", i)
+		if len(fs) != len(p.Features) {
+			return ErrFeatureNotFound
 		}
 
 		if i == 0 {
@@ -332,18 +325,24 @@ func (c *Client) SubscribeToPlan(ctx context.Context, org string, plan refs.Plan
 	return c.SubscribeTo(ctx, org, fs)
 }
 
-func (c *Client) lookupFeatures(ctx context.Context, keys []string) ([]Feature, error) {
+func (c *Client) lookupFeatures(ctx context.Context, keys []refs.FeaturePlan) ([]Feature, error) {
 	// TODO(bmizerany): return error if len(keys) == 0. No keys means
 	// stripe returns all known prices.
 	var f stripe.Form
 	f.Add("expand[]", "data.tiers")
 	for _, k := range keys {
-		f.Add("lookup_keys[]", k)
+		f.Add("lookup_keys[]", stripe.MakeID(k.String()))
 	}
 	pp, err := stripe.Slurp[stripePrice](ctx, c.Stripe, "GET", "/v1/prices", f)
 	if err != nil {
 		return nil, err
 	}
+
+	if len(pp) != len(keys) {
+		// TODO(bmizerany): return a more specific error with omitted features
+		return nil, ErrFeatureNotFound
+	}
+
 	fs := make([]Feature, len(pp))
 	for i, p := range pp {
 		fs[i] = stripePriceToFeature(p)
