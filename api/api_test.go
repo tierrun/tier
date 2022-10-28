@@ -184,7 +184,11 @@ func TestAPISubscribe(t *testing.T) {
 		Plans:    []string{"plan:test@0"},
 	})
 
-	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, nil)
+	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, &trweb.HTTPError{
+		Status:  400,
+		Code:    "feature_not_found",
+		Message: "feature not found",
+	})
 }
 
 func TestPhaseBadOrg(t *testing.T) {
