@@ -95,6 +95,7 @@ func MustParseName(s string) Name {
 
 func (n Name) String() string              { return "feature:" + n.name }
 func (n Name) WithPlan(p Plan) FeaturePlan { return FeaturePlan{name: n.name, plan: p} }
+func (n Name) Less(o Name) bool            { return n.name < o.name }
 
 func (fp *Name) UnmarshalJSON(b []byte) error {
 	return unmarshal(fp, ParseName, b)
