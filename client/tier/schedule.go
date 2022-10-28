@@ -11,7 +11,9 @@ import (
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 	"kr.dev/errorfmt"
+	"tier.run/refs"
 	"tier.run/stripe"
+	"tier.run/values"
 )
 
 // TODO(bmizerany): we don't support names in the MVP but the hook is
@@ -33,7 +35,7 @@ func (e *ValidationError) Error() string { return e.Message }
 type Phase struct {
 	Org       string // set on read
 	Effective time.Time
-	Features  []Feature
+	Features  []refs.FeaturePlan
 	Current   bool
 
 	// Plans is the set of plans that are currently active for the phase. A
@@ -41,13 +43,13 @@ type Phase struct {
 	// listed in the phase. If any features from a plan is in the phase
 	// without the other features in the plan, this phase is considered
 	// "fragmented".
-	Plans []string
+	Plans []refs.Plan
 }
 
-func (p *Phase) Fragments() []Feature {
-	var fs []Feature
+func (p *Phase) Fragments() []refs.FeaturePlan {
+	var fs []refs.FeaturePlan
 	for _, f := range p.Features {
-		if !slices.Contains(p.Plans, f.Plan) {
+		if !slices.Contains(p.Plans, f.Plan()) {
 			fs = append(fs, f)
 		}
 	}
@@ -156,7 +158,7 @@ func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub s
 		for i, p := range phases {
 			var keys []string
 			for _, fe := range p.Features {
-				keys = append(keys, fe.ID())
+				keys = append(keys, stripe.MakeID(fe.String()))
 			}
 			fs, err := c.lookupFeatures(ctx, keys)
 			if err != nil {
@@ -204,7 +206,7 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 	for i, p := range phases {
 		var keys []string
 		for _, fe := range p.Features {
-			keys = append(keys, fe.ID())
+			keys = append(keys, stripe.MakeID(fe.String()))
 		}
 		fs, err := c.lookupFeatures(ctx, keys)
 		if err != nil {
@@ -269,41 +271,62 @@ func isReleased(err error) bool {
 	return false
 }
 
-// SubscribeTo subscribes org to the provided features. If a subscription has
-// already begun, the current phase will be updated; otherwise a new
-// subscription will be created and go into effect immediatly.
-func (c *Client) SubscribeTo(ctx context.Context, org string, fs []Feature) error {
-	ps, err := c.LookupPhases(ctx, org)
+// SubscribeNow is like Subscribe but immediately starts the first phase as the
+// current phase and cuts off any phases that have not yet been transitioned
+// to.
+//
+// The first phase must have a zero Effective time to indicate that it should
+// start now.
+func (c *Client) SubscribeNow(ctx context.Context, org string, phases []Phase) error {
+	if len(phases) == 0 {
+		return errors.New("at least one phase required")
+	}
+	if !phases[0].Effective.IsZero() {
+		return errors.New("first phase must be effective now")
+	}
+	curPhases, err := c.LookupPhases(ctx, org)
 	if err != nil && !errors.Is(err, ErrOrgNotFound) {
 		return err
 	}
-	c.Logf("current phases: %# v", pretty.Formatter(ps))
-	var cur Phase
-	for i := range ps {
-		if ps[i].Current {
-			cur = ps[i]
+	for i := range curPhases {
+		if curPhases[i].Current {
+			phases[0].Effective = curPhases[i].Effective
 		}
 	}
-	cur.Features = fs
-	c.Logf("current phase: %# v", pretty.Formatter(cur))
-	return c.Subscribe(ctx, org, []Phase{cur})
+	return c.Subscribe(ctx, org, phases)
 }
 
-func (c *Client) SubscribeToPlan(ctx context.Context, org, plan string) error {
+// SubscribeTo subscribes org to the provided features. If a subscription has
+// already begun, the current phase will be updated; otherwise a new
+// subscription will be created and go into effect immediatly.
+func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeaturePlan) error {
+	return c.SubscribeNow(ctx, org, []Phase{{
+		Features: fs,
+	}})
+}
+
+func (c *Client) ExpandPlan(ctx context.Context, p refs.Plan) ([]refs.FeaturePlan, error) {
 	all, err := c.Pull(ctx, 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var fs []Feature
+	var fs []refs.FeaturePlan
 	for _, f := range all {
-		if f.Plan == plan {
-			fs = append(fs, f)
+		if f.Name.Plan() == p {
+			fs = append(fs, f.Name)
 		}
 	}
 	if len(fs) == 0 {
-		return fmt.Errorf("no features found for plan %q", plan)
+		return nil, fmt.Errorf("no features found for plan %q", p)
 	}
-	c.Logf("features for plan %q: %# v", plan, pretty.Formatter(fs))
+	return fs, nil
+}
+
+func (c *Client) SubscribeToPlan(ctx context.Context, org string, p refs.Plan) error {
+	fs, err := c.ExpandPlan(ctx, p)
+	if err != nil {
+		return err
+	}
 	return c.SubscribeTo(ctx, org, fs)
 }
 
@@ -373,19 +396,22 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		return notFoundAsNil(err)
 	})
 
-	var m []Feature
+	var m []refs.FeaturePlan
+	featureByProviderID := make(map[string]refs.FeaturePlan)
 	g.Go(func() (err error) {
-		m, err = c.Pull(ctx, 0)
+		fs, err := c.Pull(ctx, 0)
+		if err != nil {
+			return err
+		}
+		m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
+			featureByProviderID[f.ProviderID] = f.Name
+			return f.Name
+		})
 		return err
 	})
 
 	if err := g.Wait(); err != nil {
 		return nil, err
-	}
-
-	featureByProviderID := make(map[string]Feature)
-	for _, f := range m {
-		featureByProviderID[f.ProviderID] = f
 	}
 
 	for _, s := range ss {
@@ -395,20 +421,20 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 			continue
 		}
 		for _, p := range s.Phases {
-			fs := make([]Feature, 0, len(p.Items))
+			fs := make([]refs.FeaturePlan, 0, len(p.Items))
 			for _, pi := range p.Items {
 				fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
 			}
 
-			var plans []string
+			var plans []refs.Plan
 			for _, f := range fs {
-				if slices.Contains(plans, f.Plan) {
+				if slices.Contains(plans, f.Plan()) {
 					continue
 				}
-				inModel := numFeaturesInPlan(m, f.Plan)
-				inPhase := numFeaturesInPlan(fs, f.Plan)
+				inModel := numFeaturesInPlan(m, f.Plan())
+				inPhase := numFeaturesInPlan(fs, f.Plan())
 				if inModel == inPhase {
-					plans = append(plans, f.Plan)
+					plans = append(plans, f.Plan())
 				}
 
 			}
@@ -506,9 +532,9 @@ func nowOrSpecific(t time.Time) any {
 	return t
 }
 
-func numFeaturesInPlan(fs []Feature, plan string) (n int) {
+func numFeaturesInPlan(fs []refs.FeaturePlan, plan refs.Plan) (n int) {
 	for _, f := range fs {
-		if f.Plan == plan {
+		if f.Plan() == plan {
 			n++
 		}
 	}

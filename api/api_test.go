@@ -11,6 +11,7 @@ import (
 	"tier.run/client/tier"
 	"tier.run/fetch"
 	"tier.run/fetch/fetchtest"
+	"tier.run/refs"
 	"tier.run/stripe/stroke"
 	"tier.run/trweb"
 )
@@ -35,14 +36,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			Plan:     "plan:test@0",
-			Name:     "feature:x",
+			Name:     refs.MustParseFeaturePlan("feature:x@plan:test@0"),
 			Interval: "@monthly",
 			Currency: "usd",
 		},
 		{
-			Plan:      "plan:test@0",
-			Name:      "feature:t",
+			Name:      refs.MustParseFeaturePlan("feature:t@plan:test@0"),
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Aggregate: "sum",
@@ -54,7 +53,7 @@ func TestAPISubscribe(t *testing.T) {
 	}
 	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
 		if err != nil {
-			t.Logf("error pushing [%q %q]: %v", f.Plan, f.Name, err)
+			t.Logf("error pushing %q: %v", f.Name, err)
 		}
 	}); err != nil {
 		t.Fatal(err)
@@ -62,6 +61,7 @@ func TestAPISubscribe(t *testing.T) {
 
 	whoIs := func(org string, wantErr error) {
 		t.Helper()
+		defer maybeFailNow(t)
 		g, err := fetch.OK[apitypes.WhoIsResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/whois?org="+org, nil)
 		diff.Test(t, t.Fatalf, err, wantErr)
 		if wantErr != nil {
@@ -77,6 +77,7 @@ func TestAPISubscribe(t *testing.T) {
 
 	sub := func(org string, features []string, wantErr error) {
 		t.Helper()
+		defer maybeFailNow(t)
 		_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "POST", "/v1/subscribe", &apitypes.SubscribeRequest{
 			Org: org,
 			Phases: []apitypes.Phase{{
@@ -88,6 +89,7 @@ func TestAPISubscribe(t *testing.T) {
 
 	report := func(org, feature string, n int, wantErr error) {
 		t.Helper()
+		defer maybeFailNow(t)
 		_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "POST", "/v1/report", &apitypes.ReportRequest{
 			Feature: feature,
 			Org:     org,
@@ -98,13 +100,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	checkUsage := func(org string, want []apitypes.Usage) {
 		t.Helper()
+		defer maybeFailNow(t)
 		got, err := fetch.OK[apitypes.UsageResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/limits?org="+org, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		slices.SortFunc(got.Usage, func(a, b apitypes.Usage) bool {
-			return a.Feature < b.Feature
-		})
+		slices.SortFunc(got.Usage, apitypes.UsageByFeature)
 		diff.Test(t, t.Errorf, got, apitypes.UsageResponse{
 			Org:   org,
 			Usage: want,
@@ -113,6 +114,7 @@ func TestAPISubscribe(t *testing.T) {
 
 	checkPhase := func(org string, want apitypes.PhaseResponse) {
 		t.Helper()
+		defer maybeFailNow(t)
 		got, err := fetch.OK[apitypes.PhaseResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/phase?org="+org, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -146,12 +148,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	checkUsage("org:test", []apitypes.Usage{
 		{
-			Feature: "feature:t",
+			Feature: "feature:t@plan:test@0",
 			Used:    10,
 			Limit:   tier.Inf,
 		},
 		{
-			Feature: "feature:x",
+			Feature: "feature:x@plan:test@0",
 			Used:    1,
 			Limit:   tier.Inf,
 		},
@@ -203,14 +205,12 @@ func TestPhaseFragments(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			Plan:     "plan:test@0",
-			Name:     "feature:x",
+			Name:     refs.MustParseFeaturePlan("feature:x@plan:test@0"),
 			Interval: "@monthly",
 			Currency: "usd",
 		},
 		{
-			Plan:      "plan:test@0",
-			Name:      "feature:t",
+			Name:      refs.MustParseFeaturePlan("feature:t@plan:test@0"),
 			Interval:  "@monthly",
 			Currency:  "usd",
 			Aggregate: "sum",
@@ -222,7 +222,7 @@ func TestPhaseFragments(t *testing.T) {
 	}
 	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
 		if err != nil {
-			t.Logf("error pushing [%q %q]: %v", f.Plan, f.Name, err)
+			t.Logf("error pushing %q: %v", f.Name, err)
 		}
 	}); err != nil {
 		t.Fatal(err)
@@ -231,7 +231,7 @@ func TestPhaseFragments(t *testing.T) {
 	// cheating and using the tier client because ATM the API only supports
 	// subscribing to plans.
 	frag := m[1:]
-	if err := tc.SubscribeTo(ctx, "org:test", frag); err != nil {
+	if err := tc.SubscribeTo(ctx, "org:test", tier.FeaturePlans(frag)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -255,4 +255,11 @@ func TestPhaseFragments(t *testing.T) {
 	ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective")
 	diff.Test(t, t.Errorf, got, want, ignore)
 
+}
+
+func maybeFailNow(t *testing.T) {
+	t.Helper()
+	if t.Failed() {
+		t.FailNow()
+	}
 }

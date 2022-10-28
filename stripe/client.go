@@ -13,12 +13,23 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/exp/maps"
 	"tier.run/trutil"
 )
 
 var debugMode = os.Getenv("STRIPE_DEBUG") == "1"
+
+func MakeID(parts ...string) string {
+	id := []rune(strings.Join(parts, "__"))
+	for i, r := range id {
+		if r != '_' && !unicode.IsDigit(r) && !unicode.IsLetter(r) {
+			id[i] = '-'
+		}
+	}
+	return "tier__" + string(id)
+}
 
 type Error struct {
 	AccountID string
@@ -27,11 +38,16 @@ type Error struct {
 	Param     string
 	Message   string
 	DocURL    string
+	RequestID string
 }
 
 func (e *Error) Error() string {
 	var b strings.Builder
 	b.WriteString("stripe: ")
+	if e.RequestID != "" {
+		b.WriteString(e.RequestID)
+		b.WriteString(": ")
+	}
 	if e.AccountID != "" {
 		b.WriteString(e.AccountID)
 	}
@@ -228,6 +244,7 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 			return fmt.Errorf("stripe: error parsing error response: %w", err)
 		}
 		e.Error.AccountID = c.AccountID
+		e.Error.RequestID = resp.Header.Get("Request-Id")
 		return e.Error
 	}
 	if out != nil {

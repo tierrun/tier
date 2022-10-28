@@ -9,6 +9,7 @@ import (
 	"github.com/felixge/fgprof"
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
+	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/stripe/stroke"
 )
@@ -55,9 +56,15 @@ func TestRoundTrip(t *testing.T) {
 
 	want := []Feature{
 		{
-			Plan:      "plan:free@theVersion",
+			Name:     refs.MustParseFeaturePlan("feature:test@plan:free@3"),
+			Interval: "@daily",
+			Currency: "eur",
+			Title:    "Test2",
+			Base:     1000,
+		},
+		{
+			Name:      refs.MustParseFeaturePlan("feature:test@plan:free@theVersion"),
 			PlanTitle: "PlanTitle",
-			Name:      "test00",
 			Interval:  "@yearly",
 			Currency:  "usd",
 			Title:     "FeatureTitle",
@@ -69,14 +76,6 @@ func TestRoundTrip(t *testing.T) {
 				{Upto: 3, Price: 300, Base: 3},
 			},
 		},
-		{
-			Plan:     "plan:free@03",
-			Name:     "test01",
-			Interval: "@daily",
-			Currency: "eur",
-			Title:    "Test2",
-			Base:     1000,
-		},
 	}
 
 	tc.Push(ctx, want, pushLogger(t))
@@ -87,7 +86,8 @@ func TestRoundTrip(t *testing.T) {
 	}
 
 	slices.SortFunc(got, func(a, b Feature) bool {
-		return a.Name < b.Name
+		// TODO(bmizerany): embed struct on
+		return a.Name.String() < b.Name.String()
 	})
 
 	diff.Test(t, t.Errorf, got, want,
@@ -97,7 +97,7 @@ func TestRoundTrip(t *testing.T) {
 		var got struct {
 			Name string
 		}
-		if err := tc.Stripe.Do(ctx, "GET", "/v1/products/tier__test00__plan-free-theVersion", stripe.Form{}, &got); err != nil {
+		if err := tc.Stripe.Do(ctx, "GET", "/v1/products/tier__feature-test-plan-free-theVersion", stripe.Form{}, &got); err != nil {
 			t.Fatal(err)
 		}
 		const want = "PlanTitle - FeatureTitle"

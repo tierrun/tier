@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 
 	"github.com/tailscale/hujson"
+	"kr.dev/errorfmt"
 	"tier.run/client/tier"
+	"tier.run/refs"
 	"tier.run/values"
 )
 
@@ -58,18 +60,24 @@ type jsonFeature struct {
 }
 
 type jsonPlan struct {
-	Title    string                 `json:"title,omitempty"`
-	Interval string                 `json:"interval,omitempty"`
-	Currency string                 `json:"currency,omitempty"`
-	Features map[string]jsonFeature `json:"features,omitempty"`
+	Title    string                    `json:"title,omitempty"`
+	Interval string                    `json:"interval,omitempty"`
+	Currency string                    `json:"currency,omitempty"`
+	Features map[refs.Name]jsonFeature `json:"features,omitempty"`
 }
 
 type jsonModel struct {
-	Plans map[string]jsonPlan `json:"plans"`
+	Plans map[refs.Plan]jsonPlan `json:"plans"`
 }
 
-func FromPricingHuJSON(data []byte) ([]tier.Feature, error) {
-	data, err := hujson.Standardize(data)
+func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
+	var debug []string
+	dbg := func(k string) {
+		debug = append(debug, k)
+	}
+	defer errorfmt.Handlef("FromPricingHuJSON: %q: %w", &debug, &err)
+
+	data, err = hujson.Standardize(data)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +86,7 @@ func FromPricingHuJSON(data []byte) ([]tier.Feature, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields() // we use a Decoder to get the DisallowUnknownFields method
 	if err := dec.Decode(&m); err != nil {
+		dbg("decodeerr")
 		return nil, err
 	}
 
@@ -85,18 +94,17 @@ func FromPricingHuJSON(data []byte) ([]tier.Feature, error) {
 		return nil, err
 	}
 
-	var fs []tier.Feature
 	for plan, p := range m.Plans {
 		for feature, f := range p.Features {
+			fn := feature.WithPlan(plan)
 			ff := tier.Feature{
-				Plan: plan,
-				Name: feature,
+				Name: fn,
 
 				Currency: values.Coalesce(p.Currency, "usd"),
 				Interval: values.Coalesce(p.Interval, "@monthly"),
 
-				PlanTitle: values.Coalesce(p.Title, plan),
-				Title:     values.Coalesce(f.Title, feature),
+				PlanTitle: values.Coalesce(p.Title, plan.String()),
+				Title:     values.Coalesce(f.Title, fn.String()),
 
 				Base: f.Base,
 
@@ -123,10 +131,10 @@ func FromPricingHuJSON(data []byte) ([]tier.Feature, error) {
 
 func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 	m := jsonModel{
-		Plans: make(map[string]jsonPlan),
+		Plans: make(map[refs.Plan]jsonPlan),
 	}
 	for _, f := range fs {
-		p := m.Plans[f.Plan]
+		p := m.Plans[f.Name.Plan()]
 		p.Title = f.PlanTitle
 		p.Currency = f.Currency
 		p.Interval = f.Interval
@@ -135,7 +143,7 @@ func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 		values.MaybeZero(&p.Interval, "@monthly")
 
 		if p.Features == nil {
-			p.Features = make(map[string]jsonFeature)
+			p.Features = make(map[refs.Name]jsonFeature)
 		}
 
 		// TODO(bmizerany): find generic way to clone slices of type
@@ -149,13 +157,12 @@ func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 			}
 		}
 
-		p.Features[f.Name] = jsonFeature{
-			Title: values.ZeroIf(f.Title, f.Name),
+		p.Features[f.Name.Name()] = jsonFeature{
+			Title: values.ZeroIf(f.Title, f.Name.String()),
 			Base:  f.Base,
 			Tiers: tiers,
 		}
-
-		m.Plans[f.Plan] = p
+		m.Plans[f.Name.Plan()] = p
 	}
 	return json.MarshalIndent(m, "", "  ")
 }

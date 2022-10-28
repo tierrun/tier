@@ -21,6 +21,7 @@ import (
 	"tier.run/client/tier"
 	"tier.run/materialize"
 	"tier.run/profile"
+	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/version"
 )
@@ -172,8 +173,8 @@ func runTier(cmd string, args []string) (err error) {
 
 			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t[%s]\n",
 				status,
-				f.Plan,
-				f.Name,
+				f.Name.Plan(),
+				f.Name.Name(),
 				link,
 				reason,
 			)
@@ -215,8 +216,8 @@ func runTier(cmd string, args []string) (err error) {
 
 		for _, f := range fs {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
-				f.Plan,
-				f.Name,
+				f.Name.Plan(),
+				f.Name.Name(),
 				f.Mode,
 				f.Aggregate,
 				f.Base,
@@ -238,8 +239,13 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		plan := plans[0] // TODO(bmizerany): support multiple plans and feature folding
 
+		p, err := refs.ParsePlan(plan)
+		if err != nil {
+			return err
+		}
+
 		vlogf("subscribing %s to %v", org, plan)
-		return tc().SubscribeToPlan(ctx, org, plan)
+		return tc().SubscribeToPlan(ctx, org, p)
 	case "phases":
 		if len(args) < 1 {
 			return errUsage
@@ -273,8 +279,8 @@ func runTier(cmd string, args []string) (err error) {
 					i,
 					active,
 					p.Effective.Format(time.RFC3339),
-					f.Name,
-					f.Plan,
+					f.Name(),
+					f.Plan(),
 				)
 				fmt.Fprintln(tw, line)
 			}
@@ -313,7 +319,13 @@ func runTier(cmd string, args []string) (err error) {
 		if err != nil {
 			return err
 		}
-		return tc().ReportUsage(ctx, org, feature, tier.Report{
+
+		fn, err := refs.ParseName(feature)
+		if err != nil {
+			return err
+		}
+
+		return tc().ReportUsage(ctx, org, fn, tier.Report{
 			At: time.Now(),
 			N:  n,
 			// TODO(bmizerany): suuport Clobber
@@ -334,7 +346,7 @@ func runTier(cmd string, args []string) (err error) {
 		return nil
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ExitOnError)
-		addr := fs.String("addr", "localhost:8080", "address to listen on (default ':8080')")
+		addr := fs.String("addr", ":8080", "address to listen on (default ':8080')")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}

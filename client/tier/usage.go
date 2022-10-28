@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"golang.org/x/exp/maps"
+	"kr.dev/errorfmt"
 	"tailscale.com/logtail/backoff"
+	"tier.run/refs"
 	"tier.run/stripe"
 )
 
@@ -18,15 +21,15 @@ type Report struct {
 }
 
 type Usage struct {
-	Feature string
+	Feature refs.FeaturePlan
 	Start   time.Time
 	End     time.Time
 	Used    int
 	Limit   int
 }
 
-func (c *Client) ReportUsage(ctx context.Context, org, feature string, use Report) error {
-	siid, isMetered, err := c.lookupSubscriptionItemID(ctx, org, scheduleNameTODO, feature)
+func (c *Client) ReportUsage(ctx context.Context, org string, feature refs.Name, use Report) error {
+	itemID, isMetered, err := c.lookupSubscriptionItemID(ctx, org, scheduleNameTODO, feature)
 	if err != nil {
 		return err
 	}
@@ -36,7 +39,7 @@ func (c *Client) ReportUsage(ctx context.Context, org, feature string, use Repor
 
 	var f stripe.Form
 	f.Set("quantity", use.N)
-	f.Set("timestamp", use.At)
+	f.Set("timestamp", nowOrSpecific(use.At))
 	if use.Clobber {
 		f.Set("action", "set")
 	} else {
@@ -58,7 +61,7 @@ func (c *Client) ReportUsage(ctx context.Context, org, feature string, use Repor
 			return ctx.Err()
 		default:
 		}
-		err := c.Stripe.Do(ctx, "POST", "/v1/subscription_items/"+siid+"/usage_records", f, nil)
+		err := c.Stripe.Do(ctx, "POST", "/v1/subscription_items/"+itemID+"/usage_records", f, nil)
 		c.Logf("ReportUsage: %v", err)
 		bo.BackOff(ctx, err)
 		if err == nil {
@@ -89,10 +92,10 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) 
 		return nil, err
 	}
 
-	seen := map[string]Usage{}
+	seen := map[refs.FeaturePlan]Usage{}
 	for _, line := range lines {
 		f := stripePriceToFeature(line.Price)
-		if f.Name == "" { // not a Tier price
+		if f.Name.IsZero() { // not a Tier price
 			continue
 		}
 		if seen[f.Name].Used <= line.Quantity {
@@ -108,17 +111,18 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) 
 	return maps.Values(seen), nil
 }
 
-func (c *Client) lookupSubscriptionItemID(ctx context.Context, org, name, feature string) (id string, isMetered bool, err error) {
+func (c *Client) lookupSubscriptionItemID(ctx context.Context, org, name string, feature refs.Name) (id string, isMetered bool, err error) {
+	defer errorfmt.Handlef("lookupSubscriptionItemID: %w", &err)
 	s, err := c.lookupSubscription(ctx, org, name)
 	if err != nil {
 		return "", false, err
 	}
 	for _, f := range s.Features {
-		if f.Name == feature {
+		if f.Name.Name() == feature {
 			return f.ReportID, f.IsMetered(), nil
 		}
 	}
-	return "", false, ErrFeatureNotFound
+	return "", false, fmt.Errorf("%w: %q", ErrFeatureNotFound, feature)
 }
 
 func randomString() string {
