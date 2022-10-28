@@ -2,6 +2,8 @@ package apitypes
 
 import (
 	"time"
+
+	"tier.run/refs"
 )
 
 type Phase struct {
@@ -40,11 +42,11 @@ type UsageResponse struct {
 }
 
 type Usage struct {
-	Feature string `json:"feature"`
-	Used    int    `json:"used"`
-	Limit   int    `json:"limit"`
+	Feature refs.Name `json:"feature"`
+	Used    int       `json:"used"`
+	Limit   int       `json:"limit"`
 }
 
 func UsageByFeature(a, b Usage) bool {
-	return a.Feature < b.Feature
+	return a.Feature.Less(b.Feature)
 }

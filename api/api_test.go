@@ -18,6 +18,12 @@ import (
 	"tier.run/trweb"
 )
 
+var (
+	rpn = refs.MustParseName
+	_   = refs.MustParsePlan
+	_   = refs.MustParseFeaturePlan
+)
+
 func newTestClient(t *testing.T) (*http.Client, *tier.Client) {
 	sc := stroke.Client(t)
 	sc = stroke.WithAccount(t, sc)
@@ -150,12 +156,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	checkUsage("org:test", []apitypes.Usage{
 		{
-			Feature: "feature:t@plan:test@0",
+			Feature: rpn("feature:t"),
 			Used:    10,
 			Limit:   tier.Inf,
 		},
 		{
-			Feature: "feature:x@plan:test@0",
+			Feature: rpn("feature:x"),
 			Used:    1,
 			Limit:   tier.Inf,
 		},

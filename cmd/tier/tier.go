@@ -304,7 +304,7 @@ func runTier(cmd string, args []string) (err error) {
 				limit = "∞"
 			}
 			fmt.Fprintf(tw, "%s\t%s\t%d\n",
-				u.Feature,
+				u.Feature.Name(),
 				limit,
 				u.Used,
 			)

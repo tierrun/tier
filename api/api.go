@@ -234,7 +234,7 @@ func (h *Handler) serveLimits(w http.ResponseWriter, r *http.Request) error {
 	rr.Org = org
 	for _, u := range usage {
 		rr.Usage = append(rr.Usage, apitypes.Usage{
-			Feature: u.Feature.String(),
+			Feature: u.Feature.Name(),
 			Limit:   u.Limit,
 			Used:    u.Used,
 		})
