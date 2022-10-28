@@ -194,10 +194,6 @@ func ByName(a, b FeaturePlan) bool {
 	return a.name < b.name
 }
 
-func ByPlan(a, b FeaturePlan) bool {
-	return a.plan.String() < b.plan.String()
-}
-
 func (fp *FeaturePlan) UnmarshalJSON(b []byte) error {
 	return unmarshal(fp, ParseFeaturePlan, b)
 }
