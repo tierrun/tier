@@ -130,44 +130,28 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 		return invalidRequestf("a minimum of one phase is required")
 	}
 
-	expand := func(rs []string) ([]refs.FeaturePlan, error) {
-		var expanded []refs.FeaturePlan
-		for _, s := range rs {
-			fp, err := refs.ParseFeaturePlan(s)
-			if err != nil {
-				pl, err := refs.ParsePlan(s)
-				if err != nil {
-					return nil, invalidRequestf("invalid feature plan: %q", s)
-				}
-				fps, err := h.c.ExpandPlan(r.Context(), pl)
-				if err != nil {
-					return nil, err
-				}
-				expanded = append(expanded, fps...)
-			} else {
-				expanded = append(expanded, fp)
-			}
-		}
-		return expanded, nil
-	}
-
 	if !sr.Phases[0].Effective.IsZero() {
 		return invalidRequestf("effective must not be specified for the first phase; for now")
 	}
 
+	m, err := h.c.Pull(r.Context(), 0)
+	if err != nil {
+		return err
+	}
+
 	var phases []tier.Phase
 	for _, p := range sr.Phases {
-		fps, err := expand(p.Features)
+		fs, err := tier.Expand(m, p.Features...)
 		if err != nil {
 			return err
 		}
 		phases = append(phases, tier.Phase{
 			Effective: p.Effective,
-			Features:  fps,
+			Features:  fs,
 		})
 	}
 
-	return h.c.Subscribe(r.Context(), sr.Org, phases)
+	return h.c.SubscribeNow(r.Context(), sr.Org, phases)
 }
 
 func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {

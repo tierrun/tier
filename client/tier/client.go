@@ -300,6 +300,40 @@ func (c *Client) Pull(ctx context.Context, limit int) ([]Feature, error) {
 	return fs, nil
 }
 
+// Expand parses each ref in refs and adds it to the result. If the ref is a
+// plan ref, Expand will append all features in fs for that plan to the result.
+// returns an error if any ref is invalid or not availabe in the
+//
+// The parameter fs is assumed to have no two features with the same FeaturePlan.
+//
+// It returns an error if any.
+func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
+	var out []refs.FeaturePlan
+
+	for _, name := range names {
+		fp, err := refs.ParseFeaturePlan(name)
+		if err != nil {
+			p, err := refs.ParsePlan(name)
+			if err != nil {
+				return nil, err
+			}
+			n := len(out)
+			for _, f := range fs {
+				if f.Name.Plan() == p {
+					out = append(out, f.Name)
+				}
+			}
+			if len(out) == n {
+				return nil, fmt.Errorf("no features found for plan %q", p)
+			}
+		} else {
+			out = append(out, fp)
+		}
+	}
+
+	return out, nil
+}
+
 type Org struct {
 	ProviderID string
 	ID         string

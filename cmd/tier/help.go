@@ -110,7 +110,7 @@ The output is in the format:
 `,
 	"subscribe": `Usage:
 
-	tier [--live] subscribe <org> <phase>...
+	tier [--live] subscribe <org> <plan|featurePlan>...
 
 Tier subscribe creates or updates a subscription for the provided org, applying
 the features in the plan.
