@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 // marshlers
@@ -237,6 +239,15 @@ func (fp FeaturePlan) Version() string {
 		return fp.version
 	}
 	return fp.plan.String()
+}
+
+func SortGroupedByVersion(fs []FeaturePlan) {
+	slices.SortFunc(fs, func(a, b FeaturePlan) bool {
+		if a.Version() < b.Version() {
+			return true
+		}
+		return a.Less(b)
+	})
 }
 
 func invalid(msg string, id string) error {

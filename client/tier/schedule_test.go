@@ -321,12 +321,7 @@ func TestLookupPhases(t *testing.T) {
 
 	for i, p := range got {
 		p.Features = slices.Clone(p.Features)
-		slices.SortFunc(p.Features, func(a, b refs.FeaturePlan) bool {
-			if a.Version() < b.Version() {
-				return true
-			}
-			return a.String() < b.String()
-		})
+		refs.SortGroupedByVersion(p.Features)
 		got[i] = p
 	}
 
