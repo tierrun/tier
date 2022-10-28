@@ -10,6 +10,7 @@ import (
 	"github.com/kr/pretty"
 	"tier.run/api/apitypes"
 	"tier.run/client/tier"
+	"tier.run/materialize"
 	"tier.run/refs"
 	"tier.run/trweb"
 	"tier.run/values"
@@ -112,6 +113,8 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 		return h.serveSubscribe(w, r)
 	case "/v1/phase":
 		return h.servePhase(w, r)
+	case "/v1/pull":
+		return h.servePull(w, r)
 	default:
 		return trweb.NotFound
 	}
@@ -238,6 +241,20 @@ func (h *Handler) serveLimits(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return httpJSON(w, rr)
+}
+
+func (h *Handler) servePull(w http.ResponseWriter, r *http.Request) error {
+	m, err := h.c.Pull(r.Context(), 0)
+	if err != nil {
+		return err
+	}
+	b, err := materialize.ToPricingJSON(m)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(b)
+	return nil
 }
 
 func httpJSON(w http.ResponseWriter, v any) error {
