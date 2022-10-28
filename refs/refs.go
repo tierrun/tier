@@ -180,6 +180,14 @@ func MustParseFeaturePlan(s string) FeaturePlan {
 	return fp
 }
 
+func MustParseFeaturePlans(s ...string) []FeaturePlan {
+	fps, err := ParseFeaturePlans(s...)
+	if err != nil {
+		panic(err)
+	}
+	return fps
+}
+
 func ByName(a, b FeaturePlan) bool {
 	return a.name < b.name
 }
