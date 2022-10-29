@@ -405,8 +405,8 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 			return err
 		}
 		m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
-			featureByProviderID[f.ProviderID] = f.Name
-			return f.Name
+			featureByProviderID[f.ProviderID] = f.FeaturePlan
+			return f.FeaturePlan
 		})
 		return err
 	})

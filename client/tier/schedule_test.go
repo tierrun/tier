@@ -44,22 +44,22 @@ func TestSchedule(t *testing.T) {
 		model = append(model, ff...)
 		var fps []refs.FeaturePlan
 		for _, f := range ff {
-			fps = append(fps, f.Name)
+			fps = append(fps, f.FeaturePlan)
 		}
 		return fps
 	}
 
 	planFree := plan([]Feature{{
-		Name:     refs.MustParseFeaturePlan("feature:x@plan:free@0"),
-		Interval: "@monthly",
-		Currency: "usd",
+		FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:free@0"),
+		Interval:    "@monthly",
+		Currency:    "usd",
 	}})
 
 	planPro := plan([]Feature{{
-		Name:     refs.MustParseFeaturePlan("feature:x@plan:pro@0"),
-		Interval: "@monthly",
-		Base:     100,
-		Currency: "usd",
+		FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:pro@0"),
+		Interval:    "@monthly",
+		Base:        100,
+		Currency:    "usd",
 	}})
 
 	c.Push(ctx, model, pushLogger(t))
@@ -139,31 +139,31 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 	fs := []Feature{
 		{
 			// TODO(bmizerany): G: check/test plan name formats
-			Name:      mpf("feature:10@plan:test@0"),
-			Interval:  "@daily",
-			Currency:  "usd",
-			Tiers:     []Tier{{Upto: 10}},
-			Mode:      "graduated",
-			Aggregate: "sum",
+			FeaturePlan: mpf("feature:10@plan:test@0"),
+			Interval:    "@daily",
+			Currency:    "usd",
+			Tiers:       []Tier{{Upto: 10}},
+			Mode:        "graduated",
+			Aggregate:   "sum",
 		},
 		{
-			Name:      mpf("feature:inf@plan:test@0"),
-			Interval:  "@daily",
-			Currency:  "usd",
-			Tiers:     []Tier{{}},
-			Mode:      "graduated",
-			Aggregate: "sum",
+			FeaturePlan: mpf("feature:inf@plan:test@0"),
+			Interval:    "@daily",
+			Currency:    "usd",
+			Tiers:       []Tier{{}},
+			Mode:        "graduated",
+			Aggregate:   "sum",
 		},
 		{
-			Name:     mpf("feature:lic@plan:test@0"),
-			Interval: "@daily",
-			Currency: "usd",
+			FeaturePlan: mpf("feature:lic@plan:test@0"),
+			Interval:    "@daily",
+			Currency:    "usd",
 		},
 	}
 
 	fps := make([]refs.FeaturePlan, len(fs))
 	for i, f := range fs {
-		fps[i] = f.Name
+		fps[i] = f.FeaturePlan
 	}
 
 	c.setClock(t, t0)
@@ -191,15 +191,15 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 
 func TestSubscribeToPlan(t *testing.T) {
 	fs := []Feature{{
-		Name:     mpf("feature:x@plan:pro@0"),
-		Interval: "@monthly",
-		Base:     100,
-		Currency: "usd",
+		FeaturePlan: mpf("feature:x@plan:pro@0"),
+		Interval:    "@monthly",
+		Base:        100,
+		Currency:    "usd",
 	}, {
-		Name:     mpf("feature:y@plan:pro@0"),
-		Interval: "@monthly",
-		Base:     1000,
-		Currency: "usd",
+		FeaturePlan: mpf("feature:y@plan:pro@0"),
+		Interval:    "@monthly",
+		Base:        1000,
+		Currency:    "usd",
 	}}
 
 	ctx := context.Background()
@@ -230,9 +230,9 @@ func TestSubscribeToPlan(t *testing.T) {
 
 func TestDedupCustomer(t *testing.T) {
 	fs := []Feature{{
-		Name:     mpf("feature:x@plan:test@0"),
-		Interval: "@daily",
-		Currency: "usd",
+		FeaturePlan: mpf("feature:x@plan:test@0"),
+		Interval:    "@daily",
+		Currency:    "usd",
 	}}
 
 	tc := newTestClient(t)
@@ -260,14 +260,14 @@ func TestDedupCustomer(t *testing.T) {
 func TestLookupPhases(t *testing.T) {
 	fs0 := []Feature{
 		{
-			Name:     mpf("feature:x@plan:test@0"),
-			Interval: "@daily",
-			Currency: "usd",
+			FeaturePlan: mpf("feature:x@plan:test@0"),
+			Interval:    "@daily",
+			Currency:    "usd",
 		},
 		{
-			Name:     mpf("feature:y@plan:test@0"),
-			Interval: "@daily",
-			Currency: "usd",
+			FeaturePlan: mpf("feature:y@plan:test@0"),
+			Interval:    "@daily",
+			Currency:    "usd",
 		},
 	}
 
@@ -297,14 +297,14 @@ func TestLookupPhases(t *testing.T) {
 
 	fs1 := []Feature{
 		{
-			Name:     mpf("feature:x@plan:test@1"),
-			Interval: "@daily",
-			Currency: "usd",
+			FeaturePlan: mpf("feature:x@plan:test@1"),
+			Interval:    "@daily",
+			Currency:    "usd",
 		},
 		{
-			Name:     mpf("feature:y@plan:test@1"),
-			Interval: "@daily",
-			Currency: "usd",
+			FeaturePlan: mpf("feature:y@plan:test@1"),
+			Interval:    "@daily",
+			Currency:    "usd",
 		},
 	}
 	tc.Push(ctx, fs1, pushLogger(t))
@@ -342,25 +342,25 @@ func TestLookupPhases(t *testing.T) {
 func TestReportUsage(t *testing.T) {
 	fs := []Feature{
 		{
-			Name:      mpf("feature:10@plan:test@0"),
-			Interval:  "@monthly",
-			Currency:  "usd",
-			Tiers:     []Tier{{Upto: 10}},
-			Mode:      "graduated",
-			Aggregate: "sum",
+			FeaturePlan: mpf("feature:10@plan:test@0"),
+			Interval:    "@monthly",
+			Currency:    "usd",
+			Tiers:       []Tier{{Upto: 10}},
+			Mode:        "graduated",
+			Aggregate:   "sum",
 		},
 		{
-			Name:      mpf("feature:inf@plan:test@0"),
-			Interval:  "@monthly",
-			Currency:  "usd",
-			Tiers:     []Tier{{Upto: Inf}},
-			Mode:      "graduated",
-			Aggregate: "sum",
+			FeaturePlan: mpf("feature:inf@plan:test@0"),
+			Interval:    "@monthly",
+			Currency:    "usd",
+			Tiers:       []Tier{{Upto: Inf}},
+			Mode:        "graduated",
+			Aggregate:   "sum",
 		},
 		{
-			Name:     mpf("feature:lic@plan:test@0"),
-			Interval: "@monthly",
-			Currency: "usd",
+			FeaturePlan: mpf("feature:lic@plan:test@0"),
+			Interval:    "@monthly",
+			Currency:    "usd",
 		},
 	}
 
@@ -417,12 +417,12 @@ func TestReportUsageFeatureNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	fs := []Feature{{
-		Name:      mpf("feature:inf@plan:test@0"),
-		Interval:  "@monthly",
-		Currency:  "usd",
-		Tiers:     []Tier{{Upto: Inf}},
-		Mode:      "graduated",
-		Aggregate: "sum",
+		FeaturePlan: mpf("feature:inf@plan:test@0"),
+		Interval:    "@monthly",
+		Currency:    "usd",
+		Tiers:       []Tier{{Upto: Inf}},
+		Mode:        "graduated",
+		Aggregate:   "sum",
 	}}
 
 	tc.Push(ctx, fs, pushLogger(t))
@@ -452,12 +452,12 @@ func TestSubscribeToUnknownFeatures(t *testing.T) {
 
 	// make only plan:a valid
 	tc.Push(ctx, []Feature{{
-		Name:      mpf("feature:A@plan:a@0"),
-		Interval:  "@monthly",
-		Currency:  "usd",
-		Tiers:     []Tier{{Upto: Inf}},
-		Mode:      "graduated",
-		Aggregate: "sum",
+		FeaturePlan: mpf("feature:A@plan:a@0"),
+		Interval:    "@monthly",
+		Currency:    "usd",
+		Tiers:       []Tier{{Upto: Inf}},
+		Mode:        "graduated",
+		Aggregate:   "sum",
 	}}, pushLogger(t))
 
 	got = tc.SubscribeTo(ctx, "org:example", fs)

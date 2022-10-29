@@ -98,7 +98,7 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 		for feature, f := range p.Features {
 			fn := feature.WithPlan(plan)
 			ff := tier.Feature{
-				Name: fn,
+				FeaturePlan: fn,
 
 				Currency: values.Coalesce(p.Currency, "usd"),
 				Interval: values.Coalesce(p.Interval, "@monthly"),
@@ -134,7 +134,7 @@ func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 		Plans: make(map[refs.Plan]jsonPlan),
 	}
 	for _, f := range fs {
-		p := m.Plans[f.Name.Plan()]
+		p := m.Plans[f.FeaturePlan.Plan()]
 		p.Title = f.PlanTitle
 		p.Currency = f.Currency
 		p.Interval = f.Interval
@@ -157,12 +157,12 @@ func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 			}
 		}
 
-		p.Features[f.Name.Name()] = jsonFeature{
-			Title: values.ZeroIf(f.Title, f.Name.String()),
+		p.Features[f.FeaturePlan.Name()] = jsonFeature{
+			Title: values.ZeroIf(f.Title, f.FeaturePlan.String()),
 			Base:  f.Base,
 			Tiers: tiers,
 		}
-		m.Plans[f.Name.Plan()] = p
+		m.Plans[f.FeaturePlan.Plan()] = p
 	}
 	return json.MarshalIndent(m, "", "  ")
 }
