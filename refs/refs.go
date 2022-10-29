@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 // marshlers
@@ -192,10 +194,6 @@ func ByName(a, b FeaturePlan) bool {
 	return a.name < b.name
 }
 
-func ByPlan(a, b FeaturePlan) bool {
-	return a.plan.String() < b.plan.String()
-}
-
 func (fp *FeaturePlan) UnmarshalJSON(b []byte) error {
 	return unmarshal(fp, ParseFeaturePlan, b)
 }
@@ -227,6 +225,7 @@ func (fp FeaturePlan) String() string {
 
 func (fp FeaturePlan) Name() Name             { return Name{name: fp.name} }
 func (fp FeaturePlan) Plan() Plan             { return fp.plan }
+func (fp FeaturePlan) InPlan(p Plan) bool     { return fp.plan == p }
 func (a FeaturePlan) Less(b FeaturePlan) bool { return a.String() < b.String() }
 
 // Version returns the version of the feature plan as it was parsed. This means
@@ -236,6 +235,19 @@ func (fp FeaturePlan) Version() string {
 		return fp.version
 	}
 	return fp.plan.String()
+}
+
+func (fp FeaturePlan) IsVersionOf(p Name) bool {
+	return fp.name == p.name
+}
+
+func SortGroupedByVersion(fs []FeaturePlan) {
+	slices.SortFunc(fs, func(a, b FeaturePlan) bool {
+		if a.Version() < b.Version() {
+			return true
+		}
+		return a.Less(b)
+	})
 }
 
 func invalid(msg string, id string) error {

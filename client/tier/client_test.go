@@ -56,20 +56,20 @@ func TestRoundTrip(t *testing.T) {
 
 	want := []Feature{
 		{
-			Name:     refs.MustParseFeaturePlan("feature:test@plan:free@3"),
-			Interval: "@daily",
-			Currency: "eur",
-			Title:    "Test2",
-			Base:     1000,
+			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@3"),
+			Interval:    "@daily",
+			Currency:    "eur",
+			Title:       "Test2",
+			Base:        1000,
 		},
 		{
-			Name:      refs.MustParseFeaturePlan("feature:test@plan:free@theVersion"),
-			PlanTitle: "PlanTitle",
-			Interval:  "@yearly",
-			Currency:  "usd",
-			Title:     "FeatureTitle",
-			Mode:      "volume",
-			Aggregate: "perpetual",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@theVersion"),
+			PlanTitle:   "PlanTitle",
+			Interval:    "@yearly",
+			Currency:    "usd",
+			Title:       "FeatureTitle",
+			Mode:        "volume",
+			Aggregate:   "perpetual",
 			Tiers: []Tier{
 				{Upto: 1, Price: 100, Base: 1},
 				{Upto: 2, Price: 200, Base: 2},
@@ -87,7 +87,7 @@ func TestRoundTrip(t *testing.T) {
 
 	slices.SortFunc(got, func(a, b Feature) bool {
 		// TODO(bmizerany): embed struct on
-		return a.Name.String() < b.Name.String()
+		return a.Less(b.FeaturePlan)
 	})
 
 	diff.Test(t, t.Errorf, got, want,
@@ -112,9 +112,9 @@ func pushLogger(t *testing.T) func(f Feature, err error) {
 	return func(f Feature, err error) {
 		t.Helper()
 		if err == nil {
-			t.Logf("pushed %q", f.Name)
+			t.Logf("pushed %q", f.FeaturePlan)
 		} else {
-			t.Fatalf("error pushing %q: %v", f.Name, err)
+			t.Fatalf("error pushing %q: %v", f.FeaturePlan, err)
 		}
 	}
 }

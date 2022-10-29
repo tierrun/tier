@@ -46,13 +46,13 @@ var (
 func FeaturePlans(fs []Feature) []refs.FeaturePlan {
 	ns := make([]refs.FeaturePlan, len(fs))
 	for i, f := range fs {
-		ns[i] = f.Name
+		ns[i] = f.FeaturePlan
 	}
 	return ns
 }
 
 type Feature struct {
-	Name refs.FeaturePlan // the feature name prefixed with ("feature:")
+	refs.FeaturePlan // the feature name prefixed with ("feature:")
 
 	ProviderID string // identifier set by the billing engine provider
 	PlanTitle  string // a human readable title for the plan
@@ -107,7 +107,7 @@ func (f *Feature) IsMetered() bool {
 }
 
 func (f *Feature) ID() string {
-	return stripe.MakeID(f.Name.String())
+	return stripe.MakeID(f.FeaturePlan.String())
 }
 
 func (f *Feature) Limit() int {
@@ -168,7 +168,7 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	var data stripe.Form
 	data.Set("metadata", "tier.plan_title", f.PlanTitle)
 	data.Set("metadata", "tier.title", f.Title)
-	data.Set("metadata", "tier.feature", f.Name)
+	data.Set("metadata", "tier.feature", f.FeaturePlan)
 
 	c.Logf("tier: pushing feature %q", f.ID())
 	data.Set("lookup_key", f.ID())
@@ -177,8 +177,8 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	// This will appear as the line item description in the Stripe dashboard
 	// and customer invoices.
 	data.Set("product_data", "name", fmt.Sprintf("%s - %s",
-		values.Coalesce(f.PlanTitle, f.Name.String()),
-		values.Coalesce(f.Title, f.Name.String()),
+		values.Coalesce(f.PlanTitle, f.FeaturePlan.String()),
+		values.Coalesce(f.Title, f.FeaturePlan.String()),
 	))
 
 	// secondary composite key in schedules:
@@ -261,15 +261,15 @@ type stripePrice struct {
 
 func stripePriceToFeature(p stripePrice) Feature {
 	f := Feature{
-		ProviderID: p.ProviderID(),
-		PlanTitle:  p.Metadata.PlanTitle,
-		Name:       p.Metadata.Feature,
-		Title:      p.Metadata.Title,
-		Currency:   p.Currency,
-		Interval:   intervalFromStripe[p.Recurring.Interval],
-		Mode:       p.TiersMode,
-		Aggregate:  aggregateFromStripe[p.Recurring.AggregateUsage],
-		Base:       p.UnitAmount,
+		ProviderID:  p.ProviderID(),
+		PlanTitle:   p.Metadata.PlanTitle,
+		FeaturePlan: p.Metadata.Feature,
+		Title:       p.Metadata.Title,
+		Currency:    p.Currency,
+		Interval:    intervalFromStripe[p.Recurring.Interval],
+		Mode:        p.TiersMode,
+		Aggregate:   aggregateFromStripe[p.Recurring.AggregateUsage],
+		Base:        p.UnitAmount,
 	}
 	for i, t := range p.Tiers {
 		f.Tiers = append(f.Tiers, Tier(t))
@@ -319,8 +319,8 @@ func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
 			}
 			n := len(out)
 			for _, f := range fs {
-				if f.Name.Plan() == p {
-					out = append(out, f.Name)
+				if f.FeaturePlan.InPlan(p) {
+					out = append(out, f.FeaturePlan)
 				}
 			}
 			if len(out) == n {

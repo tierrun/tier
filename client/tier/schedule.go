@@ -405,8 +405,8 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 			return err
 		}
 		m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
-			featureByProviderID[f.ProviderID] = f.Name
-			return f.Name
+			featureByProviderID[f.ProviderID] = f.FeaturePlan
+			return f.FeaturePlan
 		})
 		return err
 	})
@@ -535,7 +535,7 @@ func nowOrSpecific(t time.Time) any {
 
 func numFeaturesInPlan(fs []refs.FeaturePlan, plan refs.Plan) (n int) {
 	for _, f := range fs {
-		if f.Plan() == plan {
+		if f.InPlan(plan) {
 			n++
 		}
 	}

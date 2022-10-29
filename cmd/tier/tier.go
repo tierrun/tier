@@ -173,8 +173,8 @@ func runTier(cmd string, args []string) (err error) {
 
 			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t[%s]\n",
 				status,
-				f.Name.Plan(),
-				f.Name.Name(),
+				f.Plan(),
+				f.FeaturePlan.Name(),
 				link,
 				reason,
 			)
@@ -216,8 +216,8 @@ func runTier(cmd string, args []string) (err error) {
 
 		for _, f := range fs {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
-				f.Name.Plan(),
-				f.Name.Name(),
+				f.Plan(),
+				f.FeaturePlan.Name(),
 				f.Mode,
 				f.Aggregate,
 				f.Base,

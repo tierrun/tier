@@ -44,16 +44,16 @@ func TestAPISubscribe(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			Name:     refs.MustParseFeaturePlan("feature:x@plan:test@0"),
-			Interval: "@monthly",
-			Currency: "usd",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:test@0"),
+			Interval:    "@monthly",
+			Currency:    "usd",
 		},
 		{
-			Name:      refs.MustParseFeaturePlan("feature:t@plan:test@0"),
-			Interval:  "@monthly",
-			Currency:  "usd",
-			Aggregate: "sum",
-			Mode:      "graduated",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:t@plan:test@0"),
+			Interval:    "@monthly",
+			Currency:    "usd",
+			Aggregate:   "sum",
+			Mode:        "graduated",
 			Tiers: []tier.Tier{
 				{Upto: tier.Inf, Price: 100},
 			},
@@ -61,7 +61,7 @@ func TestAPISubscribe(t *testing.T) {
 	}
 	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
 		if err != nil {
-			t.Logf("error pushing %q: %v", f.Name, err)
+			t.Logf("error pushing %q: %v", f.FeaturePlan, err)
 		}
 	}); err != nil {
 		t.Fatal(err)
@@ -219,16 +219,16 @@ func TestPhaseFragments(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			Name:     refs.MustParseFeaturePlan("feature:x@plan:test@0"),
-			Interval: "@monthly",
-			Currency: "usd",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:test@0"),
+			Interval:    "@monthly",
+			Currency:    "usd",
 		},
 		{
-			Name:      refs.MustParseFeaturePlan("feature:t@plan:test@0"),
-			Interval:  "@monthly",
-			Currency:  "usd",
-			Aggregate: "sum",
-			Mode:      "graduated",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:t@plan:test@0"),
+			Interval:    "@monthly",
+			Currency:    "usd",
+			Aggregate:   "sum",
+			Mode:        "graduated",
 			Tiers: []tier.Tier{
 				{Upto: tier.Inf, Price: 100},
 			},
@@ -236,7 +236,7 @@ func TestPhaseFragments(t *testing.T) {
 	}
 	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
 		if err != nil {
-			t.Logf("error pushing %q: %v", f.Name, err)
+			t.Logf("error pushing %q: %v", f.FeaturePlan, err)
 		}
 	}); err != nil {
 		t.Fatal(err)

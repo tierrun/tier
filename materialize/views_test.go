@@ -44,28 +44,28 @@ func TestPricingHuJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	slices.SortFunc(got, func(a, b tier.Feature) bool {
-		return a.Name.String() < b.Name.String()
+		return a.Less(b.FeaturePlan)
 	})
 
 	want := []tier.Feature{
 		{
-			PlanTitle: "Just an example plan to show off features part duex",
-			Title:     "feature:base@plan:example@2",
-			Name:      refs.MustParseFeaturePlan("feature:base@plan:example@2"),
-			Currency:  "usd",
-			Interval:  "@monthly",
-			Mode:      "graduated", // defaults
-			Aggregate: "sum",       // defaults
-			Base:      100,
+			PlanTitle:   "Just an example plan to show off features part duex",
+			Title:       "feature:base@plan:example@2",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:base@plan:example@2"),
+			Currency:    "usd",
+			Interval:    "@monthly",
+			Mode:        "graduated", // defaults
+			Aggregate:   "sum",       // defaults
+			Base:        100,
 		},
 		{
-			PlanTitle: "Just an example plan to show off features",
-			Title:     "feature:graduated@plan:example@1",
-			Name:      refs.MustParseFeaturePlan("feature:graduated@plan:example@1"),
-			Currency:  "usd",
-			Interval:  "@monthly",
-			Mode:      "graduated",
-			Aggregate: "sum",
+			PlanTitle:   "Just an example plan to show off features",
+			Title:       "feature:graduated@plan:example@1",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:graduated@plan:example@1"),
+			Currency:    "usd",
+			Interval:    "@monthly",
+			Mode:        "graduated",
+			Aggregate:   "sum",
 			Tiers: []tier.Tier{
 				{Upto: 10, Price: 0, Base: 0},
 				{Upto: 20, Price: 100, Base: 0},
