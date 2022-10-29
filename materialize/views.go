@@ -134,7 +134,7 @@ func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 		Plans: make(map[refs.Plan]jsonPlan),
 	}
 	for _, f := range fs {
-		p := m.Plans[f.FeaturePlan.Plan()]
+		p := m.Plans[f.Plan()]
 		p.Title = f.PlanTitle
 		p.Currency = f.Currency
 		p.Interval = f.Interval
@@ -162,7 +162,7 @@ func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 			Base:  f.Base,
 			Tiers: tiers,
 		}
-		m.Plans[f.FeaturePlan.Plan()] = p
+		m.Plans[f.Plan()] = p
 	}
 	return json.MarshalIndent(m, "", "  ")
 }

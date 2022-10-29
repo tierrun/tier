@@ -44,7 +44,7 @@ func TestPricingHuJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	slices.SortFunc(got, func(a, b tier.Feature) bool {
-		return a.FeaturePlan.String() < b.FeaturePlan.String()
+		return a.Less(b.FeaturePlan)
 	})
 
 	want := []tier.Feature{

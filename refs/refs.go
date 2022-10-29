@@ -237,6 +237,10 @@ func (fp FeaturePlan) Version() string {
 	return fp.plan.String()
 }
 
+func (fp FeaturePlan) IsVersionOf(p Name) bool {
+	return fp.name == p.name
+}
+
 func SortGroupedByVersion(fs []FeaturePlan) {
 	slices.SortFunc(fs, func(a, b FeaturePlan) bool {
 		if a.Version() < b.Version() {

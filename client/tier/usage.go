@@ -95,7 +95,7 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) 
 	seen := map[refs.FeaturePlan]Usage{}
 	for _, line := range lines {
 		f := stripePriceToFeature(line.Price)
-		if f.FeaturePlan.IsZero() { // not a Tier price
+		if f.IsZero() { // not a Tier price
 			continue
 		}
 		if seen[f.FeaturePlan].Used <= line.Quantity {
@@ -118,7 +118,7 @@ func (c *Client) lookupSubscriptionItemID(ctx context.Context, org, name string,
 		return "", false, err
 	}
 	for _, f := range s.Features {
-		if f.FeaturePlan.Name() == feature {
+		if f.IsVersionOf(feature) {
 			return f.ReportID, f.IsMetered(), nil
 		}
 	}

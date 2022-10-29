@@ -87,7 +87,7 @@ func TestRoundTrip(t *testing.T) {
 
 	slices.SortFunc(got, func(a, b Feature) bool {
 		// TODO(bmizerany): embed struct on
-		return a.FeaturePlan.String() < b.FeaturePlan.String()
+		return a.Less(b.FeaturePlan)
 	})
 
 	diff.Test(t, t.Errorf, got, want,
