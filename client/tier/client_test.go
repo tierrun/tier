@@ -2,6 +2,7 @@ package tier
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -105,6 +106,35 @@ func TestRoundTrip(t *testing.T) {
 			t.Errorf("got %q, want %q", got.Name, want)
 		}
 	})
+}
+
+func TestPushPlanImmutability(t *testing.T) {
+	tc := newTestClient(t)
+	ctx := context.Background()
+
+	tc.Push(ctx, []Feature{{
+		FeaturePlan: mpf("feature:original@plan:test@0"),
+		Interval:    "@daily",
+		Currency:    "eur",
+	}}, pushLogger(t))
+
+	var got []error
+	f := func(_ Feature, err error) {
+		got = append(got, err)
+	}
+
+	tc.Push(ctx, []Feature{{
+		FeaturePlan: mpf("feature:new@plan:test@0"),
+		Interval:    "@daily",
+		Currency:    "eur",
+	}}, f)
+
+	want := []error{errors.New("TODO Push error")}
+	for i, err := range got {
+		if !errors.Is(err, want[i]) {
+			t.Errorf("got[%d] = %v, want %v", i, err, want[i])
+		}
+	}
 }
 
 func pushLogger(t *testing.T) func(f Feature, err error) {
