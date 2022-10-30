@@ -14,7 +14,7 @@ type Phase struct {
 type PhaseResponse struct {
 	Effective time.Time          `json:"effective,omitempty"`
 	Features  []refs.FeaturePlan `json:"features,omitempty"`
-	Plans     []refs.Plan        `json:"plans,omitempty"`
+	Plans     []refs.Version     `json:"plans,omitempty"`
 	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
 }
 

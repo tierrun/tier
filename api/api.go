@@ -192,7 +192,7 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 			return httpJSON(w, apitypes.PhaseResponse{
 				Effective: p.Effective,
 				Features:  p.Features,
-				Plans:     p.Plans,
+				Plans:     p.Groups,
 				Fragments: p.Fragments(),
 			})
 		}

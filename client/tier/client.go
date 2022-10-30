@@ -313,18 +313,18 @@ func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
 	for _, name := range names {
 		fp, err := refs.ParseFeaturePlan(name)
 		if err != nil {
-			p, err := refs.ParsePlan(name)
+			p, err := refs.ParseVersion(name)
 			if err != nil {
 				return nil, err
 			}
 			n := len(out)
 			for _, f := range fs {
-				if f.FeaturePlan.InPlan(p) {
+				if f.FeaturePlan.InGroup(p) {
 					out = append(out, f.FeaturePlan)
 				}
 			}
 			if len(out) == n {
-				return nil, fmt.Errorf("no features found for plan %q", p)
+				return nil, fmt.Errorf("no features found for group %q", p)
 			}
 		} else {
 			out = append(out, fp)

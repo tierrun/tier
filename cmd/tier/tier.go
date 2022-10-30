@@ -173,7 +173,7 @@ func runTier(cmd string, args []string) (err error) {
 
 			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t[%s]\n",
 				status,
-				f.Plan(),
+				f.Version(),
 				f.FeaturePlan.Name(),
 				link,
 				reason,
@@ -206,7 +206,7 @@ func runTier(cmd string, args []string) (err error) {
 		defer tw.Flush()
 
 		fmt.Fprintln(tw, strings.Join([]string{
-			"PLAN",
+			"GROUP",
 			"FEATURE",
 			"MODE",
 			"AGG",
@@ -216,7 +216,7 @@ func runTier(cmd string, args []string) (err error) {
 
 		for _, f := range fs {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
-				f.Plan(),
+				f.Version(),
 				f.FeaturePlan.Name(),
 				f.Mode,
 				f.Aggregate,
@@ -256,7 +256,7 @@ func runTier(cmd string, args []string) (err error) {
 			"ACTIVE",
 			"EFFECTIVE",
 			"FEATURE",
-			"PLAN",
+			"GROUP",
 		}, "\t"))
 		for i, p := range ps {
 			if i > 0 {
@@ -273,7 +273,7 @@ func runTier(cmd string, args []string) (err error) {
 					active,
 					p.Effective.Format(time.RFC3339),
 					f.Name(),
-					f.Plan(),
+					f.Version(),
 				)
 				fmt.Fprintln(tw, line)
 			}

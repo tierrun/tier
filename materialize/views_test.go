@@ -15,7 +15,7 @@ import (
 func TestPricingHuJSON(t *testing.T) {
 	data := []byte(`{
 		"plans": {
-			"plan:example@1": {
+			"plan:example1": {
 				"title": "Just an example plan to show off features",
 				"features": {
 					"feature:graduated": {
@@ -28,7 +28,7 @@ func TestPricingHuJSON(t *testing.T) {
 					}
 				}
 			},
-			"plan:example@2": {
+			"plan:example2": {
 				"title": "Just an example plan to show off features part duex",
 				"features": {
 					"feature:base": {
@@ -50,8 +50,8 @@ func TestPricingHuJSON(t *testing.T) {
 	want := []tier.Feature{
 		{
 			PlanTitle:   "Just an example plan to show off features part duex",
-			Title:       "feature:base@plan:example@2",
-			FeaturePlan: refs.MustParseFeaturePlan("feature:base@plan:example@2"),
+			Title:       "feature:base@plan:example2",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:base@plan:example2"),
 			Currency:    "usd",
 			Interval:    "@monthly",
 			Mode:        "graduated", // defaults
@@ -60,8 +60,8 @@ func TestPricingHuJSON(t *testing.T) {
 		},
 		{
 			PlanTitle:   "Just an example plan to show off features",
-			Title:       "feature:graduated@plan:example@1",
-			FeaturePlan: refs.MustParseFeaturePlan("feature:graduated@plan:example@1"),
+			Title:       "feature:graduated@plan:example1",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:graduated@plan:example1"),
 			Currency:    "usd",
 			Interval:    "@monthly",
 			Mode:        "graduated",
@@ -83,7 +83,7 @@ func TestPricingHuJSON(t *testing.T) {
 
 	wantJSON := []byte(`{
 		"plans": {
-			"plan:example@1": {
+			"plan:example1": {
 				"title": "Just an example plan to show off features",
 				"features": {
 					"feature:graduated": {
@@ -95,7 +95,7 @@ func TestPricingHuJSON(t *testing.T) {
 					}
 				}
 			},
-			"plan:example@2": {
+			"plan:example2": {
 				"title": "Just an example plan to show off features part duex",
 				"features": {
 					"feature:base": {

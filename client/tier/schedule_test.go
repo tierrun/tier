@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	mpf = refs.MustParseFeaturePlan
-	mpp = refs.MustParsePlan
-	mpn = refs.MustParseName
+	mpf  = refs.MustParseFeaturePlan
+	mpv  = refs.MustParseVersion
+	mpvs = refs.MustParseVersions
+	mpn  = refs.MustParseName
 )
 
 // interesting times to be in
@@ -50,13 +51,13 @@ func TestSchedule(t *testing.T) {
 	}
 
 	planFree := plan([]Feature{{
-		FeaturePlan: mpf("feature:x@plan:free@0"),
+		FeaturePlan: mpf("feature:x@plan:free"),
 		Interval:    "@monthly",
 		Currency:    "usd",
 	}})
 
 	planPro := plan([]Feature{{
-		FeaturePlan: mpf("feature:x@plan:pro@0"),
+		FeaturePlan: mpf("feature:x@plan:pro0"),
 		Interval:    "@monthly",
 		Base:        100,
 		Currency:    "usd",
@@ -90,7 +91,7 @@ func TestSchedule(t *testing.T) {
 		Current:   true,
 		Effective: t0,
 		Features:  planFree,
-		Plans:     plans("plan:free@0"),
+		Groups:    mpvs("plan:free"),
 	}})
 
 	clock.Advance(t1)
@@ -101,14 +102,14 @@ func TestSchedule(t *testing.T) {
 			Current:   false,
 			Effective: t0, // unchanged by advanced clock
 			Features:  planFree,
-			Plans:     plans("plan:free@0"),
+			Groups:    mpvs("plan:free"),
 		},
 		{
 			Org:       "org:example",
 			Current:   true,
 			Effective: t1, // unchanged by advanced clock
 			Features:  planPro,
-			Plans:     plans("plan:pro@0"),
+			Groups:    mpvs("plan:pro0"),
 		},
 	})
 
@@ -120,14 +121,14 @@ func TestSchedule(t *testing.T) {
 			Current:   false,
 			Effective: t0, // unchanged by advanced clock
 			Features:  planFree,
-			Plans:     plans("plan:free@0"),
+			Groups:    mpvs("plan:free"),
 		},
 		{
 			Org:       "org:example",
 			Current:   true,
 			Effective: t1, // unchanged by advanced clock
 			Features:  planFree,
-			Plans:     plans("plan:free@0"),
+			Groups:    mpvs("plan:free"),
 		},
 	})
 }
@@ -139,7 +140,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 	fs := []Feature{
 		{
 			// TODO(bmizerany): G: check/test plan name formats
-			FeaturePlan: mpf("feature:10@plan:test@0"),
+			FeaturePlan: mpf("feature:10@plan:test0"),
 			Interval:    "@daily",
 			Currency:    "usd",
 			Tiers:       []Tier{{Upto: 10}},
@@ -147,7 +148,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 			Aggregate:   "sum",
 		},
 		{
-			FeaturePlan: mpf("feature:inf@plan:test@0"),
+			FeaturePlan: mpf("feature:inf@plan:test0"),
 			Interval:    "@daily",
 			Currency:    "usd",
 			Tiers:       []Tier{{}},
@@ -155,7 +156,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 			Aggregate:   "sum",
 		},
 		{
-			FeaturePlan: mpf("feature:lic@plan:test@0"),
+			FeaturePlan: mpf("feature:lic@plan:test0"),
 			Interval:    "@daily",
 			Currency:    "usd",
 		},
@@ -183,7 +184,7 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 		Current:   true,
 		Features:  fps,
 
-		Plans: plans("plan:test@0"),
+		Groups: mpvs("plan:test0"),
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
@@ -191,12 +192,12 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 
 func TestSubscribeToPlan(t *testing.T) {
 	fs := []Feature{{
-		FeaturePlan: mpf("feature:x@plan:pro@0"),
+		FeaturePlan: mpf("feature:x@plan:pro"),
 		Interval:    "@monthly",
 		Base:        100,
 		Currency:    "usd",
 	}, {
-		FeaturePlan: mpf("feature:y@plan:pro@0"),
+		FeaturePlan: mpf("feature:y@plan:pro"),
 		Interval:    "@monthly",
 		Base:        1000,
 		Currency:    "usd",
@@ -207,8 +208,7 @@ func TestSubscribeToPlan(t *testing.T) {
 	tc.Push(ctx, fs, pushLogger(t))
 	tc.setClock(t, t0)
 
-	p := plans("plan:pro@0")[0]
-	if err := tc.SubscribeToPlan(ctx, "org:example", p); err != nil {
+	if err := tc.SubscribeToPlan(ctx, "org:example", mpv("plan:pro")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -222,7 +222,7 @@ func TestSubscribeToPlan(t *testing.T) {
 		Effective: t0,
 		Features:  FeaturePlans(fs),
 
-		Plans: plans("plan:pro@0"),
+		Groups: mpvs("plan:pro"),
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
@@ -230,7 +230,7 @@ func TestSubscribeToPlan(t *testing.T) {
 
 func TestDedupCustomer(t *testing.T) {
 	fs := []Feature{{
-		FeaturePlan: mpf("feature:x@plan:test@0"),
+		FeaturePlan: mpf("feature:x@plan:test"),
 		Interval:    "@daily",
 		Currency:    "usd",
 	}}
@@ -260,12 +260,12 @@ func TestDedupCustomer(t *testing.T) {
 func TestLookupPhases(t *testing.T) {
 	fs0 := []Feature{
 		{
-			FeaturePlan: mpf("feature:x@plan:test@0"),
+			FeaturePlan: mpf("feature:x@plan:test"),
 			Interval:    "@daily",
 			Currency:    "usd",
 		},
 		{
-			FeaturePlan: mpf("feature:y@plan:test@0"),
+			FeaturePlan: mpf("feature:y@plan:test"),
 			Interval:    "@daily",
 			Currency:    "usd",
 		},
@@ -291,18 +291,18 @@ func TestLookupPhases(t *testing.T) {
 		Effective: t0,
 		Features:  FeaturePlans(fs0),
 
-		Plans: plans("plan:test@0"),
+		Groups: mpvs("plan:test"),
 	}}
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
 
 	fs1 := []Feature{
 		{
-			FeaturePlan: mpf("feature:x@plan:test@1"),
+			FeaturePlan: mpf("feature:x@plan:test1"),
 			Interval:    "@daily",
 			Currency:    "usd",
 		},
 		{
-			FeaturePlan: mpf("feature:y@plan:test@1"),
+			FeaturePlan: mpf("feature:y@plan:test1"),
 			Interval:    "@daily",
 			Currency:    "usd",
 		},
@@ -333,7 +333,7 @@ func TestLookupPhases(t *testing.T) {
 		Effective: t0,
 		Features:  fpsFrag,
 
-		Plans: plans("plan:test@0"),
+		Groups: mpvs("plan:test"),
 	}}
 
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
@@ -342,7 +342,7 @@ func TestLookupPhases(t *testing.T) {
 func TestReportUsage(t *testing.T) {
 	fs := []Feature{
 		{
-			FeaturePlan: mpf("feature:10@plan:test@0"),
+			FeaturePlan: mpf("feature:10@plan:test"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 			Tiers:       []Tier{{Upto: 10}},
@@ -350,7 +350,7 @@ func TestReportUsage(t *testing.T) {
 			Aggregate:   "sum",
 		},
 		{
-			FeaturePlan: mpf("feature:inf@plan:test@0"),
+			FeaturePlan: mpf("feature:inf@plan:test"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 			Tiers:       []Tier{{Upto: Inf}},
@@ -358,7 +358,7 @@ func TestReportUsage(t *testing.T) {
 			Aggregate:   "sum",
 		},
 		{
-			FeaturePlan: mpf("feature:lic@plan:test@0"),
+			FeaturePlan: mpf("feature:lic@plan:test"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 		},
@@ -404,9 +404,9 @@ func TestReportUsage(t *testing.T) {
 	})
 
 	want := []Usage{
-		{Feature: mpf("feature:10@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
-		{Feature: mpf("feature:inf@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
-		{Feature: mpf("feature:lic@plan:test@0"), Start: t1, End: t2, Used: 1, Limit: Inf},
+		{Feature: mpf("feature:10@plan:test"), Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
+		{Feature: mpf("feature:inf@plan:test"), Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
+		{Feature: mpf("feature:lic@plan:test"), Start: t1, End: t2, Used: 1, Limit: Inf},
 	}
 
 	diff.Test(t, t.Errorf, got, want)
@@ -417,7 +417,7 @@ func TestReportUsageFeatureNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	fs := []Feature{{
-		FeaturePlan: mpf("feature:inf@plan:test@0"),
+		FeaturePlan: mpf("feature:inf@plan:test"),
 		Interval:    "@monthly",
 		Currency:    "usd",
 		Tiers:       []Tier{{Upto: Inf}},
@@ -441,8 +441,8 @@ func TestSubscribeToUnknownFeatures(t *testing.T) {
 	ctx := context.Background()
 
 	fs := refs.MustParseFeaturePlans(
-		"feature:A@plan:a@0",
-		"feature:B@plan:b@0",
+		"feature:A@plan:a",
+		"feature:B@plan:b",
 	)
 
 	got := tc.SubscribeTo(ctx, "org:example", fs)
@@ -452,7 +452,7 @@ func TestSubscribeToUnknownFeatures(t *testing.T) {
 
 	// make only plan:a valid
 	tc.Push(ctx, []Feature{{
-		FeaturePlan: mpf("feature:A@plan:a@0"),
+		FeaturePlan: mpf("feature:A@plan:a"),
 		Interval:    "@monthly",
 		Currency:    "usd",
 		Tiers:       []Tier{{Upto: Inf}},
@@ -474,12 +474,4 @@ func ciOnly(t *testing.T) {
 
 func endOfStripeMonth(t time.Time) time.Time {
 	return t.AddDate(0, 1, 0).Truncate(time.Minute).Add(-5 * time.Minute)
-}
-
-func plans(ss ...string) []refs.Plan {
-	var ps []refs.Plan
-	for _, s := range ss {
-		ps = append(ps, mpp(s))
-	}
-	return ps
 }

@@ -20,7 +20,7 @@ import (
 
 var (
 	mpn  = refs.MustParseName
-	mpps = refs.MustParsePlans
+	mpvs = refs.MustParseVersions
 	mpf  = refs.MustParseFeaturePlan
 	mpfs = refs.MustParseFeaturePlans
 )
@@ -45,12 +45,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			FeaturePlan: mpf("feature:x@plan:test@0"),
+			FeaturePlan: mpf("feature:x@plan:test"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 		},
 		{
-			FeaturePlan: mpf("feature:t@plan:test@0"),
+			FeaturePlan: mpf("feature:t@plan:test"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 			Aggregate:   "sum",
@@ -144,7 +144,7 @@ func TestAPISubscribe(t *testing.T) {
 		Code:    "org_not_found",
 		Message: "org not found",
 	})
-	sub("org:test", []string{"plan:test@0"}, nil)
+	sub("org:test", []string{"plan:test"}, nil)
 	whoIs("org:test", nil)
 
 	report("org:test", "feature:t", 9, nil)
@@ -181,11 +181,11 @@ func TestAPISubscribe(t *testing.T) {
 	})
 
 	checkPhase("org:test", apitypes.PhaseResponse{
-		Features: mpfs("feature:t@plan:test@0", "feature:x@plan:test@0"),
-		Plans:    mpps("plan:test@0"),
+		Features: mpfs("feature:t@plan:test", "feature:x@plan:test"),
+		Plans:    mpvs("plan:test"),
 	})
 
-	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, &trweb.HTTPError{
+	sub("org:test", []string{"plan:test", "feature:nope@0"}, &trweb.HTTPError{
 		Status:  400,
 		Code:    "feature_not_found",
 		Message: "feature not found",
@@ -220,12 +220,12 @@ func TestPhaseFragments(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			FeaturePlan: mpf("feature:x@plan:test@0"),
+			FeaturePlan: mpf("feature:x@plan:test"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 		},
 		{
-			FeaturePlan: mpf("feature:t@plan:test@0"),
+			FeaturePlan: mpf("feature:t@plan:test"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 			Aggregate:   "sum",
@@ -256,9 +256,9 @@ func TestPhaseFragments(t *testing.T) {
 	}
 
 	want := apitypes.PhaseResponse{
-		Features:  mpfs("feature:t@plan:test@0"),
+		Features:  mpfs("feature:t@plan:test"),
 		Plans:     nil,
-		Fragments: mpfs("feature:t@plan:test@0"),
+		Fragments: mpfs("feature:t@plan:test"),
 	}
 
 	// actively avoiding a stripe test clock here to keep the test

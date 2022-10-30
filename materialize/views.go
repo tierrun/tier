@@ -67,7 +67,7 @@ type jsonPlan struct {
 }
 
 type jsonModel struct {
-	Plans map[refs.Plan]jsonPlan `json:"plans"`
+	Plans map[refs.Version]jsonPlan `json:"plans"`
 }
 
 func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
@@ -96,7 +96,7 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 
 	for plan, p := range m.Plans {
 		for feature, f := range p.Features {
-			fn := feature.WithPlan(plan)
+			fn := feature.WithVersion(plan)
 			ff := tier.Feature{
 				FeaturePlan: fn,
 
@@ -131,10 +131,10 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 
 func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 	m := jsonModel{
-		Plans: make(map[refs.Plan]jsonPlan),
+		Plans: make(map[refs.Version]jsonPlan),
 	}
 	for _, f := range fs {
-		p := m.Plans[f.Plan()]
+		p := m.Plans[f.Version()]
 		p.Title = f.PlanTitle
 		p.Currency = f.Currency
 		p.Interval = f.Interval
@@ -162,7 +162,7 @@ func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 			Base:  f.Base,
 			Tiers: tiers,
 		}
-		m.Plans[f.Plan()] = p
+		m.Plans[f.Version()] = p
 	}
 	return json.MarshalIndent(m, "", "  ")
 }

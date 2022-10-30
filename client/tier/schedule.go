@@ -38,18 +38,18 @@ type Phase struct {
 	Features  []refs.FeaturePlan
 	Current   bool
 
-	// Plans is the set of plans that are currently active for the phase. A
-	// plan is considered active in a phase if all of its features are
+	// Groups is the set of versions that where all features with the same version are present together.
+	// group is considered active in a phase if all of its features are
 	// listed in the phase. If any features from a plan is in the phase
 	// without the other features in the plan, this phase is considered
 	// "fragmented".
-	Plans []refs.Plan
+	Groups []refs.Version
 }
 
 func (p *Phase) Fragments() []refs.FeaturePlan {
 	var fs []refs.FeaturePlan
 	for _, f := range p.Features {
-		if !slices.Contains(p.Plans, f.Plan()) {
+		if !slices.Contains(p.Groups, f.Version()) {
 			fs = append(fs, f)
 		}
 	}
@@ -313,7 +313,7 @@ func (c *Client) SubscribeToRefs(ctx context.Context, org string, refs []string)
 	return c.SubscribeTo(ctx, org, fs)
 }
 
-func (c *Client) SubscribeToPlan(ctx context.Context, org string, plan refs.Plan) error {
+func (c *Client) SubscribeToPlan(ctx context.Context, org string, plan refs.Version) error {
 	m, err := c.Pull(ctx, 0)
 	if err != nil {
 		return err
@@ -427,15 +427,15 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 				fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
 			}
 
-			var plans []refs.Plan
+			var groups []refs.Version
 			for _, f := range fs {
-				if slices.Contains(plans, f.Plan()) {
+				if slices.Contains(groups, f.Version()) {
 					continue
 				}
-				inModel := numFeaturesInPlan(m, f.Plan())
-				inPhase := numFeaturesInPlan(fs, f.Plan())
+				inModel := numFeaturesInGroup(m, f.Version())
+				inPhase := numFeaturesInGroup(fs, f.Version())
 				if inModel == inPhase {
-					plans = append(plans, f.Plan())
+					groups = append(groups, f.Version())
 				}
 
 			}
@@ -446,7 +446,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 				Features:  fs,
 				Current:   p.Start == s.Current.Start,
 
-				Plans: plans,
+				Groups: groups,
 			})
 		}
 	}
@@ -533,9 +533,9 @@ func nowOrSpecific(t time.Time) any {
 	return t
 }
 
-func numFeaturesInPlan(fs []refs.FeaturePlan, plan refs.Plan) (n int) {
+func numFeaturesInGroup(fs []refs.FeaturePlan, group refs.Version) (n int) {
 	for _, f := range fs {
-		if f.InPlan(plan) {
+		if f.InGroup(group) {
 			n++
 		}
 	}

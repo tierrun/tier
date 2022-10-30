@@ -89,9 +89,9 @@ If the --live flag is provided, your accounts live mode will be used.
 The output is in the format:
 
 	PLAN            FEATURE          MODE       AGG  BASE      LINK
-	plan:free@1     feature:bar      graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDMWTEocuaj
-	plan:free@1     feature:convert  graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDMmhWG3i5D
-	plan:pro@0      feature:convert  graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDM5COLDSY1
+	plan:free     feature:bar      graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDMWTEocuaj
+	plan:free     feature:convert  graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDMmhWG3i5D
+	plan:pro      feature:convert  graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDM5COLDSY1
 `,
 	"phases": `Usage:
 
@@ -103,14 +103,14 @@ If the --live flag is provided, your accounts live mode will be used.
 
 The output is in the format:
 
-	ORG        EFFECTIVE                  FEATURE                 PLAN
-	org:blake  2022-10-10T23:26:10-07:00  feature:convert:temp    plan:pro@0
-	org:blake  2022-10-10T23:26:10-07:00  feature:convert:volume  plan:pro@0
-	org:blake  2022-10-10T23:26:10-07:00  feature:convert:weight  plan:pro@0
+	ORG        EFFECTIVE                  FEATURE                 GROUP
+	org:blake  2022-10-10T23:26:10-07:00  feature:convert:temp    plan:pro
+	org:blake  2022-10-10T23:26:10-07:00  feature:convert:volume  plan:pro
+	org:blake  2022-10-10T23:26:10-07:00  feature:convert:weight  plan:pro
 `,
 	"subscribe": `Usage:
 
-	tier [--live] subscribe <org> <plan|featurePlan>...
+	tier [--live] subscribe <org> <group|feature>...
 
 Tier subscribe creates or updates a subscription for the provided org, applying
 the features in the plan.

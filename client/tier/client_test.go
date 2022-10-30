@@ -56,14 +56,14 @@ func TestRoundTrip(t *testing.T) {
 
 	want := []Feature{
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@3"),
+			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free0"),
 			Interval:    "@daily",
 			Currency:    "eur",
 			Title:       "Test2",
 			Base:        1000,
 		},
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@theVersion"),
+			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free1"),
 			PlanTitle:   "PlanTitle",
 			Interval:    "@yearly",
 			Currency:    "usd",
@@ -97,7 +97,7 @@ func TestRoundTrip(t *testing.T) {
 		var got struct {
 			Name string
 		}
-		if err := tc.Stripe.Do(ctx, "GET", "/v1/products/tier__feature-test-plan-free-theVersion", stripe.Form{}, &got); err != nil {
+		if err := tc.Stripe.Do(ctx, "GET", "/v1/products/tier__feature-test-plan-free1", stripe.Form{}, &got); err != nil {
 			t.Fatal(err)
 		}
 		const want = "PlanTitle - FeatureTitle"

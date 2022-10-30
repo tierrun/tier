@@ -11,10 +11,8 @@ import (
 
 // marshlers
 var (
-	_ encoding.TextMarshaler   = (*Plan)(nil)
 	_ encoding.TextMarshaler   = (*Name)(nil)
 	_ encoding.TextMarshaler   = (*FeaturePlan)(nil)
-	_ encoding.TextUnmarshaler = (*Plan)(nil)
 	_ encoding.TextUnmarshaler = (*Name)(nil)
 	_ encoding.TextUnmarshaler = (*FeaturePlan)(nil)
 )
@@ -25,80 +23,11 @@ type ParseError struct {
 }
 
 func (e *ParseError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Message, e.ID)
-}
-
-type Plan struct {
-	name    string
-	version string
-}
-
-func MustParsePlan(s string) Plan {
-	p, err := ParsePlan(s)
-	if err != nil {
-		panic(err)
-	}
-	return p
-}
-
-func (p Plan) String() string   { return "plan:" + p.name + "@" + p.version }
-func (p Plan) GoString() string { return fmt.Sprintf("<%s>", p) }
-
-func (p Plan) IsZero() bool { return p == Plan{} }
-
-func (p *Plan) UnmarshalJSON(b []byte) error {
-	return unmarshal(p, ParsePlan, b)
-}
-
-func (p *Plan) UnmarshalText(b []byte) error {
-	np, err := ParsePlan(string(b))
-	if err != nil {
-		return err
-	}
-	*p = np
-	return nil
-}
-
-func (p Plan) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.String())
-}
-
-func (p Plan) MarshalText() ([]byte, error) {
-	return []byte(p.String()), nil
-}
-
-func ParsePlan(s string) (Plan, error) {
-	prefix, rest, hasPrefix := strings.Cut(s, ":")
-	if !hasPrefix || prefix != "plan" {
-		return Plan{}, invalid("plan name must start with 'plan:'", s)
-	}
-	name, version, _ := strings.Cut(rest, "@")
-	if version == "" {
-		return Plan{}, invalid("plan must have version", s)
-	}
-	if isIllegalName(name) {
-		return Plan{}, invalid("plan name must match [a-zA-Z0-9:]+", s)
-	}
-	if isIllegalVersion(version) {
-		return Plan{}, invalid("plan version must match [a-zA-Z0-9]+", s)
-	}
-	return Plan{name: name, version: version}, nil
-}
-
-func MustParsePlans(s ...string) []Plan {
-	ps := make([]Plan, 0, len(s))
-	for _, s := range s {
-		p, err := ParsePlan(s)
-		if err != nil {
-			panic(err)
-		}
-		ps = append(ps, p)
-	}
-	return ps
+	return fmt.Sprintf("%s: %q", e.Message, e.ID)
 }
 
 type Name struct {
-	name string
+	s string
 }
 
 func MustParseName(s string) Name {
@@ -109,10 +38,12 @@ func MustParseName(s string) Name {
 	return n
 }
 
-func (n Name) String() string              { return "feature:" + n.name }
-func (n Name) GoString() string            { return fmt.Sprintf("<%s>", n) }
-func (n Name) WithPlan(p Plan) FeaturePlan { return FeaturePlan{name: n.name, plan: p} }
-func (n Name) Less(o Name) bool            { return n.name < o.name }
+func (n Name) String() string   { return "feature:" + n.s }
+func (n Name) GoString() string { return fmt.Sprintf("<%s>", n) }
+func (n Name) Less(o Name) bool { return n.s < o.s }
+func (n Name) WithVersion(v Version) FeaturePlan {
+	return FeaturePlan{name: n, version: v}
+}
 
 func (fp *Name) UnmarshalJSON(b []byte) error {
 	return unmarshal(fp, ParseName, b)
@@ -140,16 +71,71 @@ func ParseName(s string) (Name, error) {
 	if !hasPrefix || prefix != "feature" {
 		return Name{}, invalid("feature name must start with 'feature:'", s)
 	}
-	if isIllegalName(name) {
+	if isIllegalID(name) {
 		return Name{}, invalid("feature name must match [a-zA-Z0-9:]+", s)
 	}
-	return Name{name: name}, nil
+	return Name{s: name}, nil
+}
+
+type Version struct {
+	s string
+}
+
+func ParseVersion(s string) (Version, error) {
+	if isIllegalID(s) {
+		return Version{}, invalid("feature version must match [a-zA-Z0-9:]+", s)
+	}
+	return Version{s: s}, nil
+}
+
+func MustParseVersion(s string) Version {
+	v, err := ParseVersion(s)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func MustParseVersions(s ...string) []Version {
+	vs := make([]Version, 0, len(s))
+	for _, s := range s {
+		v, err := ParseVersion(s)
+		if err != nil {
+			panic(err)
+		}
+		vs = append(vs, v)
+	}
+	return vs
+}
+
+func (v Version) String() string      { return v.s }
+func (v Version) GoString() string    { return fmt.Sprintf("<version %s>", v) }
+func (v Version) Less(o Version) bool { return v.s < o.s }
+
+func (v *Version) UnmarshalJSON(b []byte) error {
+	return unmarshal(v, ParseVersion, b)
+}
+
+func (v *Version) UnmarshalText(b []byte) error {
+	pv, err := ParseVersion(string(b))
+	if err != nil {
+		return err
+	}
+	*v = pv
+	return nil
+}
+
+func (v Version) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+func (v Version) MarshalText() ([]byte, error) {
+	return []byte(v.String()), nil
 }
 
 type FeaturePlan struct {
-	name    string
-	version string // empty if plan is non-empty
-	plan    Plan
+	name    Name
+	version Version
 }
 
 func ParseFeaturePlans(s ...string) ([]FeaturePlan, error) {
@@ -164,29 +150,28 @@ func ParseFeaturePlans(s ...string) ([]FeaturePlan, error) {
 	return fps, nil
 }
 
-func ParseFeaturePlan(s string) (FeaturePlan, error) {
-	prefix, rest, hasPrefix := strings.Cut(s, ":")
-	if !hasPrefix || prefix != "feature" {
-		return FeaturePlan{}, invalid("feature plan must start with 'feature:'", s)
+func MustParseFeaturePlans(s ...string) []FeaturePlan {
+	fps, err := ParseFeaturePlans(s...)
+	if err != nil {
+		panic(err)
 	}
-	name, version, hasVersion := strings.Cut(rest, "@")
-	if isIllegalName(name) {
-		return FeaturePlan{}, invalid("feature plan name must match [a-zA-Z0-9:]+", s)
-	}
-	if !hasVersion {
-		return FeaturePlan{}, invalid("feature plan must have version", s)
-	}
+	return fps
+}
 
-	fp := FeaturePlan{name: name}
-	if p, err := ParsePlan(version); err == nil {
-		fp.plan = p
-		return fp, nil
+func ParseFeaturePlan(s string) (FeaturePlan, error) {
+	name, version, hasVersion := strings.Cut(s, "@")
+	if !hasVersion {
+		return FeaturePlan{}, invalid("feature must have version", s)
 	}
-	if isIllegalVersion(version) {
-		return FeaturePlan{}, invalid("feature plan version must match [a-zA-Z0-9]+ or be a valid plan", s)
+	n, err := ParseName(name)
+	if err != nil {
+		return FeaturePlan{}, err
 	}
-	fp.version = version
-	return fp, nil
+	v, err := ParseVersion(version)
+	if err != nil {
+		return FeaturePlan{}, err
+	}
+	return FeaturePlan{name: n, version: v}, nil
 }
 
 func MustParseFeaturePlan(s string) FeaturePlan {
@@ -197,16 +182,8 @@ func MustParseFeaturePlan(s string) FeaturePlan {
 	return fp
 }
 
-func MustParseFeaturePlans(s ...string) []FeaturePlan {
-	fps, err := ParseFeaturePlans(s...)
-	if err != nil {
-		panic(err)
-	}
-	return fps
-}
-
 func ByName(a, b FeaturePlan) bool {
-	return a.name < b.name
+	return a.name.s < b.name.s
 }
 
 func (fp *FeaturePlan) UnmarshalJSON(b []byte) error {
@@ -234,30 +211,21 @@ func (fp FeaturePlan) IsZero() bool {
 	return fp == FeaturePlan{}
 }
 
-func (fp FeaturePlan) String() string   { return fmt.Sprintf("feature:%s@%s", fp.name, fp.Version()) }
+func (fp FeaturePlan) String() string   { return fmt.Sprintf("%s@%s", fp.name, fp.Version()) }
 func (fp FeaturePlan) GoString() string { return fmt.Sprintf("<%s>", fp) }
 
-func (fp FeaturePlan) Name() Name             { return Name{name: fp.name} }
-func (fp FeaturePlan) Plan() Plan             { return fp.plan }
-func (fp FeaturePlan) InPlan(p Plan) bool     { return fp.plan == p }
+func (fp FeaturePlan) Name() Name             { return fp.name }
+func (fp FeaturePlan) Version() Version       { return fp.version }
+func (fp FeaturePlan) InGroup(v Version) bool { return fp.version == v }
 func (a FeaturePlan) Less(b FeaturePlan) bool { return a.String() < b.String() }
 
-// Version returns the version of the feature plan as it was parsed. This means
-// if the version is a plan, the plan identifier is returned.
-func (fp FeaturePlan) Version() string {
-	if fp.version != "" {
-		return fp.version
-	}
-	return fp.plan.String()
-}
-
 func (fp FeaturePlan) IsVersionOf(p Name) bool {
-	return fp.name == p.name
+	return fp.name == p
 }
 
 func SortGroupedByVersion(fs []FeaturePlan) {
 	slices.SortFunc(fs, func(a, b FeaturePlan) bool {
-		if a.Version() < b.Version() {
+		if a.version.s < b.version.s {
 			return true
 		}
 		return a.Less(b)
@@ -268,31 +236,18 @@ func invalid(msg string, id string) error {
 	return &ParseError{Message: msg, ID: id}
 }
 
-func isIllegalName(s string) bool {
+func isIllegalID(s string) bool {
 	if len(s) == 0 {
 		return true
 	}
-	return strings.IndexFunc(s, isIllegalNameRune) != -1
+	return strings.IndexFunc(s, isIllegalRune) != -1
 }
 
-func isIllegalNameRune(r rune) bool {
+func isIllegalRune(r rune) bool {
 	return !(r >= 'a' && r <= 'z' ||
 		r >= 'A' && r <= 'Z' ||
 		r >= '0' && r <= '9' ||
 		r == ':')
-}
-
-func isIllegalVersion(s string) bool {
-	if len(s) == 0 {
-		return true
-	}
-	return strings.IndexFunc(s, isIllegalVersionRune) != -1
-}
-
-func isIllegalVersionRune(r rune) bool {
-	return !(r >= 'a' && r <= 'z' ||
-		r >= 'A' && r <= 'Z' ||
-		r >= '0' && r <= '9')
 }
 
 func unmarshal[T any](v *T, f func(s string) (T, error), b []byte) error {

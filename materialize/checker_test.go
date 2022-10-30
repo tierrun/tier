@@ -11,18 +11,18 @@ func TestValidatePlanID(t *testing.T) {
 		planID string
 		valid  bool
 	}{
-		{"plan:a@0", true},
-		{"plan:a@x", true},
-		{"plan:a@11", true},
-		{"plan:a@1a2b3c", true},
-		{"plan:a@a2b3c1", true},
+		{"plan:a", true},
+		{"plan:ax", true},
+		{"plan:a11", true},
+		{"plan:a1a2b3c", true},
+		{"plan:aa2b3c1", true},
 	}
 
 	for _, tc := range cases {
-		planID := refs.MustParsePlan(tc.planID)
+		planID := refs.MustParseVersion(tc.planID)
 		t.Run(tc.planID, func(t *testing.T) {
 			m := jsonModel{
-				Plans: map[refs.Plan]jsonPlan{
+				Plans: map[refs.Version]jsonPlan{
 					planID: {
 						Features: map[refs.Name]jsonFeature{
 							refs.MustParseName("feature:x"): {},
