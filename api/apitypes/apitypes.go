@@ -12,10 +12,10 @@ type Phase struct {
 }
 
 type PhaseResponse struct {
-	Effective time.Time `json:"effective,omitempty"`
-	Features  []string  `json:"features,omitempty"`
-	Plans     []string  `json:"plans,omitempty"`
-	Fragments []string  `json:"fragments,omitempty"`
+	Effective time.Time          `json:"effective,omitempty"`
+	Features  []refs.FeaturePlan `json:"features,omitempty"`
+	Plans     []refs.Plan        `json:"plans,omitempty"`
+	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
 }
 
 type SubscribeRequest struct {
@@ -25,7 +25,7 @@ type SubscribeRequest struct {
 
 type ReportRequest struct {
 	Org     string
-	Feature string
+	Feature refs.Name
 	N       int
 	At      time.Time
 	Clobber bool
