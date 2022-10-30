@@ -50,13 +50,13 @@ func TestSchedule(t *testing.T) {
 	}
 
 	planFree := plan([]Feature{{
-		FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:free@0"),
+		FeaturePlan: mpf("feature:x@plan:free@0"),
 		Interval:    "@monthly",
 		Currency:    "usd",
 	}})
 
 	planPro := plan([]Feature{{
-		FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:pro@0"),
+		FeaturePlan: mpf("feature:x@plan:pro@0"),
 		Interval:    "@monthly",
 		Base:        100,
 		Currency:    "usd",

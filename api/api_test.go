@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	rpn = refs.MustParseName
-	_   = refs.MustParsePlan
-	_   = refs.MustParseFeaturePlan
+	mpn  = refs.MustParseName
+	mpps = refs.MustParsePlans
+	mpf  = refs.MustParseFeaturePlan
+	mpfs = refs.MustParseFeaturePlans
 )
 
 func newTestClient(t *testing.T) (*http.Client, *tier.Client) {
@@ -44,12 +45,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:test@0"),
+			FeaturePlan: mpf("feature:x@plan:test@0"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 		},
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:t@plan:test@0"),
+			FeaturePlan: mpf("feature:t@plan:test@0"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 			Aggregate:   "sum",
@@ -99,7 +100,7 @@ func TestAPISubscribe(t *testing.T) {
 		t.Helper()
 		defer maybeFailNow(t)
 		_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "POST", "/v1/report", &apitypes.ReportRequest{
-			Feature: feature,
+			Feature: mpn(feature),
 			Org:     org,
 			N:       n,
 		})
@@ -156,12 +157,12 @@ func TestAPISubscribe(t *testing.T) {
 
 	checkUsage("org:test", []apitypes.Usage{
 		{
-			Feature: rpn("feature:t"),
+			Feature: mpn("feature:t"),
 			Used:    10,
 			Limit:   tier.Inf,
 		},
 		{
-			Feature: rpn("feature:x"),
+			Feature: mpn("feature:x"),
 			Used:    1,
 			Limit:   tier.Inf,
 		},
@@ -180,8 +181,8 @@ func TestAPISubscribe(t *testing.T) {
 	})
 
 	checkPhase("org:test", apitypes.PhaseResponse{
-		Features: []string{"feature:t@plan:test@0", "feature:x@plan:test@0"},
-		Plans:    []string{"plan:test@0"},
+		Features: mpfs("feature:t@plan:test@0", "feature:x@plan:test@0"),
+		Plans:    mpps("plan:test@0"),
 	})
 
 	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, &trweb.HTTPError{
@@ -219,12 +220,12 @@ func TestPhaseFragments(t *testing.T) {
 
 	m := []tier.Feature{
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:test@0"),
+			FeaturePlan: mpf("feature:x@plan:test@0"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 		},
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:t@plan:test@0"),
+			FeaturePlan: mpf("feature:t@plan:test@0"),
 			Interval:    "@monthly",
 			Currency:    "usd",
 			Aggregate:   "sum",
@@ -255,9 +256,9 @@ func TestPhaseFragments(t *testing.T) {
 	}
 
 	want := apitypes.PhaseResponse{
-		Features:  []string{"feature:t@plan:test@0"},
+		Features:  mpfs("feature:t@plan:test@0"),
 		Plans:     nil,
-		Fragments: []string{"feature:t@plan:test@0"},
+		Fragments: mpfs("feature:t@plan:test@0"),
 	}
 
 	// actively avoiding a stripe test clock here to keep the test

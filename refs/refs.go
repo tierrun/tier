@@ -41,8 +41,10 @@ func MustParsePlan(s string) Plan {
 	return p
 }
 
-func (p Plan) String() string { return "plan:" + p.name + "@" + p.version }
-func (p Plan) IsZero() bool   { return p == Plan{} }
+func (p Plan) String() string   { return "plan:" + p.name + "@" + p.version }
+func (p Plan) GoString() string { return fmt.Sprintf("<%s>", p) }
+
+func (p Plan) IsZero() bool { return p == Plan{} }
 
 func (p *Plan) UnmarshalJSON(b []byte) error {
 	return unmarshal(p, ParsePlan, b)
@@ -83,6 +85,18 @@ func ParsePlan(s string) (Plan, error) {
 	return Plan{name: name, version: version}, nil
 }
 
+func MustParsePlans(s ...string) []Plan {
+	ps := make([]Plan, 0, len(s))
+	for _, s := range s {
+		p, err := ParsePlan(s)
+		if err != nil {
+			panic(err)
+		}
+		ps = append(ps, p)
+	}
+	return ps
+}
+
 type Name struct {
 	name string
 }
@@ -96,6 +110,7 @@ func MustParseName(s string) Name {
 }
 
 func (n Name) String() string              { return "feature:" + n.name }
+func (n Name) GoString() string            { return fmt.Sprintf("<%s>", n) }
 func (n Name) WithPlan(p Plan) FeaturePlan { return FeaturePlan{name: n.name, plan: p} }
 func (n Name) Less(o Name) bool            { return n.name < o.name }
 
@@ -138,7 +153,7 @@ type FeaturePlan struct {
 }
 
 func ParseFeaturePlans(s ...string) ([]FeaturePlan, error) {
-	fps := make([]FeaturePlan, len(s))
+	fps := make([]FeaturePlan, 0, len(s))
 	for _, s := range s {
 		fp, err := ParseFeaturePlan(s)
 		if err != nil {
@@ -219,9 +234,8 @@ func (fp FeaturePlan) IsZero() bool {
 	return fp == FeaturePlan{}
 }
 
-func (fp FeaturePlan) String() string {
-	return fmt.Sprintf("feature:%s@%s", fp.name, fp.Version())
-}
+func (fp FeaturePlan) String() string   { return fmt.Sprintf("feature:%s@%s", fp.name, fp.Version()) }
+func (fp FeaturePlan) GoString() string { return fmt.Sprintf("<%s>", fp) }
 
 func (fp FeaturePlan) Name() Name             { return Name{name: fp.name} }
 func (fp FeaturePlan) Plan() Plan             { return fp.plan }

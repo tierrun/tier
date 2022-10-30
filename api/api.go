@@ -11,7 +11,6 @@ import (
 	"tier.run/api/apitypes"
 	"tier.run/client/tier"
 	"tier.run/materialize"
-	"tier.run/refs"
 	"tier.run/trweb"
 	"tier.run/values"
 )
@@ -160,12 +159,7 @@ func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	fn, err := refs.ParseName(rr.Feature)
-	if err != nil {
-		return err
-	}
-
-	return h.c.ReportUsage(r.Context(), rr.Org, fn, tier.Report{
+	return h.c.ReportUsage(r.Context(), rr.Org, rr.Feature, tier.Report{
 		N:       rr.N,
 		At:      values.Coalesce(rr.At, time.Now()),
 		Clobber: rr.Clobber,
@@ -197,9 +191,9 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 		if p.Current {
 			return httpJSON(w, apitypes.PhaseResponse{
 				Effective: p.Effective,
-				Features:  values.Strings(p.Features),
-				Plans:     values.Strings(p.Plans),
-				Fragments: values.Strings(p.Fragments()),
+				Features:  p.Features,
+				Plans:     p.Plans,
+				Fragments: p.Fragments(),
 			})
 		}
 	}
