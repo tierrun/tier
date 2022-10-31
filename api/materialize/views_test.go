@@ -9,6 +9,7 @@ import (
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/client/tier"
+	"tier.run/control"
 	"tier.run/refs"
 )
 
@@ -43,11 +44,11 @@ func TestPricingHuJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	slices.SortFunc(got, func(a, b tier.Feature) bool {
+	slices.SortFunc(got, func(a, b control.Feature) bool {
 		return a.Less(b.FeaturePlan)
 	})
 
-	want := []tier.Feature{
+	want := []control.Feature{
 		{
 			PlanTitle:   "Just an example plan to show off features part duex",
 			Title:       "feature:base@plan:example@2",
@@ -66,7 +67,7 @@ func TestPricingHuJSON(t *testing.T) {
 			Interval:    "@monthly",
 			Mode:        "graduated",
 			Aggregate:   "sum",
-			Tiers: []tier.Tier{
+			Tiers: []control.Tier{
 				{Upto: 10, Price: 0, Base: 0},
 				{Upto: 20, Price: 100, Base: 0},
 				{Upto: tier.Inf, Price: 50, Base: 0},

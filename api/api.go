@@ -10,24 +10,24 @@ import (
 	"github.com/kr/pretty"
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
-	"tier.run/client/tier"
+	"tier.run/control"
 	"tier.run/trweb"
 	"tier.run/values"
 )
 
 // HTTP Errors
 var errorLookup = map[error]error{
-	tier.ErrOrgNotFound: &trweb.HTTPError{
+	control.ErrOrgNotFound: &trweb.HTTPError{
 		Status:  400,
 		Code:    "org_not_found",
 		Message: "org not found",
 	},
-	tier.ErrFeatureNotFound: &trweb.HTTPError{
+	control.ErrFeatureNotFound: &trweb.HTTPError{
 		Status:  400,
 		Code:    "feature_not_found",
 		Message: "feature not found",
 	},
-	tier.ErrFeatureNotMetered: &trweb.HTTPError{
+	control.ErrFeatureNotMetered: &trweb.HTTPError{
 		Status:  400,
 		Code:    "invalid_request",
 		Message: "feature not reportable",
@@ -47,11 +47,11 @@ func lookupErr(err error) error {
 
 type Handler struct {
 	Logf   func(format string, args ...any)
-	c      *tier.Client
+	c      *control.Client
 	helper func()
 }
 
-func NewHandler(c *tier.Client, logf func(string, ...any)) *Handler {
+func NewHandler(c *control.Client, logf func(string, ...any)) *Handler {
 	return &Handler{c: c, Logf: logf, helper: func() {}}
 }
 
@@ -80,7 +80,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var e *tier.ValidationError
+	var e *control.ValidationError
 	if errors.As(err, &e) {
 		dbg("validationerr")
 		trweb.WriteError(w, &trweb.HTTPError{
@@ -138,13 +138,13 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	var phases []tier.Phase
+	var phases []control.Phase
 	for _, p := range sr.Phases {
-		fs, err := tier.Expand(m, p.Features...)
+		fs, err := control.Expand(m, p.Features...)
 		if err != nil {
 			return err
 		}
-		phases = append(phases, tier.Phase{
+		phases = append(phases, control.Phase{
 			Effective: p.Effective,
 			Features:  fs,
 		})
@@ -159,7 +159,7 @@ func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return h.c.ReportUsage(r.Context(), rr.Org, rr.Feature, tier.Report{
+	return h.c.ReportUsage(r.Context(), rr.Org, rr.Feature, control.Report{
 		N:       rr.N,
 		At:      values.Coalesce(rr.At, time.Now()),
 		Clobber: rr.Clobber,

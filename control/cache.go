@@ -1,4 +1,4 @@
-package tier
+package control
 
 import (
 	"sync"

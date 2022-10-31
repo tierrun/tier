@@ -9,6 +9,7 @@ import (
 	"github.com/tailscale/hujson"
 	"kr.dev/errorfmt"
 	"tier.run/client/tier"
+	"tier.run/control"
 	"tier.run/refs"
 	"tier.run/values"
 )
@@ -70,7 +71,7 @@ type jsonModel struct {
 	Plans map[refs.Plan]jsonPlan `json:"plans"`
 }
 
-func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
+func FromPricingHuJSON(data []byte) (fs []control.Feature, err error) {
 	var debug []string
 	dbg := func(k string) {
 		debug = append(debug, k)
@@ -97,7 +98,7 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 	for plan, p := range m.Plans {
 		for feature, f := range p.Features {
 			fn := feature.WithPlan(plan)
-			ff := tier.Feature{
+			ff := control.Feature{
 				FeaturePlan: fn,
 
 				Currency: values.Coalesce(p.Currency, "usd"),
@@ -113,9 +114,9 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 			}
 
 			if len(f.Tiers) > 0 {
-				ff.Tiers = make([]tier.Tier, len(f.Tiers))
+				ff.Tiers = make([]control.Tier, len(f.Tiers))
 				for i, t := range f.Tiers {
-					ff.Tiers[i] = tier.Tier{
+					ff.Tiers[i] = control.Tier{
 						Upto:  t.Upto,
 						Price: t.Price,
 						Base:  t.Base,
@@ -129,7 +130,7 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 	return fs, nil
 }
 
-func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
+func ToPricingJSON(fs []control.Feature) ([]byte, error) {
 	m := jsonModel{
 		Plans: make(map[refs.Plan]jsonPlan),
 	}

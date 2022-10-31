@@ -10,7 +10,7 @@ import (
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/api/apitypes"
-	"tier.run/client/tier"
+	"tier.run/control"
 	"tier.run/fetch"
 	"tier.run/fetch/fetchtest"
 	"tier.run/refs"
@@ -25,10 +25,10 @@ var (
 	mpfs = refs.MustParseFeaturePlans
 )
 
-func newTestClient(t *testing.T) (*http.Client, *tier.Client) {
+func newTestClient(t *testing.T) (*http.Client, *control.Client) {
 	sc := stroke.Client(t)
 	sc = stroke.WithAccount(t, sc)
-	tc := &tier.Client{
+	tc := &control.Client{
 		Stripe: sc,
 		Logf:   t.Logf,
 	}
@@ -43,7 +43,7 @@ func TestAPISubscribe(t *testing.T) {
 	ctx := context.Background()
 	c, tc := newTestClient(t)
 
-	m := []tier.Feature{
+	m := []control.Feature{
 		{
 			FeaturePlan: mpf("feature:x@plan:test@0"),
 			Interval:    "@monthly",
@@ -55,12 +55,12 @@ func TestAPISubscribe(t *testing.T) {
 			Currency:    "usd",
 			Aggregate:   "sum",
 			Mode:        "graduated",
-			Tiers: []tier.Tier{
-				{Upto: tier.Inf, Price: 100},
+			Tiers: []control.Tier{
+				{Upto: control.Inf, Price: 100},
 			},
 		},
 	}
-	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
+	if err := tc.Push(ctx, m, func(f control.Feature, err error) {
 		if err != nil {
 			t.Logf("error pushing %q: %v", f.FeaturePlan, err)
 		}
@@ -159,12 +159,12 @@ func TestAPISubscribe(t *testing.T) {
 		{
 			Feature: mpn("feature:t"),
 			Used:    10,
-			Limit:   tier.Inf,
+			Limit:   control.Inf,
 		},
 		{
 			Feature: mpn("feature:x"),
 			Used:    1,
-			Limit:   tier.Inf,
+			Limit:   control.Inf,
 		},
 	})
 
@@ -218,7 +218,7 @@ func TestPhaseFragments(t *testing.T) {
 	ctx := context.Background()
 	c, tc := newTestClient(t)
 
-	m := []tier.Feature{
+	m := []control.Feature{
 		{
 			FeaturePlan: mpf("feature:x@plan:test@0"),
 			Interval:    "@monthly",
@@ -230,12 +230,12 @@ func TestPhaseFragments(t *testing.T) {
 			Currency:    "usd",
 			Aggregate:   "sum",
 			Mode:        "graduated",
-			Tiers: []tier.Tier{
-				{Upto: tier.Inf, Price: 100},
+			Tiers: []control.Tier{
+				{Upto: control.Inf, Price: 100},
 			},
 		},
 	}
-	if err := tc.Push(ctx, m, func(f tier.Feature, err error) {
+	if err := tc.Push(ctx, m, func(f control.Feature, err error) {
 		if err != nil {
 			t.Logf("error pushing %q: %v", f.FeaturePlan, err)
 		}
@@ -246,7 +246,7 @@ func TestPhaseFragments(t *testing.T) {
 	// cheating and using the tier client because ATM the API only supports
 	// subscribing to plans.
 	frag := m[1:]
-	if err := tc.SubscribeTo(ctx, "org:test", tier.FeaturePlans(frag)); err != nil {
+	if err := tc.SubscribeTo(ctx, "org:test", control.FeaturePlans(frag)); err != nil {
 		t.Fatal(err)
 	}
 

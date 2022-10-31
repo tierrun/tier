@@ -20,6 +20,7 @@ import (
 	"golang.org/x/exp/slices"
 	"tier.run/api/materialize"
 	"tier.run/client/tier"
+	"tier.run/control"
 	"tier.run/profile"
 	"tier.run/refs"
 	"tier.run/stripe"
@@ -155,14 +156,14 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		defer f.Close()
 
-		if err := pushJSON(ctx, f, func(f tier.Feature, err error) {
+		if err := pushJSON(ctx, f, func(f control.Feature, err error) {
 			link := makeLink(f)
 			var status, reason string
 			switch err {
 			case nil:
 				status = "ok"
 				reason = "created"
-			case tier.ErrFeatureExists:
+			case control.ErrFeatureExists:
 				status = "ok"
 				reason = "feature already exists"
 			default:
@@ -318,7 +319,7 @@ func runTier(cmd string, args []string) (err error) {
 			return err
 		}
 
-		return tc().ReportUsage(ctx, org, fn, tier.Report{
+		return tc().ReportUsage(ctx, org, fn, control.Report{
 			At: time.Now(),
 			N:  n,
 			// TODO(bmizerany): suuport Clobber
@@ -329,7 +330,7 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		org := args[0]
 		cid, err := tc().WhoIs(ctx, org)
-		if errors.Is(err, tier.ErrOrgNotFound) {
+		if errors.Is(err, control.ErrOrgNotFound) {
 			return fmt.Errorf("no customer found for %q", org)
 		}
 		if err != nil {
@@ -356,9 +357,9 @@ func fileOrStdin(fname string) (io.ReadCloser, error) {
 	return os.Open(fname)
 }
 
-var tierClient *tier.Client
+var tierClient *control.Client
 
-func tc() *tier.Client {
+func tc() *control.Client {
 	if tierClient == nil {
 		key, err := getKey()
 		if err != nil {
@@ -386,7 +387,7 @@ func tc() *tier.Client {
 			KeyPrefix: os.Getenv("TIER_KEY_PREFIX"),
 			Logf:      vlogf,
 		}
-		tierClient = &tier.Client{
+		tierClient = &control.Client{
 			Stripe: sc,
 			Logf:   vlogf,
 		}
@@ -422,7 +423,7 @@ func newID() string {
 	return hex.EncodeToString(buf[:])
 }
 
-func pushJSON(ctx context.Context, r io.Reader, cb func(tier.Feature, error)) error {
+func pushJSON(ctx context.Context, r io.Reader, cb func(control.Feature, error)) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -435,7 +436,7 @@ func pushJSON(ctx context.Context, r io.Reader, cb func(tier.Feature, error)) er
 	return nil
 }
 
-func makeLink(f tier.Feature) string {
+func makeLink(f control.Feature) string {
 	link, err := url.JoinPath(dashURL[tc().Live()], "products", f.ID())
 	if err != nil {
 		panic(err)
