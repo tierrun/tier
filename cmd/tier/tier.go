@@ -18,8 +18,8 @@ import (
 
 	"go4.org/types"
 	"golang.org/x/exp/slices"
+	"tier.run/api/materialize"
 	"tier.run/client/tier"
-	"tier.run/materialize"
 	"tier.run/profile"
 	"tier.run/refs"
 	"tier.run/stripe"

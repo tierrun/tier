@@ -9,8 +9,8 @@ import (
 
 	"github.com/kr/pretty"
 	"tier.run/api/apitypes"
+	"tier.run/api/materialize"
 	"tier.run/client/tier"
-	"tier.run/materialize"
 	"tier.run/trweb"
 	"tier.run/values"
 )
