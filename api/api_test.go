@@ -10,6 +10,7 @@ import (
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/api/apitypes"
+	"tier.run/client/tier"
 	"tier.run/control"
 	"tier.run/fetch"
 	"tier.run/fetch/fetchtest"
@@ -41,7 +42,9 @@ func TestAPISubscribe(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	c, tc := newTestClient(t)
+	c, cc := newTestClient(t)
+
+	tc := &tier.Client{HTTPClient: c}
 
 	m := []control.Feature{
 		{
@@ -60,7 +63,7 @@ func TestAPISubscribe(t *testing.T) {
 			},
 		},
 	}
-	if err := tc.Push(ctx, m, func(f control.Feature, err error) {
+	if err := cc.Push(ctx, m, func(f control.Feature, err error) {
 		if err != nil {
 			t.Logf("error pushing %q: %v", f.FeaturePlan, err)
 		}
@@ -71,7 +74,7 @@ func TestAPISubscribe(t *testing.T) {
 	whoIs := func(org string, wantErr error) {
 		t.Helper()
 		defer maybeFailNow(t)
-		g, err := fetch.OK[apitypes.WhoIsResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/whois?org="+org, nil)
+		g, err := tc.WhoIs(ctx, org)
 		diff.Test(t, t.Fatalf, err, wantErr)
 		if wantErr != nil {
 			return
@@ -87,21 +90,17 @@ func TestAPISubscribe(t *testing.T) {
 	sub := func(org string, features []string, wantErr error) {
 		t.Helper()
 		defer maybeFailNow(t)
-		_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "POST", "/v1/subscribe", &apitypes.SubscribeRequest{
-			Org: org,
-			Phases: []apitypes.Phase{{
-				Features: features,
-			}},
-		})
+		err := tc.SubscribeToRefs(ctx, org, features)
 		diff.Test(t, t.Errorf, err, wantErr)
 	}
 
 	report := func(org, feature string, n int, wantErr error) {
 		t.Helper()
 		defer maybeFailNow(t)
-		_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "POST", "/v1/report", &apitypes.ReportRequest{
-			Feature: mpn(feature),
+		fn := mpn(feature)
+		err := tc.ReportUsage(ctx, apitypes.ReportRequest{
 			Org:     org,
+			Feature: fn,
 			N:       n,
 		})
 		diff.Test(t, t.Errorf, err, wantErr)
@@ -110,7 +109,7 @@ func TestAPISubscribe(t *testing.T) {
 	checkUsage := func(org string, want []apitypes.Usage) {
 		t.Helper()
 		defer maybeFailNow(t)
-		got, err := fetch.OK[apitypes.UsageResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/limits?org="+org, nil)
+		got, err := tc.LookupLimits(ctx, org)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -124,11 +123,10 @@ func TestAPISubscribe(t *testing.T) {
 	checkPhase := func(org string, want apitypes.PhaseResponse) {
 		t.Helper()
 		defer maybeFailNow(t)
-		got, err := fetch.OK[apitypes.PhaseResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/phase?org="+org, nil)
+		got, err := tc.LookupPhase(ctx, org)
 		if err != nil {
 			t.Fatal(err)
 		}
-
 		// actively avoiding a stripe test clock here to keep the test
 		// from being horribly slow, so buying time by spot checking
 		// the Effective field is at least set.
