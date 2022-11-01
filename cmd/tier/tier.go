@@ -298,9 +298,11 @@ func runTier(cmd string, args []string) (err error) {
 			return err
 		}
 
-		return tc().ReportUsage(ctx, org, fn, apitypes.ReportRequest{
-			At: time.Now(),
-			N:  n,
+		return tc().ReportUsage(ctx, apitypes.ReportRequest{
+			Org:     org,
+			Feature: fn,
+			At:      time.Now(),
+			N:       n,
 			// TODO(bmizerany): suuport Clobber
 		})
 	case "whois":
