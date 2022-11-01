@@ -25,6 +25,11 @@ type event struct {
 	DisplayName string
 	DeviceName  string
 	Version     string
+
+	GOOS   string
+	GOARCH string
+
+	IsHomeBrewInstall bool
 }
 
 var report = &reporter{}

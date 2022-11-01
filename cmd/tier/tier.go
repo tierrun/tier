@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -102,18 +103,23 @@ func runTier(cmd string, args []string) (err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 
+		isHomebrewInstall := cmd == "version" && slices.Contains(args, "--homebrew")
+
 		report.send(ctx, &event{
-			TraceID:     traceID,
-			ID:          traceID,
-			Type:        "cli",
-			Name:        cmd,
-			Start:       start,
-			End:         timeNow(),
-			Err:         err,
-			AccountID:   p.AccountID,
-			DisplayName: p.DisplayName,
-			DeviceName:  p.DeviceName,
-			Version:     version.String(),
+			TraceID:           traceID,
+			ID:                traceID,
+			Type:              "cli",
+			Name:              cmd,
+			Start:             start,
+			End:               timeNow(),
+			Err:               err,
+			AccountID:         p.AccountID,
+			DisplayName:       p.DisplayName,
+			DeviceName:        p.DeviceName,
+			Version:           version.String(),
+			GOOS:              runtime.GOOS,
+			GOARCH:            runtime.GOARCH,
+			IsHomeBrewInstall: isHomebrewInstall,
 		})
 
 		report.flush()

@@ -82,7 +82,7 @@ brews:
       name: homebrew-tap
     folder: Formula
     test: |
-         system "#{bin}/tier version"
+         system "#{bin}/tier version --homebrew"
     # install: |
     #   bin.install "tier"
     #   bash_completion.install "completions/tier.bash" => "tier"
