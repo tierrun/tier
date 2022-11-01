@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptrace"
+	"os"
+	"strings"
 
 	"go4.org/types"
 	"golang.org/x/sync/errgroup"
@@ -29,7 +31,7 @@ type event struct {
 	GOOS   string
 	GOARCH string
 
-	IsHomeBrewInstall bool
+	IsHomebrewInstall bool // set by send
 }
 
 var report = &reporter{}
@@ -53,6 +55,10 @@ func (r *reporter) init() {
 
 func (r *reporter) send(ctx context.Context, ev *event) {
 	ok := r.g.TryGo(func() error {
+		if ev != nil {
+			ev.IsHomebrewInstall = isHomebrewInstall()
+		}
+
 		data, err := json.Marshal(ev)
 		if err != nil {
 			vvlogf("report: %v", err)
@@ -105,4 +111,10 @@ func (r *reporter) send(ctx context.Context, ev *event) {
 // It is an error to call flush before init.
 func (r *reporter) flush() error {
 	return r.g.Wait() // hook up a context?
+}
+
+func isHomebrewInstall() bool {
+	// a little crude but it works well enough
+	p, _ := os.Executable()
+	return strings.Contains(p, "/Cellar/") || strings.Contains(p, "/homebrew/")
 }
