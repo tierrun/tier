@@ -415,9 +415,10 @@ type clientTransport struct {
 func (t *clientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// While it feels a little odd to bring in httptest here, it's what I
 	// want: The ability to run all commands through the API handler, and
-	// get back a response, all without having to spawn a server listening on a
-	// port. If I did spawn a server, it would add extra latency to the cli
-	// which could easily be avoided.
+	// get back a response, all without having to spawn a server listening
+	// on a port. If I did spawn a server, it would add extra latency to
+	// the cli which could easily be avoided. Still, it feels like a hack,
+	// but it works great.
 	w := httptest.NewRecorder()
 	t.h.ServeHTTP(w, req)
 	return w.Result(), nil
