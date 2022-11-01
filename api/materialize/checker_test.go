@@ -3,6 +3,7 @@ package materialize
 import (
 	"testing"
 
+	"tier.run/api/apitypes"
 	"tier.run/refs"
 )
 
@@ -21,10 +22,10 @@ func TestValidatePlanID(t *testing.T) {
 	for _, tc := range cases {
 		planID := refs.MustParsePlan(tc.planID)
 		t.Run(tc.planID, func(t *testing.T) {
-			m := jsonModel{
-				Plans: map[refs.Plan]jsonPlan{
+			m := apitypes.Model{
+				Plans: map[refs.Plan]apitypes.Plan{
 					planID: {
-						Features: map[refs.Name]jsonFeature{
+						Features: map[refs.Name]apitypes.Feature{
 							refs.MustParseName("feature:x"): {},
 						},
 					},
