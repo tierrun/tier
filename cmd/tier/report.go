@@ -8,6 +8,7 @@ import (
 	"net/http/httptrace"
 	"os"
 	"strings"
+	"time"
 
 	"go4.org/types"
 	"golang.org/x/sync/errgroup"
@@ -49,8 +50,10 @@ type reporter struct {
 }
 
 func (r *reporter) init() {
-	r.g.SetLimit(50)                  // arbitrary; large enough to avoid blocking
-	r.send(context.Background(), nil) // wake up the telemetry server
+	r.g.SetLimit(50) // arbitrary; large enough to avoid blocking
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	r.send(ctx, nil) // wake up the telemetry server
 }
 
 func (r *reporter) send(ctx context.Context, ev *event) {
