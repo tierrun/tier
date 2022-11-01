@@ -21,7 +21,9 @@ func testtier(t *testing.T) *cline.Data {
 	if c.Live() {
 		t.Fatal("STRIPE_API_KEY must be a live key")
 	}
-	return cline.Test(t)
+	ct := cline.Test(t)
+	ct.Setenv("TIER_DEBUG", "1")
+	return ct
 }
 
 func TestVersion(t *testing.T) {

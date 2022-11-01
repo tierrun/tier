@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
@@ -17,6 +19,7 @@ import (
 
 	"go4.org/types"
 	"golang.org/x/exp/slices"
+	"tier.run/api"
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/client/tier"
@@ -74,10 +77,10 @@ func main() {
 	}
 }
 
-var dashURL = map[bool]string{
-	true:  "https://dashboard.stripe.com",
-	false: "https://dashboard.stripe.com/test",
-}
+// TODO: var dashURL = map[bool]string{
+// TODO: 	true:  "https://dashboard.stripe.com",
+// TODO: 	false: "https://dashboard.stripe.com/test",
+// TODO: }
 
 var (
 	// only one trace per invoking (for now)
@@ -393,10 +396,29 @@ func getArg(args []string, i int) string {
 var tierClient *tier.Client
 
 func tc() *tier.Client {
+	h := api.NewHandler(cc(), vlogf)
 	if tierClient == nil {
 		// TODO(bmizerany): hookup logging, timeouts, etc
-		tierClient = &tier.Client{}
+		tierClient = &tier.Client{
+			HTTPClient: &http.Client{
+				Transport: &clientTransport{h},
+			},
+		}
 	}
 	return tierClient
+}
 
+type clientTransport struct {
+	h http.Handler
+}
+
+func (t *clientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// While it feels a little odd to bring in httptest here, it's what I
+	// want: The ability to run all commands through the API handler, and
+	// get back a response, all without having to spawn a server listening on a
+	// port. If I did spawn a server, it would add extra latency to the cli
+	// which could easily be avoided.
+	w := httptest.NewRecorder()
+	t.h.ServeHTTP(w, req)
+	return w.Result(), nil
 }

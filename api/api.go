@@ -11,6 +11,7 @@ import (
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/control"
+	"tier.run/stripe"
 	"tier.run/trweb"
 	"tier.run/values"
 )
@@ -31,6 +32,11 @@ var errorLookup = map[error]error{
 		Status:  400,
 		Code:    "invalid_request",
 		Message: "feature not reportable",
+	},
+	stripe.ErrInvalidAPIKey: &trweb.HTTPError{
+		Status:  401,
+		Code:    "invalid_api_key",
+		Message: "invalid api key",
 	},
 }
 

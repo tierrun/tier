@@ -107,7 +107,7 @@ func (f *Feature) IsMetered() bool {
 }
 
 func (f *Feature) ID() string {
-	return stripe.MakeID(f.FeaturePlan.String())
+	return stripe.MakeID(f.String())
 }
 
 func (f *Feature) Limit() int {
@@ -177,8 +177,8 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	// This will appear as the line item description in the Stripe dashboard
 	// and customer invoices.
 	data.Set("product_data", "name", fmt.Sprintf("%s - %s",
-		values.Coalesce(f.PlanTitle, f.FeaturePlan.String()),
-		values.Coalesce(f.Title, f.FeaturePlan.String()),
+		values.Coalesce(f.PlanTitle, f.String()),
+		values.Coalesce(f.Title, f.String()),
 	))
 
 	// secondary composite key in schedules:
@@ -319,7 +319,7 @@ func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
 			}
 			n := len(out)
 			for _, f := range fs {
-				if f.FeaturePlan.InPlan(p) {
+				if f.InPlan(p) {
 					out = append(out, f.FeaturePlan)
 				}
 			}

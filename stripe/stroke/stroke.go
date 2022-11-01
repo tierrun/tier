@@ -79,7 +79,8 @@ type Clock struct {
 	now    time.Time
 	status string
 
-	logf    func(string, ...any)
+	logf func(string, ...any)
+
 	dashURL string
 }
 
