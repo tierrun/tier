@@ -20,12 +20,10 @@ import (
 	"go4.org/types"
 	"golang.org/x/exp/slices"
 	"tier.run/api"
-	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/client/tier"
 	"tier.run/control"
 	"tier.run/profile"
-	"tier.run/refs"
 	"tier.run/version"
 )
 
@@ -236,7 +234,7 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 		vlogf("subscribing %s to %v", org, refs)
-		return tc().SubscribeToRefs(ctx, org, refs)
+		return tc().SubscribeNow(ctx, org, refs...)
 	case "phases":
 		if len(args) < 1 {
 			return errUsage
@@ -295,19 +293,7 @@ func runTier(cmd string, args []string) (err error) {
 		if err != nil {
 			return err
 		}
-
-		fn, err := refs.ParseName(feature)
-		if err != nil {
-			return err
-		}
-
-		return tc().ReportUsage(ctx, apitypes.ReportRequest{
-			Org:     org,
-			Feature: fn,
-			At:      time.Now(),
-			N:       n,
-			// TODO(bmizerany): suuport Clobber
-		})
+		return tc().Report(ctx, org, feature, n)
 	case "whois":
 		if len(args) < 1 {
 			return errUsage
