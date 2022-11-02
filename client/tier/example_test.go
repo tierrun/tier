@@ -27,7 +27,7 @@ func ExampleClient() {
 	m.HandleFunc("/subscribe", func(w http.ResponseWriter, r *http.Request) {
 		org := orgFromSession(r)
 		plan := r.FormValue("plan")
-		if err := c.SubscribeNow(r.Context(), org, plan); err != nil {
+		if err := c.Subscribe(r.Context(), org, plan); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

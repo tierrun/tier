@@ -149,30 +149,15 @@ func (c *Client) ReportUsage(ctx context.Context, r apitypes.ReportRequest) erro
 	return err
 }
 
-// SubscribeNow subscribes the provided org to the provided feature or plan,
+// Subscribe subscribes the provided org to the provided feature or plan,
 // effective immediately.
 //
 // Any in-progress scheduled is overwritten and the customer is billed with
 // prorations immediately.
-func (c *Client) SubscribeNow(ctx context.Context, org string, featuresAndPlans ...string) error {
-	return c.Subscribe(ctx, org, []apitypes.Phase{{
-		Features: featuresAndPlans,
-	}})
-}
-
-// Subscribe schedules phases for the provided org.
-//
-// If no phase is provided that matches any in-progress phase, the in-progress
-// schedule is ended and the customer is billed with prorations immediately and
-// the new schedule goes into effect.
-//
-// To amend or modify an in-progress schedule, lookup the current phases with
-// LookupPhases, update the list, but be sure to keep any phase with Current
-// set to true unmodified, and call Subscribe with the updated list of phases.
-func (c *Client) Subscribe(ctx context.Context, org string, phases []apitypes.Phase) error {
+func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...string) error {
 	_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/subscribe", apitypes.SubscribeRequest{
 		Org:    org,
-		Phases: phases,
+		Phases: []apitypes.Phase{{Features: featuresAndPlans}},
 	})
 	return err
 }
