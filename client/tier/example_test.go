@@ -1,6 +1,8 @@
 package tier_test
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -36,10 +38,36 @@ func ExampleClient() {
 	log.Fatal(http.ListenAndServe(":https", m))
 }
 
+func ExampleClient_Can_basic() {
+	c := &tier.Client{}
+
+	// Check if the user can convert a temperature.
+	if c.Can(context.Background(), "org:example", "feature:convert").OK() {
+		// The user can convert a temperature.
+	} else {
+		// The user cannot convert a temperature.
+	}
+}
+
+func ExampleClient_Can_report() {
+	c := &tier.Client{}
+	ans := c.Can(context.Background(), "org:example", "feature:convert")
+	if !ans.OK() {
+		// The user cannot convert a temperature.
+		return
+	}
+	defer ans.Report() // report consumption after the conversion
+	fmt.Println(convert(readInput()))
+}
+
 func orgFromSession(r *http.Request) string {
 	return "org:example"
 }
 
 func convert(temp string) string {
 	return "80F"
+}
+
+func readInput() string {
+	return "30C"
 }

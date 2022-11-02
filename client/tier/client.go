@@ -76,17 +76,29 @@ func (c *Client) LookupLimit(ctx context.Context, org, feature string) (limit, u
 	return 0, 0, nil
 }
 
-type Check struct {
+// An Answer is the response to any question for Can. It can be used in a few
+// forms to shorten the logic necessary to know if a program should proceed to
+// perform a user request based on their entitlements.
+type Answer struct {
 	ok     bool
 	err    error
 	report func(n int) error
 }
 
-func (c Check) OK() bool      { return c.ok }
-func (c Check) Err() error    { return c.err }
-func (c Check) Report() error { return c.ReportN(1) }
+// OK reports if the program should proceed with a user request or not. To
+// prevent total failure if Can needed to reach the sidecar and was unable to,
+// OK will fail optimistically and report true. If the opposite is desired,
+// clients can check Err.
+func (c Answer) OK() bool { return c.ok }
 
-func (c Check) ReportN(n int) error {
+// Err returns the error, if any, that occurred during the call to Can.
+func (c Answer) Err() error { return c.err }
+
+// Report is the same as calling ReportN(1).
+func (c Answer) Report() error { return c.ReportN(1) }
+
+// ReportN reports usage of n units for the feature and org provided to Can.
+func (c Answer) ReportN(n int) error {
 	if c.report != nil {
 		return c.report(n)
 	}
@@ -110,21 +122,21 @@ func (c Check) ReportN(n int) error {
 //  defer ans.Report() // or ReportN
 //  return convert(temp)
 //
-func (c *Client) Can(ctx context.Context, org, feature string) Check {
+func (c *Client) Can(ctx context.Context, org, feature string) Answer {
 	limit, used, err := c.LookupLimit(ctx, org, feature)
 	if err != nil {
 		// TODO(bmizerany): caching of usage and limits in imminent and
 		// the cache can be consulted before failing to "allow by
 		// default", but for now simply allow by default right away.
-		return Check{ok: true, err: err}
+		return Answer{ok: true, err: err}
 	}
 	if used >= limit {
-		return Check{}
+		return Answer{}
 	}
 	report := func(n int) error {
 		return c.Report(ctx, org, feature, 1)
 	}
-	return Check{ok: true, report: report}
+	return Answer{ok: true, report: report}
 }
 
 // Report reports a usage of n for the provided org and feature at the current

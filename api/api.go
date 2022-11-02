@@ -156,7 +156,7 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	return h.c.SubscribeNow(r.Context(), sr.Org, phases)
+	return h.c.ScheduleNow(r.Context(), sr.Org, phases)
 }
 
 func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
