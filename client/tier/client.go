@@ -156,8 +156,7 @@ func (c *Client) ReportUsage(ctx context.Context, r apitypes.ReportRequest) erro
 // prorations immediately.
 func (c *Client) SubscribeNow(ctx context.Context, org string, featuresAndPlans ...string) error {
 	return c.Subscribe(ctx, org, []apitypes.Phase{{
-		Effective: time.Now(),
-		Features:  featuresAndPlans,
+		Features: featuresAndPlans,
 	}})
 }
 
