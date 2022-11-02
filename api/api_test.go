@@ -90,7 +90,7 @@ func TestAPISubscribe(t *testing.T) {
 	sub := func(org string, features []string, wantErr error) {
 		t.Helper()
 		defer maybeFailNow(t)
-		err := tc.SubscribeToRefs(ctx, org, features)
+		err := tc.SubscribeNow(ctx, org, features...)
 		diff.Test(t, t.Errorf, err, wantErr)
 	}
 
