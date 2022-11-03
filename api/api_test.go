@@ -309,6 +309,57 @@ func TestTierPull(t *testing.T) {
 	diff.Test(t, t.Errorf, got, want)
 }
 
+func TestTierReport(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c, _ := newTestClient(t)
+	tc := &tier.Client{HTTPClient: c}
+
+	pr, err := tc.PushJSON(ctx, []byte(`
+		{
+			"plans": {
+				"plan:test@0": {
+					"features": {
+						"feature:t": {
+							"tiers": [{}]
+						}
+					}
+				}
+			}
+		}
+	`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, r := range pr.Results {
+		if r.Status != "ok" {
+			t.Errorf("unexpected status: %s: %q: %s", r.Feature, r.Status, r.Reason)
+		}
+	}
+
+	if err := tc.Subscribe(ctx, "org:test", "plan:test@0"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tc.Report(ctx, "org:test", "feature:t", 10); err != nil {
+		t.Fatal(err)
+	}
+
+	limit, used, err := tc.LookupLimit(ctx, "org:test", "feature:t")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if limit != control.Inf {
+		t.Errorf("limit = %d, want %d", control.Inf, limit)
+	}
+	if used != 10 {
+		t.Errorf("used = %d, want 10", used)
+	}
+}
+
 func maybeFailNow(t *testing.T) {
 	t.Helper()
 	if t.Failed() {

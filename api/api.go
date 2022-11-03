@@ -79,8 +79,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.logf("%s %s %s: %# v", r.Method, r.URL.Path, debug, pretty.Formatter(err))
 	}()
 
+	bw := &byteCountResponseWriter{ResponseWriter: w}
+
 	dbg("serve")
-	err = h.serve(w, r)
+	err = h.serve(bw, r)
 
 	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
 		dbg("writeerr")
@@ -104,7 +106,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbg("writeok")
+	if bw.n == 0 {
+		dbg("empty")
+		io.WriteString(w, "{}")
+	}
 }
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
@@ -287,4 +292,15 @@ func invalidRequestf(reason string, args ...any) *trweb.HTTPError {
 		Code:    "invalid_request",
 		Message: fmt.Sprintf(reason, args...),
 	}
+}
+
+type byteCountResponseWriter struct {
+	http.ResponseWriter
+	n int
+}
+
+func (w *byteCountResponseWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.n += n
+	return n, err
 }

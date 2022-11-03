@@ -6,6 +6,7 @@ package tier
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -31,6 +32,10 @@ func (c *Client) client() *http.Client {
 // Pull fetches the complete pricing model from Stripe.
 func (c *Client) Push(ctx context.Context, m apitypes.Model) (apitypes.PushResponse, error) {
 	return fetch.OK[apitypes.PushResponse, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/push", m)
+}
+
+func (c *Client) PushJSON(ctx context.Context, m []byte) (apitypes.PushResponse, error) {
+	return fetch.OK[apitypes.PushResponse, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/push", json.RawMessage(m))
 }
 
 // Pull fetches the complete pricing model from Stripe.
