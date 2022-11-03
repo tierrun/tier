@@ -257,13 +257,24 @@ func (h *Handler) servePush(w http.ResponseWriter, r *http.Request) error {
 	}
 	var ee []apitypes.PushResult
 	_ = h.c.Push(r.Context(), fs, func(f control.Feature, err error) {
+		pr := apitypes.PushResult{
+			Feature: f.FeaturePlan,
+		}
+		switch err {
+		case nil:
+			pr.Status = "ok"
+			pr.Reason = "created"
+		case control.ErrFeatureExists:
+			pr.Status = "ok"
+			pr.Reason = "feature already exists"
+		default:
+			pr.Status = "failed"
+			pr.Reason = err.Error()
+		}
 		if err == nil {
 			err = errOK
 		}
-		ee = append(ee, apitypes.PushResult{
-			Feature: f.FeaturePlan,
-			Err:     err.Error(),
-		})
+		ee = append(ee, pr)
 	})
 	return httpJSON(w, apitypes.PushResponse{Errors: ee})
 }
