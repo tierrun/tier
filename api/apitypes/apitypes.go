@@ -50,3 +50,13 @@ type Usage struct {
 func UsageByFeature(a, b Usage) bool {
 	return a.Feature.Less(b.Feature)
 }
+
+type PushResult struct {
+	Feature refs.FeaturePlan `json:"feature"`
+	Status  string           `json:"status"`
+	Reason  string           `json:"reason"`
+}
+
+type PushResponse struct {
+	Results []PushResult `json:"results,omitempty"`
+}
