@@ -271,12 +271,9 @@ func (h *Handler) servePush(w http.ResponseWriter, r *http.Request) error {
 			pr.Status = "failed"
 			pr.Reason = err.Error()
 		}
-		if err == nil {
-			err = errOK
-		}
 		ee = append(ee, pr)
 	})
-	return httpJSON(w, apitypes.PushResponse{Errors: ee})
+	return httpJSON(w, apitypes.PushResponse{Results: ee})
 }
 
 func httpJSON(w http.ResponseWriter, v any) error {

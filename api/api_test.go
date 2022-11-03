@@ -295,7 +295,7 @@ func TestTierPull(t *testing.T) {
 	}
 
 	wantResp := apitypes.PushResponse{
-		Errors: []apitypes.PushResult{
+		Results: []apitypes.PushResult{
 			{Feature: mpf("feature:t@plan:test@0"), Status: "ok", Reason: "created"},
 		},
 	}

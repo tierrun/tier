@@ -58,5 +58,5 @@ type PushResult struct {
 }
 
 type PushResponse struct {
-	Errors []PushResult `json:"errors,omitempty"`
+	Results []PushResult `json:"results,omitempty"`
 }
