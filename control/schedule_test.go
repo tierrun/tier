@@ -1,4 +1,4 @@
-package tier
+package control
 
 import (
 	"context"
@@ -207,8 +207,11 @@ func TestSubscribeToPlan(t *testing.T) {
 	tc.Push(ctx, fs, pushLogger(t))
 	tc.setClock(t, t0)
 
-	p := plans("plan:pro@0")[0]
-	if err := tc.SubscribeToPlan(ctx, "org:example", p); err != nil {
+	efs, err := Expand(fs, "plan:pro@0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tc.SubscribeTo(ctx, "org:example", efs); err != nil {
 		t.Fatal(err)
 	}
 

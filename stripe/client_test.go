@@ -33,3 +33,15 @@ func TestSetIdempotencyKey(t *testing.T) {
 		t.Errorf("got %q; want %q", got, "foo")
 	}
 }
+
+func TestInvalidAPIKey(t *testing.T) {
+	c := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error": {"message": "Invalid API Key provided: foo"}}`))
+	})
+
+	var f Form
+	if err := c.Do(context.Background(), "POST", "/", f, nil); err != ErrInvalidAPIKey {
+		t.Errorf("got %v; want %v", err, ErrInvalidAPIKey)
+	}
+}

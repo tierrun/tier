@@ -1,4 +1,4 @@
-package tier
+package control
 
 import (
 	"context"
@@ -222,7 +222,7 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+id, f, nil)
 }
 
-func (c *Client) Subscribe(ctx context.Context, org string, phases []Phase) (err error) {
+func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) (err error) {
 	defer errorfmt.Handlef("tier: subscribe: %q: %w", org, &err)
 	if len(phases) == 0 {
 		return errors.New("at least one phase required")
@@ -264,13 +264,13 @@ func isReleased(err error) bool {
 	return false
 }
 
-// SubscribeNow is like Subscribe but immediately starts the first phase as the
+// ScheduleNow is like Schedule but immediately starts the first phase as the
 // current phase and cuts off any phases that have not yet been transitioned
 // to.
 //
 // The first phase must have a zero Effective time to indicate that it should
 // start now.
-func (c *Client) SubscribeNow(ctx context.Context, org string, phases []Phase) error {
+func (c *Client) ScheduleNow(ctx context.Context, org string, phases []Phase) error {
 	if len(phases) == 0 {
 		return errors.New("at least one phase required")
 	}
@@ -289,40 +289,16 @@ func (c *Client) SubscribeNow(ctx context.Context, org string, phases []Phase) e
 			break
 		}
 	}
-	return c.Subscribe(ctx, org, phases)
+	return c.Schedule(ctx, org, phases)
 }
 
-// SubscribeTo subscribes org to the provided features. If a subscription has
-// already begun, the current phase will be updated; otherwise a new
-// subscription will be created and go into effect immediatly.
+// SubscribeTo subscribes org to the provided features effective immediately,
+// taking over any in-progress schedule. The customer is billed immediately
+// with prorations if any.
 func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeaturePlan) error {
-	return c.SubscribeNow(ctx, org, []Phase{{
+	return c.ScheduleNow(ctx, org, []Phase{{
 		Features: fs,
 	}})
-}
-
-func (c *Client) SubscribeToRefs(ctx context.Context, org string, refs []string) error {
-	m, err := c.Pull(ctx, 0)
-	if err != nil {
-		return err
-	}
-	fs, err := Expand(m, refs...)
-	if err != nil {
-		return err
-	}
-	return c.SubscribeTo(ctx, org, fs)
-}
-
-func (c *Client) SubscribeToPlan(ctx context.Context, org string, plan refs.Plan) error {
-	m, err := c.Pull(ctx, 0)
-	if err != nil {
-		return err
-	}
-	fs, err := Expand(m, plan.String())
-	if err != nil {
-		return err
-	}
-	return c.SubscribeTo(ctx, org, fs)
 }
 
 func (c *Client) lookupFeatures(ctx context.Context, keys []refs.FeaturePlan) ([]Feature, error) {

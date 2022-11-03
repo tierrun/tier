@@ -19,6 +19,10 @@ import (
 	"tier.run/trutil"
 )
 
+var (
+	ErrInvalidAPIKey = errors.New("stripe: Invalid API Key")
+)
+
 var debugMode = os.Getenv("STRIPE_DEBUG") == "1"
 
 func MakeID(parts ...string) string {
@@ -239,12 +243,14 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 		var e struct {
 			Error *Error
 		}
-
 		if err := json.NewDecoder(body).Decode(&e); err != nil {
 			return fmt.Errorf("stripe: error parsing error response: %w", err)
 		}
 		e.Error.AccountID = c.AccountID
 		e.Error.RequestID = resp.Header.Get("Request-Id")
+		if isInvalidAPIKey(e.Error) {
+			return ErrInvalidAPIKey
+		}
 		return e.Error
 	}
 	if out != nil {
@@ -279,4 +285,8 @@ func randomString() string {
 		panic(err)
 	}
 	return hex.EncodeToString(b[:])
+}
+
+func isInvalidAPIKey(err *Error) bool {
+	return strings.Contains(err.Message, "Invalid API Key provided")
 }

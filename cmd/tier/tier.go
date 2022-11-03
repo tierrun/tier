@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/url"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"runtime"
 	"strconv"
@@ -19,11 +20,11 @@ import (
 
 	"go4.org/types"
 	"golang.org/x/exp/slices"
+	"tier.run/api"
+	"tier.run/api/materialize"
 	"tier.run/client/tier"
-	"tier.run/materialize"
+	"tier.run/control"
 	"tier.run/profile"
-	"tier.run/refs"
-	"tier.run/stripe"
 	"tier.run/version"
 )
 
@@ -75,10 +76,10 @@ func main() {
 	}
 }
 
-var dashURL = map[bool]string{
-	true:  "https://dashboard.stripe.com",
-	false: "https://dashboard.stripe.com/test",
-}
+// TODO: var dashURL = map[bool]string{
+// TODO: 	true:  "https://dashboard.stripe.com",
+// TODO: 	false: "https://dashboard.stripe.com/test",
+// TODO: }
 
 var (
 	// only one trace per invoking (for now)
@@ -158,14 +159,14 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		defer f.Close()
 
-		if err := pushJSON(ctx, f, func(f tier.Feature, err error) {
-			link := makeLink(f)
+		if err := pushJSON(ctx, f, func(f control.Feature, err error) {
+			link := "TODO"
 			var status, reason string
 			switch err {
 			case nil:
 				status = "ok"
 				reason = "created"
-			case tier.ErrFeatureExists:
+			case control.ErrFeatureExists:
 				status = "ok"
 				reason = "feature already exists"
 			default:
@@ -177,7 +178,7 @@ func runTier(cmd string, args []string) (err error) {
 			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t[%s]\n",
 				status,
 				f.Plan(),
-				f.FeaturePlan.Name(),
+				f.Name(),
 				link,
 				reason,
 			)
@@ -186,21 +187,14 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		return nil
 	case "pull":
-		fs, err := tc().Pull(ctx, 0)
+		data, err := tc().PullJSON(ctx)
 		if err != nil {
 			return err
 		}
-
-		out, err := materialize.ToPricingJSON(fs)
-		if err != nil {
-			return err
-		}
-
-		fmt.Fprintf(stdout, "%s\n", out)
-
+		fmt.Fprintf(stdout, "%s\n", data)
 		return nil
 	case "ls":
-		fs, err := tc().Pull(ctx, 0)
+		m, err := tc().Pull(ctx)
 		if err != nil {
 			return err
 		}
@@ -217,15 +211,17 @@ func runTier(cmd string, args []string) (err error) {
 			"LINK",
 		}, "\t"))
 
-		for _, f := range fs {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
-				f.Plan(),
-				f.FeaturePlan.Name(),
-				f.Mode,
-				f.Aggregate,
-				f.Base,
-				makeLink(f),
-			)
+		for plan, p := range m.Plans {
+			for feature, f := range p.Features {
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
+					plan,
+					feature,
+					f.Mode,
+					f.Aggregate,
+					f.Base,
+					f.PermLink,
+				)
+			}
 		}
 
 		return nil
@@ -241,45 +237,30 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 		vlogf("subscribing %s to %v", org, refs)
-		return tc().SubscribeToRefs(ctx, org, refs)
+		return tc().Subscribe(ctx, org, refs...)
 	case "phases":
 		if len(args) < 1 {
 			return errUsage
 		}
 		org := args[0]
-		ps, err := tc().LookupPhases(ctx, org)
+		p, err := tc().LookupPhase(ctx, org)
 		if err != nil {
 			return err
 		}
 		tw := newTabWriter()
 		defer tw.Flush()
 		fmt.Fprintln(tw, strings.Join([]string{
-			"ORG",
-			"INDEX",
-			"ACTIVE",
 			"EFFECTIVE",
 			"FEATURE",
 			"PLAN",
 		}, "\t"))
-		for i, p := range ps {
-			if i > 0 {
-				fmt.Fprintln(tw)
-			}
-			active := "n"
-			if p.Current {
-				active = "Y"
-			}
-			for _, f := range p.Features {
-				line := fmt.Sprintf("%s\t%d\t%s\t%s\t%s\t%s",
-					p.Org,
-					i,
-					active,
-					p.Effective.Format(time.RFC3339),
-					f.Name(),
-					f.Plan(),
-				)
-				fmt.Fprintln(tw, line)
-			}
+		for _, f := range p.Features {
+			line := fmt.Sprintf("%s\t%s\t%s",
+				p.Effective.Format(time.RFC3339),
+				f.Name(),
+				f.Plan(),
+			)
+			fmt.Fprintln(tw, line)
 		}
 		return nil
 	case "limits":
@@ -287,14 +268,14 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 		org := args[0]
-		use, err := tc().LookupLimits(ctx, org)
+		ur, err := tc().LookupLimits(ctx, org)
 		if err != nil {
 			return err
 		}
 		tw := newTabWriter()
 		defer tw.Flush()
 		fmt.Fprintln(tw, "FEATURE\tLIMIT\tUSED")
-		for _, u := range use {
+		for _, u := range ur.Usage {
 			limit := strconv.Itoa(u.Limit)
 			if u.Limit == tier.Inf {
 				limit = "∞"
@@ -315,24 +296,14 @@ func runTier(cmd string, args []string) (err error) {
 		if err != nil {
 			return err
 		}
-
-		fn, err := refs.ParseName(feature)
-		if err != nil {
-			return err
-		}
-
-		return tc().ReportUsage(ctx, org, fn, tier.Report{
-			At: time.Now(),
-			N:  n,
-			// TODO(bmizerany): suuport Clobber
-		})
+		return tc().Report(ctx, org, feature, n)
 	case "whois":
 		if len(args) < 1 {
 			return errUsage
 		}
 		org := args[0]
 		cid, err := tc().WhoIs(ctx, org)
-		if errors.Is(err, tier.ErrOrgNotFound) {
+		if errors.Is(err, control.ErrOrgNotFound) {
 			return fmt.Errorf("no customer found for %q", org)
 		}
 		if err != nil {
@@ -357,44 +328,6 @@ func fileOrStdin(fname string) (io.ReadCloser, error) {
 		return io.NopCloser(stdin), nil
 	}
 	return os.Open(fname)
-}
-
-var tierClient *tier.Client
-
-func tc() *tier.Client {
-	if tierClient == nil {
-		key, err := getKey()
-		if err != nil {
-			fmt.Fprintf(stderr, "tier: There was an error looking up your Stripe API Key: %v\n", err)
-			if errors.Is(err, profile.ErrProfileNotFound) {
-				fmt.Fprintf(stderr, "tier: Please run `tier connect` to connect your Stripe account\n")
-			}
-			os.Exit(1)
-		}
-
-		if stripe.IsLiveKey(key) {
-			if !*flagLive {
-				fmt.Fprintf(stderr, "tier: --live is required if stripe key is a live key\n")
-				os.Exit(1)
-			}
-		} else {
-			if *flagLive {
-				fmt.Fprintf(stderr, "tier: --live provided with test key\n")
-				os.Exit(1)
-			}
-		}
-
-		sc := &stripe.Client{
-			APIKey:    key,
-			KeyPrefix: os.Getenv("TIER_KEY_PREFIX"),
-			Logf:      vlogf,
-		}
-		tierClient = &tier.Client{
-			Stripe: sc,
-			Logf:   vlogf,
-		}
-	}
-	return tierClient
 }
 
 var debugLevel, _ = strconv.Atoi(os.Getenv("TIER_DEBUG"))
@@ -425,7 +358,7 @@ func newID() string {
 	return hex.EncodeToString(buf[:])
 }
 
-func pushJSON(ctx context.Context, r io.Reader, cb func(tier.Feature, error)) error {
+func pushJSON(ctx context.Context, r io.Reader, cb func(control.Feature, error)) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -434,16 +367,8 @@ func pushJSON(ctx context.Context, r io.Reader, cb func(tier.Feature, error)) er
 	if err != nil {
 		return err
 	}
-	tc().Push(ctx, fs, cb)
+	cc().Push(ctx, fs, cb)
 	return nil
-}
-
-func makeLink(f tier.Feature) string {
-	link, err := url.JoinPath(dashURL[tc().Live()], "products", f.ID())
-	if err != nil {
-		panic(err)
-	}
-	return link
 }
 
 func newTabWriter() *tabwriter.Writer {
@@ -455,4 +380,35 @@ func getArg(args []string, i int) string {
 		return args[i]
 	}
 	return ""
+}
+
+var tierClient *tier.Client
+
+func tc() *tier.Client {
+	h := api.NewHandler(cc(), vlogf)
+	if tierClient == nil {
+		// TODO(bmizerany): hookup logging, timeouts, etc
+		tierClient = &tier.Client{
+			HTTPClient: &http.Client{
+				Transport: &clientTransport{h},
+			},
+		}
+	}
+	return tierClient
+}
+
+type clientTransport struct {
+	h http.Handler
+}
+
+func (t *clientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// While it feels a little odd to bring in httptest here, it's what I
+	// want: The ability to run all commands through the API handler, and
+	// get back a response, all without having to spawn a server listening
+	// on a port. If I did spawn a server, it would add extra latency to
+	// the cli which could easily be avoided. Still, it feels like a hack,
+	// but it works great.
+	w := httptest.NewRecorder()
+	t.h.ServeHTTP(w, req)
+	return w.Result(), nil
 }

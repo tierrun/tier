@@ -1,381 +1,175 @@
+// Package tier contains the local client for interacting with the tier sidecar
+// API.
+//
+// For more information, please see https://tier.run/docs.
 package tier
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"strconv"
+	"net/http"
+	"time"
 
-	"golang.org/x/sync/errgroup"
+	"tier.run/api/apitypes"
+	"tier.run/fetch"
 	"tier.run/refs"
-	"tier.run/stripe"
-	"tier.run/values"
-)
-
-// Errors
-var (
-	ErrFeatureExists     = errors.New("feature already exists")
-	ErrFeatureNotFound   = errors.New("feature not found")
-	ErrFeatureNotMetered = errors.New("feature is not metered")
+	"tier.run/trweb"
 )
 
 const Inf = 1<<63 - 1
 
-var (
-	intervalToStripe = map[string]string{
-		"@daily":   "day",
-		"@weekly":  "week",
-		"@monthly": "month",
-		"@yearly":  "year",
-	}
-
-	intervalFromStripe = values.Invert(intervalToStripe)
-)
-
-var (
-	aggregateToStripe = map[string]string{
-		"sum":       "sum",
-		"max":       "max",
-		"last":      "last_during_period",
-		"perpetual": "last_ever",
-	}
-
-	aggregateFromStripe = values.Invert(aggregateToStripe)
-)
-
-func FeaturePlans(fs []Feature) []refs.FeaturePlan {
-	ns := make([]refs.FeaturePlan, len(fs))
-	for i, f := range fs {
-		ns[i] = f.FeaturePlan
-	}
-	return ns
-}
-
-type Feature struct {
-	refs.FeaturePlan // the feature name prefixed with ("feature:")
-
-	ProviderID string // identifier set by the billing engine provider
-	PlanTitle  string // a human readable title for the plan
-	Title      string // a human readable title for the feature
-
-	// Interval specifies the billing interval for the feature.
-	//
-	// Known intervals are "@daily", "@weekly", "@monthly", and "@yearly".
-	Interval string
-
-	// Currency is the ISO 4217 currency code for the feature.
-	//
-	// Known currencies look like "usd", "eur", "gbp", "cad", "aud", "jpy", "chf",
-	// etc. Please see your billing engine provider for a complete list.
-	Currency string
-
-	// Base is the base price for the feature. If Tiers is not empty, then Base
-	// is ignored.
-	Base int
-
-	// Mode specifies the billing mode for use with Tiers.
-	//
-	// Known modes are "graduated" and "volume".
-	Mode string
-
-	// Aggregate specifies the usage aggregation method for use with Tiers.
-	//
-	// Known aggregates are "sum", "max", "last", and "perpetual".
-	Aggregate string
-
-	// Tiers optionally specifies the pricing tiers for this feature. If
-	// empty, feature is billed at the beginning of each billing period at
-	// the flat rate specified by Base. If non-empty, the feature is billed
-	// at the end of each billing period based on usage, and at a price
-	// determined by Tiers, Mode, and Aggregate.
-	Tiers []Tier
-
-	// ReportID is the ID for reporting usage to the billing provider.
-	ReportID string
-}
-
-// TODO(bmizerany): remove FQN and replace with simply adding the version to
-// the Name.
-
-// IsMetered reports if the feature is metered.
-func (f *Feature) IsMetered() bool {
-	// checking the mode is more reliable than checking the existence of
-	// tiers becauase not all responses from stripe containing prices
-	// include tiers, but they all include the mode, which is empty for
-	// license prices.
-	return f.Mode != ""
-}
-
-func (f *Feature) ID() string {
-	return stripe.MakeID(f.FeaturePlan.String())
-}
-
-func (f *Feature) Limit() int {
-	if len(f.Tiers) == 0 {
-		return Inf
-	}
-	return f.Tiers[len(f.Tiers)-1].Upto
-}
-
-// Tier holds the pricing information for a single tier.
-type Tier struct {
-	Upto  int // the upper limit of the tier
-	Price int // the price of the tier
-	Base  int // the base price of the tier
-}
-
 type Client struct {
-	Logf   func(format string, args ...any)
-	Stripe *stripe.Client
-	Clock  string
-
-	cache memo
+	HTTPClient *http.Client
 }
 
-// Live reports if APIKey is set to a "live" key.
-func (c *Client) Live() bool { return c.Stripe.Live() }
+func (c *Client) client() *http.Client {
+	if c.HTTPClient == nil {
+		return http.DefaultClient
+	}
+	return c.HTTPClient
+}
 
-// Push pushes each feature in fs to Stripe as a product and price combination.
-// A new price and product are created in Stripe if one does not already exist.
+// Pull fetches the complete pricing model from Stripe.
+func (c *Client) Pull(ctx context.Context) (apitypes.Model, error) {
+	return fetch.OK[apitypes.Model, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/pull", nil)
+}
+
+// PullJSON fetches the complete pricing model from Stripe and returns the raw
+// JSON response.
+func (c *Client) PullJSON(ctx context.Context) ([]byte, error) {
+	return fetch.OK[[]byte, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/pull", nil)
+}
+
+// WhoIS reports the Stripe ID for the given organization.
+func (c *Client) WhoIs(ctx context.Context, org string) (apitypes.WhoIsResponse, error) {
+	return fetch.OK[apitypes.WhoIsResponse, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/whois?org="+org, nil)
+}
+
+// LookupPhase reports information about the current phase the provided org is scheduled in.
+func (c *Client) LookupPhase(ctx context.Context, org string) (apitypes.PhaseResponse, error) {
+	return fetch.OK[apitypes.PhaseResponse, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/phase?org="+org, nil)
+}
+
+// LookupLimits reports the current usage and limits for the provided org.
+func (c *Client) LookupLimits(ctx context.Context, org string) (apitypes.UsageResponse, error) {
+	return fetch.OK[apitypes.UsageResponse, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/limits?org="+org, nil)
+}
+
+// LookupLimit reports the current usage and limits for the provided org and
+// feature. If the feature is not currently available to the org, both limit
+// and used are zero and no error is reported.
 //
-// Each call to push is subject to rate limiting via the clients shared rate
-// limit.
+// It reports an error if any.
+func (c *Client) LookupLimit(ctx context.Context, org, feature string) (limit, used int, err error) {
+	fn, err := refs.ParseName(feature)
+	if err != nil {
+		return 0, 0, err
+	}
+	limits, err := c.LookupLimits(ctx, org)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, u := range limits.Usage {
+		if u.Feature == fn {
+			return u.Limit, u.Used, nil
+		}
+	}
+	return 0, 0, nil
+}
+
+// An Answer is the response to any question for Can. It can be used in a few
+// forms to shorten the logic necessary to know if a program should proceed to
+// perform a user request based on their entitlements.
+type Answer struct {
+	ok     bool
+	err    error
+	report func(n int) error
+}
+
+// OK reports if the program should proceed with a user request or not. To
+// prevent total failure if Can needed to reach the sidecar and was unable to,
+// OK will fail optimistically and report true. If the opposite is desired,
+// clients can check Err.
+func (c Answer) OK() bool { return c.ok }
+
+// Err returns the error, if any, that occurred during the call to Can.
+func (c Answer) Err() error { return c.err }
+
+// Report is the same as calling ReportN(1).
+func (c Answer) Report() error { return c.ReportN(1) }
+
+// ReportN reports usage of n units for the feature and org provided to Can.
+func (c Answer) ReportN(n int) error {
+	if c.report != nil {
+		return c.report(n)
+	}
+	return nil
+}
+
+// Can is a convenience function for checking if an org has used more of a
+// feature than they are entitled to and optionally reporting usage post check
+// and consumption.
 //
-// It returns the first error encountered if any.
-func (c *Client) Push(ctx context.Context, fs []Feature, cb func(f Feature, err error)) error {
-	var g errgroup.Group
-	g.SetLimit(c.maxWorkers())
-	for _, f := range fs {
-		f := f
-		g.Go(func() error {
-			err := c.pushFeature(ctx, f)
-			cb(f, err)
-			return err
-		})
+// If reporting consumption is not required, it can be used in the form:
+//
+//  if c.Can(ctx, "org:acme", "feature:convert").OK() { ... }
+//
+// reporting usage post consumption looks like:
+//
+//  ans := c.Can(ctx, "org:acme", "feature:convert")
+//  if !ans.OK() {
+//    return ""
+//  }
+//  defer ans.Report() // or ReportN
+//  return convert(temp)
+//
+func (c *Client) Can(ctx context.Context, org, feature string) Answer {
+	limit, used, err := c.LookupLimit(ctx, org, feature)
+	if err != nil {
+		// TODO(bmizerany): caching of usage and limits in imminent and
+		// the cache can be consulted before failing to "allow by
+		// default", but for now simply allow by default right away.
+		return Answer{ok: true, err: err}
 	}
-	return g.Wait()
+	if used >= limit {
+		return Answer{}
+	}
+	report := func(n int) error {
+		return c.Report(ctx, org, feature, 1)
+	}
+	return Answer{ok: true, report: report}
 }
 
-func (c *Client) maxWorkers() int {
-	if c.Stripe.Live() {
-		return 50
+// Report reports a usage of n for the provided org and feature at the current
+// time.
+func (c *Client) Report(ctx context.Context, org, feature string, n int) error {
+	fn, err := refs.ParseName(feature)
+	if err != nil {
+		return err
 	}
-	return 20 // a little under the max concurrent requests in test mode
-}
-
-func (c *Client) pushFeature(ctx context.Context, f Feature) error {
-	// https://stripe.com/docs/api/prices/create
-	var data stripe.Form
-	data.Set("metadata", "tier.plan_title", f.PlanTitle)
-	data.Set("metadata", "tier.title", f.Title)
-	data.Set("metadata", "tier.feature", f.FeaturePlan)
-
-	c.Logf("tier: pushing feature %q", f.ID())
-	data.Set("lookup_key", f.ID())
-	data.Set("product_data", "id", f.ID())
-
-	// This will appear as the line item description in the Stripe dashboard
-	// and customer invoices.
-	data.Set("product_data", "name", fmt.Sprintf("%s - %s",
-		values.Coalesce(f.PlanTitle, f.FeaturePlan.String()),
-		values.Coalesce(f.Title, f.FeaturePlan.String()),
-	))
-
-	// secondary composite key in schedules:
-	data.Set("currency", f.Currency)
-
-	interval := intervalToStripe[f.Interval]
-	if interval == "" {
-		return fmt.Errorf("unknown interval: %q", f.Interval)
-	}
-	data.Set("recurring", "interval", interval)
-	data.Set("recurring", "interval_count", 1) // TODO: support user-defined interval count
-
-	if len(f.Tiers) == 0 {
-		data.Set("recurring", "usage_type", "licensed")
-		data.Set("billing_scheme", "per_unit")
-		data.Set("unit_amount", f.Base)
-	} else {
-		data.Set("recurring", "usage_type", "metered")
-		data.Set("billing_scheme", "tiered")
-		data.Set("tiers_mode", f.Mode)
-		aggregate := aggregateToStripe[f.Aggregate]
-		if aggregate == "" {
-			return fmt.Errorf("unknown aggregate: %q", f.Aggregate)
-		}
-		data.Set("recurring", "aggregate_usage", aggregate)
-		var limit int
-		for i, t := range f.Tiers {
-			if i == len(f.Tiers)-1 {
-				data.Set("tiers", i, "up_to", "inf")
-			} else {
-				data.Set("tiers", i, "up_to", t.Upto)
-			}
-			if limit < t.Upto {
-				limit = t.Upto
-			}
-			data.Set("tiers", i, "unit_amount", t.Price)
-			data.Set("tiers", i, "flat_amount", t.Base)
-		}
-		data.Set("metadata", "tier.limit", limit)
-	}
-
-	// TODO(bmizerany): data.Set("active", ?)
-	// TODO(bmizerany): data.Set("tax_behavior", "?")
-	// TODO(bmizerany): data.Set("transform_quantity", "?")
-	// TODO(bmizerany): data.Set("currency_options", "?")
-
-	err := c.Stripe.Do(ctx, "POST", "/v1/prices", data, nil)
-	if isExists(err) {
-		return ErrFeatureExists
-	}
+	_, err = fetch.OK[struct{}, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/report", apitypes.ReportRequest{
+		Org:     org,
+		Feature: fn,
+		N:       n,
+		At:      time.Now(),
+	})
 	return err
 }
 
-type stripePrice struct {
-	stripe.ID
-	LookupKey string `json:"lookup_key"`
-	Metadata  struct {
-		Plan      string           `json:"tier.plan"`
-		PlanTitle string           `json:"tier.plan_title"`
-		Feature   refs.FeaturePlan `json:"tier.feature"`
-		Limit     string           `json:"tier.limit"`
-		Title     string           `json:"tier.title"`
-	}
-	Recurring struct {
-		Interval       string
-		IntervalCount  int    `json:"interval_count"`
-		UsageType      string `json:"usage_type"`
-		AggregateUsage string `json:"aggregate_usage"`
-	}
-	BillingScheme string `json:"billing_scheme"`
-	TiersMode     string `json:"tiers_mode"`
-	UnitAmount    int    `json:"unit_amount"`
-	Tiers         []struct {
-		Upto  int `json:"up_to"`
-		Price int `json:"unit_amount"`
-		Base  int `json:"flat_amount"`
-	}
-	Currency string
+// ReportUsage reports usage based on the provided ReportRequest fields.
+func (c *Client) ReportUsage(ctx context.Context, r apitypes.ReportRequest) error {
+	_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/report", r)
+	return err
 }
 
-func stripePriceToFeature(p stripePrice) Feature {
-	f := Feature{
-		ProviderID:  p.ProviderID(),
-		PlanTitle:   p.Metadata.PlanTitle,
-		FeaturePlan: p.Metadata.Feature,
-		Title:       p.Metadata.Title,
-		Currency:    p.Currency,
-		Interval:    intervalFromStripe[p.Recurring.Interval],
-		Mode:        p.TiersMode,
-		Aggregate:   aggregateFromStripe[p.Recurring.AggregateUsage],
-		Base:        p.UnitAmount,
-	}
-	for i, t := range p.Tiers {
-		f.Tiers = append(f.Tiers, Tier(t))
-		if i == len(p.Tiers)-1 {
-			f.Tiers[i].Upto = parseLimit(p.Metadata.Limit)
-		}
-	}
-	return f
-}
-
-// Pull retrieves the feature from Stripe.
-func (c *Client) Pull(ctx context.Context, limit int) ([]Feature, error) {
-	// https://stripe.com/docs/api/prices/list
-	var f stripe.Form
-	f.Add("expand[]", "data.product")
-	f.Add("expand[]", "data.tiers")
-	prices, err := stripe.Slurp[stripePrice](ctx, c.Stripe, "GET", "/v1/prices", f)
-	if err != nil {
-		return nil, err
-	}
-	var fs []Feature
-	for _, p := range prices {
-		if p.Metadata.Feature.IsZero() {
-			continue
-		}
-		fs = append(fs, stripePriceToFeature(p))
-	}
-	return fs, nil
-}
-
-// Expand parses each ref in refs and adds it to the result. If the ref is a
-// plan ref, Expand will append all features in fs for that plan to the result.
-// returns an error if any ref is invalid or not availabe in the
+// Subscribe subscribes the provided org to the provided feature or plan,
+// effective immediately.
 //
-// The parameter fs is assumed to have no two features with the same FeaturePlan.
-//
-// It returns an error if any.
-func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
-	var out []refs.FeaturePlan
-
-	for _, name := range names {
-		fp, err := refs.ParseFeaturePlan(name)
-		if err != nil {
-			p, err := refs.ParsePlan(name)
-			if err != nil {
-				return nil, err
-			}
-			n := len(out)
-			for _, f := range fs {
-				if f.FeaturePlan.InPlan(p) {
-					out = append(out, f.FeaturePlan)
-				}
-			}
-			if len(out) == n {
-				return nil, fmt.Errorf("no features found for plan %q", p)
-			}
-		} else {
-			out = append(out, fp)
-		}
-	}
-
-	return out, nil
-}
-
-type Org struct {
-	ProviderID string
-	ID         string
-	Email      string
-}
-
-// ListOrgs returns a list of all known customers in Stripe.
-func (c *Client) ListOrgs(ctx context.Context) ([]Org, error) {
-	// https://stripe.com/docs/api/customers/list
-	var f stripe.Form
-	f.Add("limit", 100)
-	type T struct {
-		stripe.ID
-		Email    string
-		Metadata struct {
-			Org string `json:"tier.org"`
-		}
-	}
-	customers, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/customers", f)
-	if err != nil {
-		return nil, err
-	}
-	var cs []Org
-	for _, c := range customers {
-		cs = append(cs, Org{
-			ProviderID: c.ProviderID(),
-			ID:         c.Metadata.Org,
-			Email:      c.Email,
-		})
-	}
-	return cs, nil
-}
-
-func parseLimit(s string) int {
-	if s == "inf" || s == "" {
-		return Inf
-	}
-	n, _ := strconv.Atoi(s)
-	return n
-}
-
-func isExists(err error) bool {
-	var e *stripe.Error
-	return errors.As(err, &e) && e.Code == "resource_already_exists"
+// Any in-progress scheduled is overwritten and the customer is billed with
+// prorations immediately.
+func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...string) error {
+	_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/subscribe", apitypes.SubscribeRequest{
+		Org:    org,
+		Phases: []apitypes.Phase{{Features: featuresAndPlans}},
+	})
+	return err
 }

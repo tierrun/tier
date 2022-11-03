@@ -4,9 +4,10 @@ import (
 	"fmt"
 
 	"tailscale.com/util/multierr"
+	"tier.run/api/apitypes"
 )
 
-func validate(m jsonModel) error {
+func validate(m apitypes.Model) error {
 	var e errors
 	for plan, p := range m.Plans {
 		if len(p.Features) == 0 {

@@ -8,69 +8,13 @@ import (
 
 	"github.com/tailscale/hujson"
 	"kr.dev/errorfmt"
-	"tier.run/client/tier"
+	"tier.run/api/apitypes"
+	"tier.run/control"
 	"tier.run/refs"
 	"tier.run/values"
 )
 
-type jsonTier struct {
-	Upto  int `json:"upto,omitempty"`
-	Price int `json:"price,omitempty"`
-	Base  int `json:"base,omitempty"`
-}
-
-func (t *jsonTier) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Upto  int `json:"upto,omitempty"`
-		Price int `json:"price,omitempty"`
-		Base  int `json:"base,omitempty"`
-	}{
-		Upto:  values.ZeroIf(t.Upto, tier.Inf),
-		Price: t.Price,
-		Base:  t.Base,
-	})
-}
-
-func (t *jsonTier) UnmarshalJSON(data []byte) error {
-	*t = jsonTier{}
-	var v struct {
-		Upto  *int
-		Price int
-		Base  int
-	}
-	if err := json.Unmarshal(data, &v); err != nil {
-		return err
-	}
-	if v.Upto == nil {
-		t.Upto = tier.Inf
-	} else {
-		t.Upto = *v.Upto
-	}
-	t.Price = v.Price
-	t.Base = v.Base
-	return nil
-}
-
-type jsonFeature struct {
-	Title     string     `json:"title,omitempty"`
-	Base      int        `json:"base,omitempty"`
-	Mode      string     `json:"mode,omitempty"`
-	Aggregate string     `json:"aggregate,omitempty"`
-	Tiers     []jsonTier `json:"tiers,omitempty"`
-}
-
-type jsonPlan struct {
-	Title    string                    `json:"title,omitempty"`
-	Interval string                    `json:"interval,omitempty"`
-	Currency string                    `json:"currency,omitempty"`
-	Features map[refs.Name]jsonFeature `json:"features,omitempty"`
-}
-
-type jsonModel struct {
-	Plans map[refs.Plan]jsonPlan `json:"plans"`
-}
-
-func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
+func FromPricingHuJSON(data []byte) (fs []control.Feature, err error) {
 	var debug []string
 	dbg := func(k string) {
 		debug = append(debug, k)
@@ -82,7 +26,7 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 		return nil, err
 	}
 
-	var m jsonModel
+	var m apitypes.Model
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields() // we use a Decoder to get the DisallowUnknownFields method
 	if err := dec.Decode(&m); err != nil {
@@ -97,7 +41,7 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 	for plan, p := range m.Plans {
 		for feature, f := range p.Features {
 			fn := feature.WithPlan(plan)
-			ff := tier.Feature{
+			ff := control.Feature{
 				FeaturePlan: fn,
 
 				Currency: values.Coalesce(p.Currency, "usd"),
@@ -113,9 +57,9 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 			}
 
 			if len(f.Tiers) > 0 {
-				ff.Tiers = make([]tier.Tier, len(f.Tiers))
+				ff.Tiers = make([]control.Tier, len(f.Tiers))
 				for i, t := range f.Tiers {
-					ff.Tiers[i] = tier.Tier{
+					ff.Tiers[i] = control.Tier{
 						Upto:  t.Upto,
 						Price: t.Price,
 						Base:  t.Base,
@@ -129,9 +73,9 @@ func FromPricingHuJSON(data []byte) (fs []tier.Feature, err error) {
 	return fs, nil
 }
 
-func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
-	m := jsonModel{
-		Plans: make(map[refs.Plan]jsonPlan),
+func ToPricingJSON(fs []control.Feature) ([]byte, error) {
+	m := apitypes.Model{
+		Plans: make(map[refs.Plan]apitypes.Plan),
 	}
 	for _, f := range fs {
 		p := m.Plans[f.Plan()]
@@ -143,21 +87,21 @@ func ToPricingJSON(fs []tier.Feature) ([]byte, error) {
 		values.MaybeZero(&p.Interval, "@monthly")
 
 		if p.Features == nil {
-			p.Features = make(map[refs.Name]jsonFeature)
+			p.Features = make(map[refs.Name]apitypes.Feature)
 		}
 
 		// TODO(bmizerany): find generic way to clone slices of type
 		// types with the same underlying type
-		tiers := make([]jsonTier, len(f.Tiers))
+		tiers := make([]apitypes.Tier, len(f.Tiers))
 		for i, t := range f.Tiers {
-			tiers[i] = jsonTier{
+			tiers[i] = apitypes.Tier{
 				Upto:  t.Upto,
 				Price: t.Price,
 				Base:  t.Base,
 			}
 		}
 
-		p.Features[f.FeaturePlan.Name()] = jsonFeature{
+		p.Features[f.FeaturePlan.Name()] = apitypes.Feature{
 			Title: values.ZeroIf(f.Title, f.FeaturePlan.String()),
 			Base:  f.Base,
 			Tiers: tiers,
