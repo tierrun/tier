@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -120,6 +121,8 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 		return h.servePhase(w, r)
 	case "/v1/pull":
 		return h.servePull(w, r)
+	case "/v1/push":
+		return h.servePush(w, r)
 	default:
 		return trweb.NotFound
 	}
@@ -239,6 +242,30 @@ func (h *Handler) servePull(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(b)
 	return nil
+}
+
+var errOK = errors.New("")
+
+func (h *Handler) servePush(w http.ResponseWriter, r *http.Request) error {
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	fs, err := materialize.FromPricingHuJSON(data)
+	if err != nil {
+		return err
+	}
+	var ee []apitypes.PushResult
+	_ = h.c.Push(r.Context(), fs, func(f control.Feature, err error) {
+		if err == nil {
+			err = errOK
+		}
+		ee = append(ee, apitypes.PushResult{
+			Feature: f.FeaturePlan,
+			Err:     err.Error(),
+		})
+	})
+	return httpJSON(w, apitypes.PushResponse{Errors: ee})
 }
 
 func httpJSON(w http.ResponseWriter, v any) error {

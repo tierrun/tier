@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 
 	"golang.org/x/exp/slices"
@@ -21,6 +19,7 @@ import (
 
 var (
 	mpn  = refs.MustParseName
+	mpp  = refs.MustParsePlan
 	mpps = refs.MustParsePlans
 	mpf  = refs.MustParseFeaturePlan
 	mpfs = refs.MustParseFeaturePlans
@@ -275,13 +274,39 @@ func TestTierPull(t *testing.T) {
 	ctx := context.Background()
 	c, _ := newTestClient(t)
 
-	got, err := fetch.OK[json.RawMessage, *trweb.HTTPError](ctx, c, "GET", "/v1/pull", nil)
+	tc := &tier.Client{HTTPClient: c}
+
+	want := apitypes.Model{
+		Plans: map[refs.Plan]apitypes.Plan{
+			mpp("plan:test@0"): {
+				Title: "plan:test@0",
+				Features: map[refs.Name]apitypes.Feature{
+					mpn("feature:t"): {
+						Base: 9,
+					},
+				},
+			},
+		},
+	}
+
+	gotResp, err := tc.Push(ctx, want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(got), "{") {
-		t.Errorf("expected json, got:\n%s", got)
+
+	wantResp := apitypes.PushResponse{
+		Errors: []apitypes.PushResult{
+			{Feature: mpf("feature:t@plan:test@0"), Err: ""},
+		},
 	}
+	diff.Test(t, t.Errorf, gotResp, wantResp)
+
+	got, err := tc.Pull(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	diff.Test(t, t.Errorf, got, want)
 }
 
 func maybeFailNow(t *testing.T) {
