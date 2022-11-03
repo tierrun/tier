@@ -52,10 +52,10 @@ func UsageByFeature(a, b Usage) bool {
 }
 
 type PushResult struct {
-	Feature refs.FeaturePlan
-	Err     string
+	Feature refs.FeaturePlan `json:"feature"`
+	Err     string           `json:"err"`
 }
 
 type PushResponse struct {
-	Errors []PushResult
+	Errors []PushResult `json:"errors"`
 }
