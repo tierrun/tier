@@ -88,10 +88,10 @@ If the --live flag is provided, your accounts live mode will be used.
 
 The output is in the format:
 
-	PLAN            FEATURE          MODE       AGG  BASE      LINK
-	plan:free@1     feature:bar      graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDMWTEocuaj
-	plan:free@1     feature:convert  graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDMmhWG3i5D
-	plan:pro@0      feature:convert  graduated  sum  0         https://dashboard.stripe.com/test/prices/price_1LhjMLCdYGloJaDM5COLDSY1
+	PLAN            FEATURE          MODE       AGG  BASE
+	plan:free@1     feature:bar      graduated  sum  0
+	plan:free@1     feature:convert  graduated  sum  0
+	plan:pro@0      feature:convert  graduated  sum  0
 `,
 	"phases": `Usage:
 
