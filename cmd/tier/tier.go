@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -76,10 +77,10 @@ func main() {
 	}
 }
 
-// TODO: var dashURL = map[bool]string{
-// TODO: 	true:  "https://dashboard.stripe.com",
-// TODO: 	false: "https://dashboard.stripe.com/test",
-// TODO: }
+var dashURL = map[bool]string{
+	true:  "https://dashboard.stripe.com",
+	false: "https://dashboard.stripe.com/test",
+}
 
 var (
 	// only one trace per invoking (for now)
@@ -160,7 +161,10 @@ func runTier(cmd string, args []string) (err error) {
 		defer f.Close()
 
 		if err := pushJSON(ctx, f, func(f control.Feature, err error) {
-			link := "TODO"
+			link, uerr := url.JoinPath(dashURL[cc().Live()], "products", f.ProviderID)
+			if uerr != nil {
+				panic(uerr)
+			}
 			var status, reason string
 			switch err {
 			case nil:
@@ -208,18 +212,16 @@ func runTier(cmd string, args []string) (err error) {
 			"MODE",
 			"AGG",
 			"BASE",
-			"LINK",
 		}, "\t"))
 
 		for plan, p := range m.Plans {
 			for feature, f := range p.Features {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n",
 					plan,
 					feature,
 					f.Mode,
 					f.Aggregate,
 					f.Base,
-					f.PermLink,
 				)
 			}
 		}
