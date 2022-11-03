@@ -316,19 +316,30 @@ func TestTierReport(t *testing.T) {
 	c, _ := newTestClient(t)
 	tc := &tier.Client{HTTPClient: c}
 
-	if err := tc.PushJSON(ctx, `
+	pr, err := tc.PushJSON(ctx, []byte(`
 		{
 			"plans": {
 				"plan:test@0": {
 					"features": {
 						"feature:t": {
-							"base": 100
+							"tiers": [{}]
 						}
 					}
 				}
 			}
 		}
-	`); err != nil {
+	`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, r := range pr.Results {
+		if r.Status != "ok" {
+			t.Errorf("unexpected status: %s: %q: %s", r.Feature, r.Status, r.Reason)
+		}
+	}
+
+	if err := tc.Subscribe(ctx, "org:test", "plan:test@0"); err != nil {
 		t.Fatal(err)
 	}
 
