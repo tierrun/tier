@@ -234,7 +234,7 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 		vlogf("subscribing %s to %v", org, refs)
-		return tc().SubscribeNow(ctx, org, refs...)
+		return tc().Subscribe(ctx, org, refs...)
 	case "phases":
 		if len(args) < 1 {
 			return errUsage
