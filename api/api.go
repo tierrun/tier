@@ -244,8 +244,6 @@ func (h *Handler) servePull(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-var errOK = errors.New("")
-
 func (h *Handler) servePush(w http.ResponseWriter, r *http.Request) error {
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
