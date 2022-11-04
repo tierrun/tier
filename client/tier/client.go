@@ -29,22 +29,30 @@ func (c *Client) client() *http.Client {
 	return c.HTTPClient
 }
 
-// Pull fetches the complete pricing model from Stripe.
+// Push pushes the provided pricing model.
+//
+// Each plan is pushed in isolation. If any plan fails to push from the server
+// to Stripe, the error is recorded and returned in the PushResponse once all
+// other plans have either been successfully pushed or resulted in an error.
+//
+// Only new plans are created. Existing plans are not updated. Each push may
+// contain only new and/or a subset of existing plans.
 func (c *Client) Push(ctx context.Context, m apitypes.Model) (apitypes.PushResponse, error) {
 	return fetch.OK[apitypes.PushResponse, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/push", m)
 }
 
+// PushJSON pushes the provided pricing.json.
 func (c *Client) PushJSON(ctx context.Context, m []byte) (apitypes.PushResponse, error) {
 	return fetch.OK[apitypes.PushResponse, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/push", json.RawMessage(m))
 }
 
-// Pull fetches the complete pricing model from Stripe.
+// Pull fetches the complete pricing model.
 func (c *Client) Pull(ctx context.Context) (apitypes.Model, error) {
 	return fetch.OK[apitypes.Model, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/pull", nil)
 }
 
-// PullJSON fetches the complete pricing model from Stripe and returns the raw
-// JSON response.
+// PullJSON fetches the complete pricing model and returns the raw JSON
+// response.
 func (c *Client) PullJSON(ctx context.Context) ([]byte, error) {
 	return fetch.OK[[]byte, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/pull", nil)
 }
@@ -59,7 +67,9 @@ func (c *Client) LookupPhase(ctx context.Context, org string) (apitypes.PhaseRes
 	return fetch.OK[apitypes.PhaseResponse, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/phase?org="+org, nil)
 }
 
-// LookupLimits reports the current usage and limits for the provided org.
+// LookupLimits reports the current usage and limits for the provided org. The
+// response can be considered a reference list of entitlements for the provided
+// org.
 func (c *Client) LookupLimits(ctx context.Context, org string) (apitypes.UsageResponse, error) {
 	return fetch.OK[apitypes.UsageResponse, *trweb.HTTPError](ctx, c.client(), "GET", "/v1/limits?org="+org, nil)
 }
@@ -121,21 +131,20 @@ func (c Answer) ReportN(n int) error {
 //
 // If reporting consumption is not required, it can be used in the form:
 //
-//  if c.Can(ctx, "org:acme", "feature:convert").OK() { ... }
+//	if c.Can(ctx, "org:acme", "feature:convert").OK() { ... }
 //
 // reporting usage post consumption looks like:
 //
-//  ans := c.Can(ctx, "org:acme", "feature:convert")
-//  if !ans.OK() {
-//    return ""
-//  }
-//  defer ans.Report() // or ReportN
-//  return convert(temp)
-//
+//	ans := c.Can(ctx, "org:acme", "feature:convert")
+//	if !ans.OK() {
+//	  return ""
+//	}
+//	defer ans.Report() // or ReportN
+//	return convert(temp)
 func (c *Client) Can(ctx context.Context, org, feature string) Answer {
 	limit, used, err := c.LookupLimit(ctx, org, feature)
 	if err != nil {
-		// TODO(bmizerany): caching of usage and limits in imminent and
+		// TODO(bmizerany): caching of usage and limits is imminent and
 		// the cache can be consulted before failing to "allow by
 		// default", but for now simply allow by default right away.
 		return Answer{ok: true, err: err}
@@ -174,8 +183,8 @@ func (c *Client) ReportUsage(ctx context.Context, r apitypes.ReportRequest) erro
 // Subscribe subscribes the provided org to the provided feature or plan,
 // effective immediately.
 //
-// Any in-progress scheduled is overwritten and the customer is billed with
-// prorations immediately.
+// Any in-progress schedule is cut-off and replaced. The customer is billed
+// with prorations immediately.
 func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...string) error {
 	_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c.client(), "POST", "/v1/subscribe", apitypes.SubscribeRequest{
 		Org:    org,
