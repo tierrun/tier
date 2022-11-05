@@ -70,7 +70,7 @@ func main() {
 			if err := help(stderr, cmd); err != nil {
 				log.Fatalf("%v", err)
 			}
-			return
+			os.Exit(1)
 		} else {
 			log.Fatalf("tier: %v", err)
 		}
@@ -133,7 +133,8 @@ func runTier(cmd string, args []string) (err error) {
 	}
 
 	if slices.Contains(args, "-h") {
-		return help(stdout, cmd)
+		err := help(stdout, cmd)
+		return err
 	}
 
 	ctx := context.Background()
@@ -160,7 +161,7 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		defer f.Close()
 
-		if err := pushJSON(ctx, f, func(f control.Feature, err error) {
+		return pushJSON(ctx, f, func(f control.Feature, err error) {
 			link, uerr := url.JoinPath(dashURL[cc().Live()], "products", f.ProviderID)
 			if uerr != nil {
 				panic(uerr)
@@ -186,10 +187,7 @@ func runTier(cmd string, args []string) (err error) {
 				link,
 				reason,
 			)
-		}); err != nil {
-			return err
-		}
-		return nil
+		})
 	case "pull":
 		data, err := tc().PullJSON(ctx)
 		if err != nil {
@@ -326,8 +324,11 @@ func runTier(cmd string, args []string) (err error) {
 }
 
 func fileOrStdin(fname string) (io.ReadCloser, error) {
-	if fname == "" || fname == "-" {
-		return io.NopCloser(stdin), nil
+	if fname == "" {
+		return nil, errUsage
+	}
+	if fname == "-" {
+		return io.NopCloser(os.Stdin), nil
 	}
 	return os.Open(fname)
 }
@@ -369,8 +370,7 @@ func pushJSON(ctx context.Context, r io.Reader, cb func(control.Feature, error))
 	if err != nil {
 		return err
 	}
-	cc().Push(ctx, fs, cb)
-	return nil
+	return cc().Push(ctx, fs, cb)
 }
 
 func newTabWriter() *tabwriter.Writer {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"tier.run/cmd/tier/cline"
@@ -54,4 +55,42 @@ func TestServeAddrFlag(t *testing.T) {
 	tt := testtier(t)
 	tt.RunFail("serve", "--addr", ":-1")
 	tt.GrepBoth("invalid port", "bad port accepted or ignored")
+}
+
+func TestPushStdin(t *testing.T) {
+	cases := []struct {
+		stdin         string
+		param         string
+		match         string
+		shouldSucceed bool
+	}{
+		// with and without stdin
+		{"", "", "Usage:", false}, // TODO(bmizerany): should exit non-zero, but not fixing in this PR
+		{"{", "", "Usage:", false},
+		{"{}", "", "Usage:", false},
+
+		{"", "foo.json", "no such file", false},
+		{"{-}", "-", "invalid literal", false},
+		{"{", "-", "unexpected EOF", false},
+
+		{"{}", "-", "", true},
+	}
+
+	for _, c := range cases {
+		t.Run("case", func(t *testing.T) {
+			tt := testtier(t)
+			tt.SetStdin(strings.NewReader(c.stdin))
+			if c.shouldSucceed {
+				tt.Run("push", c.param)
+				if c.match != "" {
+					tt.GrepBoth(c.match, "unexpected output")
+				} else {
+					tt.GrepBothNot(".+", "unexepcted output")
+				}
+			} else {
+				tt.RunFail("push", c.param)
+				tt.GrepBoth(c.match, "unexpected output")
+			}
+		})
+	}
 }
