@@ -47,10 +47,12 @@ Print the version of the Tier CLI.
 
 	"push": `Usage:
 
-	tier [--live] push <filename>
+	tier [--live] push <filename | - >
 
-Tier push pushes the pricing JSON in the provided filename to Stripe. To learn
-more about how this works, please visit: https://tier.run/docs/cli/push
+Tier push pushes the pricing JSON in the provided filename to Stripe. If the
+filename is ("-") then stdin is read.
+
+To learn more about how this works, please visit: https://tier.run/docs/cli/push
 
 If the --live flag is provided, your accounts live mode will be used.
 `,

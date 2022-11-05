@@ -74,6 +74,7 @@ func TestMain(m *testing.M, run func()) {
 
 type Data struct {
 	t      *testing.T
+	stdin  io.Reader
 	stdout bytes.Buffer
 	stderr bytes.Buffer
 	env    []string
@@ -126,6 +127,7 @@ func (d *Data) doRun(args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, testTier, args...)
+	cmd.Stdin = d.stdin
 	cmd.Stdout = &d.stdout
 	cmd.Stderr = &d.stderr
 	cmd.Env = d.env
@@ -165,15 +167,19 @@ func (d *Data) GrepStderrNot(match, msg string) {
 func (d *Data) GrepBothNot(match, msg string) {
 	d.t.Helper()
 	if d.doGrepMatch(match, &d.stdout) || d.doGrepMatch(match, &d.stderr) {
-		d.t.Errorf("pattern %q found it standard output or standard error: %s", match, msg)
+		d.t.Errorf("pattern %q found in standard output or standard error: %s", match, msg)
 	}
 }
 
 func (d *Data) GrepBoth(match, msg string) {
 	d.t.Helper()
 	if !d.doGrepMatch(match, &d.stdout) && !d.doGrepMatch(match, &d.stderr) {
-		d.t.Errorf("pattern %q found it standard output or standard error: %s", match, msg)
+		d.t.Errorf("pattern %q found in standard output or standard error: %s", match, msg)
 	}
+}
+
+func (d *Data) SetStdin(r io.Reader) {
+	d.stdin = r
 }
 
 // doGrep looks for a regular expression in a buffer and fails if it
