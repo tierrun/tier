@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -22,7 +24,20 @@ func testtier(t *testing.T) *cline.Data {
 	if c.Live() {
 		t.Fatal("STRIPE_API_KEY must be a live key")
 	}
+
+	// Make home something other than actual home as to not pick up a rea
+	// config and push to a real account.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	os.MkdirAll(filepath.Join(home, ".config/tier"), 0700)
+	const cfg = `{ "profiles": { "tier": {} } }`
+	err = os.WriteFile(filepath.Join(home, ".config/tier/config.json"), []byte(cfg), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	ct := cline.Test(t)
+	ct.Setenv("HOME", home)
 	ct.Setenv("TIER_DEBUG", "1")
 	return ct
 }
