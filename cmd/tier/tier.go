@@ -328,7 +328,7 @@ func fileOrStdin(fname string) (io.ReadCloser, error) {
 		return nil, errUsage
 	}
 	if fname == "-" {
-		return io.NopCloser(os.Stdin), nil
+		return io.NopCloser(stdin), nil
 	}
 	return os.Open(fname)
 }
