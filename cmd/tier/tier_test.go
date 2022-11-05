@@ -25,7 +25,7 @@ func testtier(t *testing.T) *cline.Data {
 		t.Fatal("STRIPE_API_KEY must be a live key")
 	}
 
-	// Make home something other than actual home as to not pick up a rea
+	// Make home something other than actual home as to not pick up a real
 	// config and push to a real account.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
