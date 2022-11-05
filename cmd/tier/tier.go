@@ -21,6 +21,7 @@ import (
 
 	"go4.org/types"
 	"golang.org/x/exp/slices"
+	"golang.org/x/term"
 	"tier.run/api"
 	"tier.run/api/materialize"
 	"tier.run/client/tier"
@@ -326,7 +327,11 @@ func runTier(cmd string, args []string) (err error) {
 }
 
 func fileOrStdin(fname string) (io.ReadCloser, error) {
-	if fname == "" || fname == "-" {
+	isTerm := term.IsTerminal(int(os.Stdin.Fd()))
+	if isTerm && fname == "" || fname == "-" {
+		return nil, errUsage
+	}
+	if !isTerm {
 		return io.NopCloser(stdin), nil
 	}
 	return os.Open(fname)
