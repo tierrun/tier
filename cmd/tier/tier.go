@@ -49,6 +49,11 @@ var (
 )
 
 func main() {
+	if sendEvents() {
+		return
+	}
+	defer flushEvents()
+
 	log.SetFlags(0)
 	flag.Usage = func() {
 		if err := help(stderr, ""); err != nil {
@@ -102,10 +107,7 @@ func runTier(cmd string, args []string) (err error) {
 			}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-
-		report.send(ctx, &event{
+		trackEvent(&event{
 			TraceID:     traceID,
 			ID:          traceID,
 			Type:        "cli",
@@ -120,8 +122,6 @@ func runTier(cmd string, args []string) (err error) {
 			GOOS:        runtime.GOOS,
 			GOARCH:      runtime.GOARCH,
 		})
-
-		report.flush()
 	}()
 
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
@@ -343,12 +343,6 @@ func vlogf(format string, args ...any) {
 			line = line + "\n"
 		}
 		io.WriteString(stderr, line)
-	}
-}
-
-func vvlogf(format string, args ...any) {
-	if debugLevel > 2 {
-		vlogf(format, args...)
 	}
 }
 
