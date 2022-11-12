@@ -3,13 +3,13 @@ module tier.run
 go 1.19
 
 require (
+	blake.io/forks v0.4.2
 	github.com/felixge/fgprof v0.9.3
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/kr/pretty v0.3.0
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
-	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	golang.org/x/tools v0.1.12
 	honnef.co/go/tools v0.3.3
 	kr.dev/diff v0.3.1-0.20221025214654-4c9427f2d4d4
