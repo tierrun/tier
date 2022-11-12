@@ -49,6 +49,20 @@ var (
 )
 
 func main() {
+	v, err := checkForUpdate()
+	if err != nil {
+		vlogf("%v", err)
+		// do not exit, continue
+	}
+	if v != "" {
+		fmt.Fprintf(stderr, "A new version of tier is available: %s\n", v)
+		if isHomebrewInstall() {
+			fmt.Fprintf(stderr, "Run `brew upgrade tier` to upgrade.\n")
+		} else {
+			fmt.Fprintf(stderr, "Visit https://tier.run/releases to download.\n")
+		}
+		fmt.Fprintln(stderr)
+	}
 	if sendEvents() {
 		return
 	}
@@ -338,7 +352,7 @@ var debugLevel, _ = strconv.Atoi(os.Getenv("TIER_DEBUG"))
 func vlogf(format string, args ...any) {
 	if *flagVerbose || debugLevel > 0 {
 		// mimic behavior of log.Printf
-		line := fmt.Sprintf(format, args...)
+		line := fmt.Sprintf("tier: "+format, args...)
 		if len(line) > 0 && line[len(line)-1] != '\n' {
 			line = line + "\n"
 		}
