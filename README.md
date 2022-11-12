@@ -21,7 +21,7 @@ brew install tierrun/tap/tier
 ```
 ### Binary (macOS, linux, Windows)
 
-Binaries for major architectures can be found at [here](https://github.com/tierrun/tier/releases).
+Binaries for major architectures can be found at [here](https://tier.run/releases).
 
 ### Go (most operating systems and architectures)
 

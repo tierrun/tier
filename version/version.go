@@ -26,7 +26,6 @@ var Short = ""
 
 func init() {
 	if Long != "" && Short != "" {
-		// Built in the recommended way, using build_dist.sh.
 		return
 	}
 
