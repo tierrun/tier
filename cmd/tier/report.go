@@ -44,6 +44,7 @@ var vhs struct {
 }
 
 func trackEvent(ev *event) {
+	vlogf("tracking: %v", ev)
 	if doNotTrack {
 		return
 	}

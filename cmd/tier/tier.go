@@ -58,6 +58,7 @@ func main() {
 		vlogf("%v", err)
 		// do not exit, continue
 	}
+
 	if v != "" {
 		fmt.Fprintf(stderr, "A new version of tier is available: %s\n", v)
 		if isHomebrewInstall() {
@@ -90,9 +91,8 @@ func main() {
 				log.Fatalf("%v", err)
 			}
 			os.Exit(1)
-		} else {
-			log.Fatalf("tier: %v", err)
 		}
+		log.Fatalf("tier: %v", err)
 	}
 }
 

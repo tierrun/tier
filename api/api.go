@@ -62,36 +62,18 @@ func NewHandler(c *control.Client, logf func(string, ...any)) *Handler {
 	return &Handler{c: c, Logf: logf, helper: func() {}}
 }
 
-func (h *Handler) logf(format string, args ...interface{}) {
-	h.helper()
-	if h.Logf != nil {
-		h.Logf("api:"+format, args...)
-	}
-}
-
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	var debug []string // TODO(bmizerany): pool to remove allocs
-	dbg := func(msg string) {
-		debug = append(debug, msg)
-	}
 	defer func() {
-		h.logf("%s %s %s: %# v", r.Method, r.URL.Path, debug, pretty.Formatter(err))
+		// h.logf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)
 	}()
-
 	bw := &byteCountResponseWriter{ResponseWriter: w}
-
-	dbg("serve")
 	err = h.serve(bw, r)
-
 	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
-		dbg("writeerr")
 		return
 	}
-
 	var e *control.ValidationError
 	if errors.As(err, &e) {
-		dbg("validationerr")
 		trweb.WriteError(w, &trweb.HTTPError{
 			Status:  400,
 			Code:    "invalid_request",
@@ -99,15 +81,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
 	if err != nil {
-		dbg("catchallerr")
 		trweb.WriteError(w, trweb.InternalError)
 		return
 	}
-
 	if bw.n == 0 {
-		dbg("empty")
 		io.WriteString(w, "{}")
 	}
 }
