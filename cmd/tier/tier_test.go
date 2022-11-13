@@ -36,6 +36,8 @@ func testtier(t *testing.T) *cline.Data {
 		t.Fatal(err)
 	}
 
+	setWorkingDir(t, home)
+
 	ct := cline.Test(t)
 	ct.Setenv("HOME", home)
 	ct.Setenv("TIER_DEBUG", "1")
@@ -56,8 +58,9 @@ func TestLiveFlag(t *testing.T) {
 
 	tt = testtier(t)
 	tt.Setenv("STRIPE_API_KEY", "sk_live_123")
+	tt.Unsetenv("TIER_DEBUG")
 	tt.RunFail("--live", "pull") // fails due to invalid key only
-	tt.GrepStderr("stripe:.*Invalid API Key", "unexpected error message")
+	tt.GrepStderr("invalid_api_key", "expected error message")
 	tt.GrepBothNot("--live", "output contains --live flag")
 
 	tt = testtier(t)
@@ -100,7 +103,7 @@ func TestPushStdin(t *testing.T) {
 				if c.match != "" {
 					tt.GrepBoth(c.match, "unexpected output")
 				} else {
-					tt.GrepBothNot(".+", "unexepcted output")
+					tt.GrepStdoutNot(".+", "unexpected output")
 				}
 			} else {
 				tt.RunFail("push", c.param)
@@ -108,4 +111,16 @@ func TestPushStdin(t *testing.T) {
 			}
 		})
 	}
+}
+
+func setWorkingDir(t *testing.T, dir string) {
+	t.Helper()
+	cwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	os.Chdir(dir)
+	t.Cleanup(func() {
+		os.Chdir(cwd)
+	})
 }
