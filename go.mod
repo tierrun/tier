@@ -3,7 +3,7 @@ module tier.run
 go 1.19
 
 require (
-	blake.io/forks v0.5.1
+	blake.io/forks v0.5.2
 	github.com/felixge/fgprof v0.9.3
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/kr/pretty v0.3.0

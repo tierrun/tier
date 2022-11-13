@@ -22,7 +22,7 @@ type event struct {
 	Name  string
 	Start types.Time3339
 	End   types.Time3339
-	Err   error
+	Err   string
 
 	AccountID   string
 	DisplayName string
@@ -74,7 +74,7 @@ func flushEvents() {
 }
 
 func sendEvents() (sent bool) {
-	if !forks.Child() {
+	if !forks.ChildOf("track") {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

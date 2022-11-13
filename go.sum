@@ -1,5 +1,7 @@
 blake.io/forks v0.5.1 h1:Lo8bLRX85B/ioMto64CAujlbhybA7ZHeRYxXpGN9/Ls=
 blake.io/forks v0.5.1/go.mod h1:UO8nMYLpBIldfECuLvjVpbOsGni6Gp/INqkoSW5EpLg=
+blake.io/forks v0.5.2 h1:ctnUy1AvpSuV7Y2uLxVHeUC14ZbmrBpkGI9ukHAQtiE=
+blake.io/forks v0.5.2/go.mod h1:UO8nMYLpBIldfECuLvjVpbOsGni6Gp/INqkoSW5EpLg=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.34.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSRU=

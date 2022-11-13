@@ -49,6 +49,10 @@ var (
 )
 
 func main() {
+	if sendEvents() {
+		return
+	}
+
 	v, err := checkForUpdate()
 	if err != nil {
 		vlogf("%v", err)
@@ -63,10 +67,6 @@ func main() {
 		}
 		fmt.Fprintln(stderr)
 	}
-	if sendEvents() {
-		return
-	}
-	defer flushEvents()
 
 	log.SetFlags(0)
 	flag.Usage = func() {
@@ -111,16 +111,22 @@ func timeNow() types.Time3339 {
 }
 
 func runTier(cmd string, args []string) (err error) {
+	defer flushEvents()
+
 	start := timeNow()
 	defer func() {
-		p, err := profile.Load("tier")
-		if err != nil {
+		p, pErr := profile.Load("tier")
+		if pErr != nil {
 			vlogf("tier: %v", err)
 			p = &profile.Profile{
 				DeviceName: "profile.unknown",
 			}
 		}
 
+		errStr := ""
+		if err != nil && !errors.Is(err, errUsage) {
+			errStr = err.Error()
+		}
 		trackEvent(&event{
 			TraceID:     traceID,
 			ID:          traceID,
@@ -128,7 +134,7 @@ func runTier(cmd string, args []string) (err error) {
 			Name:        cmd,
 			Start:       start,
 			End:         timeNow(),
-			Err:         err,
+			Err:         errStr,
 			AccountID:   p.AccountID,
 			DisplayName: p.DisplayName,
 			DeviceName:  p.DeviceName,
