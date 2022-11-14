@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"blake.io/forks"
 	"go4.org/types"
+	"tier.run/envknobs"
 )
 
 type event struct {
@@ -59,29 +60,21 @@ func trackEvent(ev *event) {
 	}
 }
 
-func flushEvents() {
-	// save events to temp json file
+func sendEvents() error {
 	if doNotTrack {
-		return
-	}
-	vhs.Lock()
-	defer vhs.Unlock()
-	os.Setenv("_TIER_EVENTS", vhs.buf.String())
-	_, err := forks.Maybe("track", 1*time.Second)
-	if err != nil {
-		// TODO(bmizerany): log to some logfile
-		return
-	}
-}
-
-func sendEvents() (sent bool) {
-	if !forks.ChildOf("track") {
-		return false
+		vlogf("not sending events because DO_NOT_TRACK is set")
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+	urlStr, err := url.JoinPath(envknobs.TrackingBaseURL(), "api/t")
+	if err != nil {
+		return err
+	}
 	body := strings.NewReader(os.Getenv("_TIER_EVENTS"))
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://tele.tier.run/api/t", body)
+	vlogf("sending events to %v", urlStr)
+	vlogf("events: %v", os.Getenv("_TIER_EVENTS"))
+	req, err := http.NewRequestWithContext(ctx, "POST", urlStr, body)
 	if err != nil {
 		panic(err)
 	}
@@ -90,10 +83,10 @@ func sendEvents() (sent bool) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		// TODO(bmizerany): log to some logfile
-		return
+		return err
 	}
 	resp.Body.Close()
-	return true
+	return nil
 }
 
 func isHomebrewInstall() bool {

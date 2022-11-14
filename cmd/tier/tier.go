@@ -49,26 +49,6 @@ var (
 )
 
 func main() {
-	if sendEvents() {
-		return
-	}
-
-	v, err := checkForUpdate()
-	if err != nil {
-		vlogf("%v", err)
-		// do not exit, continue
-	}
-
-	if v != "" {
-		fmt.Fprintf(stderr, "A new version of tier is available: %s\n", v)
-		if isHomebrewInstall() {
-			fmt.Fprintf(stderr, "Run `brew upgrade tier` to upgrade.\n")
-		} else {
-			fmt.Fprintf(stderr, "Visit https://tier.run/releases to download.\n")
-		}
-		fmt.Fprintln(stderr)
-	}
-
 	log.SetFlags(0)
 	flag.Usage = func() {
 		if err := help(stderr, ""); err != nil {
@@ -111,7 +91,22 @@ func timeNow() types.Time3339 {
 }
 
 func runTier(cmd string, args []string) (err error) {
-	defer flushEvents()
+	if f := background(); f != nil {
+		defer f()
+	} else {
+		// background already processed
+		return
+	}
+
+	if v := updateAvailable(); v != "" {
+		fmt.Fprintf(stderr, "A new version of tier is available: %s\n", v)
+		if isHomebrewInstall() {
+			fmt.Fprintf(stderr, "Run `brew upgrade tier` to upgrade.\n")
+		} else {
+			fmt.Fprintf(stderr, "Visit https://tier.run/releases to download.\n")
+		}
+		fmt.Fprintln(stderr)
+	}
 
 	start := timeNow()
 	defer func() {
@@ -124,9 +119,12 @@ func runTier(cmd string, args []string) (err error) {
 		}
 
 		errStr := ""
-		if err != nil && !errors.Is(err, errUsage) {
+		if errors.Is(err, errUsage) {
+			errStr = "usage"
+		} else if err != nil {
 			errStr = err.Error()
 		}
+
 		trackEvent(&event{
 			TraceID:     traceID,
 			ID:          traceID,
@@ -358,7 +356,7 @@ var debugLevel, _ = strconv.Atoi(os.Getenv("TIER_DEBUG"))
 func vlogf(format string, args ...any) {
 	if *flagVerbose || debugLevel > 0 {
 		// mimic behavior of log.Printf
-		line := fmt.Sprintf("tier: "+format, args...)
+		line := fmt.Sprintf("tierDEBUG: "+format, args...)
 		if len(line) > 0 && line[len(line)-1] != '\n' {
 			line = line + "\n"
 		}

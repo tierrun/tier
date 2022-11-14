@@ -44,7 +44,7 @@ func TestMain(m *testing.M, run func()) {
 
 	testTier = testTempDir + "/tier"
 
-	// synlink the test executable to the temp dir or copy if the host OS
+	// symlink the test executable to the temp dir or copy if the host OS
 	// does not support symlinks.
 	if err := os.Symlink(testExe, testTier); err != nil {
 		// Otherwise, copy the bytes.
@@ -98,7 +98,7 @@ func (d *Data) Unsetenv(name string) {
 	}
 	for i, e := range d.env {
 		if strings.HasPrefix(e, name+"=") {
-			d.env = slices.Delete(d.env, i, i)
+			d.env = slices.Delete(d.env, i, i+1)
 			return
 		}
 	}
@@ -133,12 +133,10 @@ func (d *Data) doRun(args ...string) error {
 	cmd.Env = d.env
 	status := cmd.Run()
 	if d.stdout.Len() > 0 {
-		d.t.Log("standard output:")
-		d.t.Log(d.stdout.String())
+		d.t.Logf("standard output:\n%s", d.stdout.String())
 	}
 	if d.stderr.Len() > 0 {
-		d.t.Log("standard error:")
-		d.t.Log(d.stderr.String())
+		d.t.Logf("standard error:\n%s", d.stderr.String())
 	}
 	d.ran = true
 	return status
