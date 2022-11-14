@@ -28,7 +28,6 @@ func testtier(t *testing.T) *cline.Data {
 	// Make home something other than actual home as to not pick up a real
 	// config and push to a real account.
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	os.MkdirAll(filepath.Join(home, ".config/tier"), 0700)
 	const cfg = `{ "profiles": { "tier": {} } }`
 	err = os.WriteFile(filepath.Join(home, ".config/tier/config.json"), []byte(cfg), 0600)
@@ -41,6 +40,7 @@ func testtier(t *testing.T) *cline.Data {
 	ct := cline.Test(t)
 	ct.Setenv("HOME", home)
 	ct.Setenv("TIER_DEBUG", "1")
+	ct.Setenv("DO_NOT_TRACK", "1") // prevent tests from sending events
 	return ct
 }
 

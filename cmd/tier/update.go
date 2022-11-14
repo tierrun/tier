@@ -11,63 +11,47 @@ import (
 	"strings"
 	"time"
 
-	"blake.io/forks"
 	"golang.org/x/mod/semver"
-	"kr.dev/errorfmt"
 	tierroot "tier.run"
+	"tier.run/envknobs"
 )
 
-// checkForUpdate reports a new version if one is available; otherwise it
-// returns the empty string.
-func checkForUpdate() (latest string, err error) {
-	defer errorfmt.Handlef("checkForUpdate: %w", &err)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	name := filepath.Join(home, ".local", "tier", "version")
+var versionFileName = filepath.Join(envknobs.XDGDataHome(), "tier", "latest-version")
 
-	if forks.ChildOf("update") {
-		log.Println("child process; checking for updates")
-		ver, err := fetchLatestVersion()
-		if err != nil {
-			log.Printf("error fetching latest version: %v", err)
-			return "", err
-		}
-		os.MkdirAll(filepath.Dir(name), 0755)
-		if err := os.WriteFile(name, []byte(ver), 0644); err != nil {
-			log.Printf("error writing version file: %v", err)
-			return "", err
-		}
-		log.Printf("updated version file to %q", ver)
-		return "", nil
-	}
-
-	_, err = forks.Maybe("update", 1*time.Hour)
-	if err != nil {
-		// If the child process fails, it is okay to continue; log the
-		// error if verbose is set, but always swallow the error.
-		return "", err
-	}
-
-	ver, err := os.ReadFile(name)
+func updateAvailable() string {
+	ver, err := os.ReadFile(versionFileName)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", nil // prevent verbose log output about this
+			return ""
 		}
-		// This means the file is bad, etc. It does not matter, we'll
-		// try again next time.
-		return "", err
+		vlogf("error reading version file: %v", err)
+		return ""
 	}
-
-	latest = string(ver)
+	latest := string(ver)
 	current := "v" + strings.TrimSpace(tierroot.Version)
 	vlogf("latest version: %s, current version: %s", latest, current)
 	vlogf("update: %v", semver.Compare(latest, current))
 	if semver.Compare(latest, current) > 0 {
-		return latest, nil
+		return latest
 	}
-	return "", nil
+	return ""
+}
+
+// checkForUpdate reports a new version if one is available; otherwise it
+// returns the empty string.
+func checkForUpdate() error {
+	ver, err := fetchLatestVersion()
+	if err != nil {
+		log.Printf("error fetching latest version: %v", err)
+		return err
+	}
+	os.MkdirAll(filepath.Dir(versionFileName), 0755)
+	if err := os.WriteFile(versionFileName, []byte(ver), 0644); err != nil {
+		log.Printf("error writing version file: %v", err)
+		return err
+	}
+	log.Printf("updated version file to %q", ver)
+	return nil
 }
 
 func fetchLatestVersion() (string, error) {
