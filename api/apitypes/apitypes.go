@@ -1,10 +1,22 @@
 package apitypes
 
 import (
+	"fmt"
 	"time"
 
 	"tier.run/refs"
 )
+
+type Error struct {
+	Status  int    `json:"status"`
+	Code    string `json:"code"` // (e.g. "invalid_request")
+	Message string `json:"message"`
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("httpError{status:%d code:%q message:%q}",
+		e.Status, e.Code, e.Message)
+}
 
 type Phase struct {
 	Effective time.Time
@@ -59,4 +71,13 @@ type PushResult struct {
 
 type PushResponse struct {
 	Results []PushResult `json:"results,omitempty"`
+}
+
+type WhoAmIResponse struct {
+	ProviderID string    `json:"id"`
+	Email      string    `json:"email"`
+	Created    time.Time `json:"created"`
+	KeySource  string    `json:"key_source"`
+	Isolated   bool      `json:"isolated"`
+	URL        string    `json:"url"`
 }

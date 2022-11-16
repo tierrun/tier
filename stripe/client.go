@@ -146,6 +146,13 @@ func formKeyVal(args ...any) (string, string) {
 	return key, fmt.Sprint(v)
 }
 
+func BaseURL() string {
+	if s := os.Getenv("STRIPE_BASE_API_URL"); s != "" {
+		return s
+	}
+	return "https://api.stripe.com"
+}
+
 type Client struct {
 	APIKey     string
 	BaseURL    string
@@ -159,11 +166,12 @@ type Client struct {
 }
 
 func FromEnv() (*Client, error) {
-	key, ok := os.LookupEnv("STRIPE_API_KEY")
-	if !ok {
+	key := os.Getenv("STRIPE_API_KEY")
+	if key == "" {
 		return nil, errors.New("stripe: missing STRIPE_API_KEY")
 	}
-	return &Client{APIKey: key}, nil
+	baseURL := os.Getenv("STRIPE_BASE_API_URL")
+	return &Client{APIKey: key, BaseURL: baseURL}, nil
 }
 
 func IsLiveKey(key string) bool {

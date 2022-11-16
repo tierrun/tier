@@ -21,13 +21,16 @@ The commands are:
 	push       push pricing plans to Stripe
 	pull       pull pricing plans from Stripe
 	ls         list pricing plans
-	version    print the current CLI version
+	version    display the current CLI version
 	subscribe  subscribe an org to a pricing plan
 	phases     list scheduled phases for an org
 	limits     list feature limits for an org
-	report     report usage
-	whois      get the Stripe customer ID for an org
-	help       print this help message
+	report     report usage for metered features
+	whoami     display the current account information
+	switch     create and switch to clean rooms
+	whois      display the Stripe customer ID for an org
+	serve      run the sidecar API
+	help       display this help message
 
 The flags are:
 
@@ -145,6 +148,13 @@ Tier whois reports the Stripe customer ID for the provided org.
 
 If the --live flag is provided, your accounts live mode will be used.
 `,
+	"whoami": `Usage:
+
+	tier whoami
+
+Tier whoami reports Stripe account information associated with the current key
+in use as a result of "tier connect", "tier switch", or the STRIPE_API_KEY.
+`,
 
 	`tier`: errUsage.Error(),
 
@@ -156,6 +166,52 @@ Tier serve starts a web server that exposes the Tier API over HTTP listening on
 the provided service address.
 
 The default service address is "localhost:8080".
+`,
+	"switch": `Usage:
+
+	tier switch [-c] [accountID]
+
+Tier switch tells tier to use the provided accountID, or, if run with "-i", to
+create and use a new isolation account, when run from the current working
+directory.
+
+To switch back to the default account:
+
+    a) rename the tier.state file
+    b) change your working directory, or
+    c) delete the tier.state file 
+
+Example:
+
+	This example demostrates pushing a pricing model to an isolated account
+	and then starting fresh with a new isolated account, and then switching
+	back to the default account by deleting the tier.state file.
+
+		; tier connect
+		; tier switch -c
+		; tier push pricing.json
+		; tier pull
+		; tier switch -c
+		; tier pull
+		; tier push pricing2.json
+		; rm tier.state
+		; tier pull
+
+Prerequisites:
+
+	Connected accounts MUST be enabled in your Stripe account. To enable,
+	head to https://dashboard.stripe.com/test/connect/accounts/overview.
+
+Constraints:
+
+	Commands run in isloated mode for an account not accessible by the
+	current API key, will fail. Move to a new directory or move the
+	tier.state file to resume using the API key, or run "tier connect" and
+	login to the root account that owns the account in the tier.state file.
+
+Flags:
+
+    -i    Create a new account and switch to it.
 `,
 }
 

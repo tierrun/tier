@@ -125,9 +125,10 @@ type Tier struct {
 }
 
 type Client struct {
-	Logf   func(format string, args ...any)
-	Stripe *stripe.Client
-	Clock  string
+	Logf      func(format string, args ...any)
+	Stripe    *stripe.Client
+	Clock     string // a test clock name if any should be used
+	KeySource string // the source of the API key
 
 	cache memo
 }

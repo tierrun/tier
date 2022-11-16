@@ -110,20 +110,18 @@ func fetchProfile(ctx context.Context, pollURL string) (*profile.Profile, error)
 // getKey returns the API from the environment variable STRIPE_API_KEY, or the
 // live mode key in config.json, or the test mode key in config.json, in that
 // order. It returns an error if no key is found.
-func getKey() (string, error) {
+func getKey() (key, source string, err error) {
 	if envAPIKey != "" {
-		return envAPIKey, nil
+		return envAPIKey, "STRIPE_API_KEY", nil
 	}
-
 	p, err := profile.Load("tier")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-
 	if *flagLive {
-		return p.LiveAPIKey, nil
+		return p.LiveAPIKey, profile.ConfigPath, nil
 	}
-	return p.TestAPIKey, nil
+	return p.TestAPIKey, profile.ConfigPath, nil
 }
 
 //lint:ignore U1000 this type is used as a type parameter, but staticcheck seems to not be able to detect that yet. Remove this comment when staticcheck will stop complaining.

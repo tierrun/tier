@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -28,7 +29,7 @@ var controlClient *control.Client
 
 func cc() *control.Client {
 	if controlClient == nil {
-		key, err := getKey()
+		key, source, err := getKey()
 		if err != nil {
 			fmt.Fprintf(stderr, "tier: There was an error looking up your Stripe API Key: %v\n", err)
 			if errors.Is(err, profile.ErrProfileNotFound) {
@@ -49,15 +50,56 @@ func cc() *control.Client {
 			}
 		}
 
+		a, err := getState()
+		if err != nil {
+			fmt.Fprintf(stderr, "tier: %v", err)
+			os.Exit(1)
+		}
+
+		keyPrefix := a.ID
+		if keyPrefix == "" {
+			keyPrefix = os.Getenv("TIER_KEY_PREFIX")
+		}
 		sc := &stripe.Client{
 			APIKey:    key,
-			KeyPrefix: os.Getenv("TIER_KEY_PREFIX"),
+			KeyPrefix: keyPrefix,
+			AccountID: a.ID,
 			Logf:      vlogf,
+			BaseURL:   stripe.BaseURL(),
 		}
 		controlClient = &control.Client{
-			Stripe: sc,
-			Logf:   vlogf,
+			Stripe:    sc,
+			Logf:      vlogf,
+			KeySource: source,
 		}
 	}
 	return controlClient
+}
+
+const stateFile = "tier.state"
+
+func saveState(a stripe.Account) error {
+	data, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(stateFile, data, 0600)
+}
+
+func getState() (stripe.Account, error) {
+	var a stripe.Account
+	data, err := os.ReadFile(stateFile)
+	if os.IsNotExist(err) {
+		return a, nil
+	}
+	if err != nil {
+		return a, err
+	}
+	if err := json.Unmarshal(data, &a); err != nil {
+		return a, err
+	}
+	if a.ID == "" {
+		return a, fmt.Errorf("no account ID in state file")
+	}
+	return a, nil
 }

@@ -455,6 +455,37 @@ func (c *Client) putCustomer(ctx context.Context, org string) (string, error) {
 	return cid, err
 }
 
+type Account struct {
+	ProviderID string `json:"id"`
+	Email      string `json:"email"`
+	CreatedAt  int64  `json:"created"`
+	KeySource  string `json:"key_source"`
+	Isolated   bool   `json:"isolated"`
+}
+
+func (a *Account) Created() time.Time {
+	return time.Unix(a.CreatedAt, 0)
+}
+
+func (a *Account) URL() string {
+	return fmt.Sprintf("https://dashboard.stripe.com/%s", a.ProviderID)
+}
+
+func (c *Client) WhoAmI(ctx context.Context) (Account, error) {
+	var a Account
+	var f stripe.Form
+	if err := c.Stripe.Do(ctx, "GET", "/v1/account", f, &a); err != nil {
+		return Account{}, err
+	}
+	a.Isolated = c.Stripe.AccountID != ""
+	a.KeySource = c.KeySource
+	return a, nil
+}
+
+func (c *Client) Isolated() bool {
+	return c.Stripe.AccountID != ""
+}
+
 func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 	if !strings.HasPrefix(org, "org:") {
 		return "", &ValidationError{Message: "org must be prefixed with \"org:\""}

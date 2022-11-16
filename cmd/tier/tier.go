@@ -22,10 +22,12 @@ import (
 	"go4.org/types"
 	"golang.org/x/exp/slices"
 	"tier.run/api"
+	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/client/tier"
 	"tier.run/control"
 	"tier.run/profile"
+	"tier.run/stripe"
 	"tier.run/version"
 )
 
@@ -66,6 +68,9 @@ func main() {
 
 	cmd := args[0]
 	if err := runTier(cmd, args[1:]); err != nil {
+		if isIsolationError(err) {
+			log.Fatalf("tier: Running in isloated mode without the API key that started it; See 'tier switch -h'.")
+		}
 		if errors.Is(err, errUsage) {
 			if err := help(stderr, cmd); err != nil {
 				log.Fatalf("%v", err)
@@ -74,6 +79,11 @@ func main() {
 		}
 		log.Fatalf("tier: %v", err)
 	}
+}
+
+func isIsolationError(err error) bool {
+	var e *apitypes.Error
+	return errors.As(err, &e) && e.Code == "account_invalid"
 }
 
 var dashURL = map[bool]string{
@@ -315,6 +325,20 @@ func runTier(cmd string, args []string) (err error) {
 			return err
 		}
 		return tc().Report(ctx, org, feature, n)
+	case "whoami":
+		who, err := tc().WhoAmI(ctx)
+		if err != nil {
+			return err
+		}
+		tw := newTabWriter()
+		defer tw.Flush()
+		fmt.Fprintf(tw, "ID:\t%v\n", who.ProviderID)
+		fmt.Fprintf(tw, "KeySource:\t%v\n", who.KeySource)
+		fmt.Fprintf(tw, "Isolated:\t%v\n", who.Isolated)
+		fmt.Fprintf(tw, "Email:\t%v\n", who.Email)
+		fmt.Fprintf(tw, "Created:\t%v\n", who.Created.Format(time.RFC3339))
+		fmt.Fprintf(tw, "URL:\t%v\n", who.URL)
+		return nil
 	case "whois":
 		if len(args) < 1 {
 			return errUsage
@@ -336,6 +360,60 @@ func runTier(cmd string, args []string) (err error) {
 			return err
 		}
 		return serve(*addr)
+	case "switch":
+		fs := flag.NewFlagSet("switch", flag.ExitOnError)
+		create := fs.Bool("c", false, "create a new isolated environment")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		var a stripe.Account
+		if *create {
+			if cc().Live() {
+				return fmt.Errorf("isolation mode not allowed in live mode")
+			}
+			if fs.NArg() != 0 {
+				return fmt.Errorf("isolation mode does not accept arguments")
+			}
+			ca, _ := getState()
+			if ca.ID != "" {
+				//lint:ignore ST1005 we're using errors for text in main, ignore.
+				return errors.New(`tier.state file present
+
+To switch to an ioslated account, run from a different directory, or remove
+the tier.state file.`)
+			}
+			var err error
+			a, err = stripe.CreateAccount(ctx, cc().Stripe)
+			if errors.Is(err, stripe.ErrConnectUnavailable) {
+				fmt.Fprintf(stderr, "tier: stripe connect not enabled\n")
+				return errUsage
+			}
+			if err != nil {
+				return err
+			}
+		} else {
+			if fs.NArg() < 1 {
+				return errUsage
+			}
+			a.ID = fs.Arg(0)
+		}
+		if err := saveState(a); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, strings.TrimSpace(`
+Running in isolation mode.
+
+To switch back to normal mode, you can either:
+
+    A) delete the tier.state file in this directory, or
+    B) run tier from another directory
+
+The account dashboard is located at:
+
+    https://dashboard.stripe.com/%s/test
+`), a.ID)
+		fmt.Fprintln(stdout)
+		return nil
 	default:
 		return errUsage
 	}
