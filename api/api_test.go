@@ -14,7 +14,6 @@ import (
 	"tier.run/fetch/fetchtest"
 	"tier.run/refs"
 	"tier.run/stripe/stroke"
-	"tier.run/trweb"
 )
 
 var (
@@ -136,7 +135,7 @@ func TestAPISubscribe(t *testing.T) {
 		diff.Test(t, t.Errorf, got, want, ignore)
 	}
 
-	whoIs("org:test", &trweb.HTTPError{
+	whoIs("org:test", &apitypes.Error{
 		Status:  400,
 		Code:    "org_not_found",
 		Message: "org not found",
@@ -146,7 +145,7 @@ func TestAPISubscribe(t *testing.T) {
 
 	report("org:test", "feature:t", 9, nil)
 	report("org:test", "feature:t", 1, nil)
-	report("org:test", "feature:x", 1, &trweb.HTTPError{
+	report("org:test", "feature:x", 1, &apitypes.Error{
 		Status:  400,
 		Code:    "invalid_request",
 		Message: "feature not reportable",
@@ -165,13 +164,13 @@ func TestAPISubscribe(t *testing.T) {
 		},
 	})
 
-	report("org:test", "feature:nope", 9, &trweb.HTTPError{
+	report("org:test", "feature:nope", 9, &apitypes.Error{
 		Status:  400,
 		Code:    "feature_not_found",
 		Message: "feature not found",
 	})
 
-	report("org:nope", "feature:t", 9, &trweb.HTTPError{
+	report("org:nope", "feature:t", 9, &apitypes.Error{
 		Status:  400,
 		Code:    "org_not_found",
 		Message: "org not found",
@@ -182,7 +181,7 @@ func TestAPISubscribe(t *testing.T) {
 		Plans:    mpps("plan:test@0"),
 	})
 
-	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, &trweb.HTTPError{
+	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, &apitypes.Error{
 		Status:  400,
 		Code:    "feature_not_found",
 		Message: "feature not found",
@@ -195,14 +194,14 @@ func TestPhaseBadOrg(t *testing.T) {
 	ctx := context.Background()
 	c, _ := newTestClient(t)
 
-	_, err := fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "GET", "/v1/phase?org=org:nope", nil)
-	diff.Test(t, t.Errorf, err, &trweb.HTTPError{
+	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c, "GET", "/v1/phase?org=org:nope", nil)
+	diff.Test(t, t.Errorf, err, &apitypes.Error{
 		Status:  404,
 		Code:    "not_found",
 		Message: "Not Found",
 	})
-	_, err = fetch.OK[struct{}, *trweb.HTTPError](ctx, c, "GET", "/v1/phase", nil)
-	diff.Test(t, t.Errorf, err, &trweb.HTTPError{
+	_, err = fetch.OK[struct{}, *apitypes.Error](ctx, c, "GET", "/v1/phase", nil)
+	diff.Test(t, t.Errorf, err, &apitypes.Error{
 		Status:  400,
 		Code:    "invalid_request",
 		Message: `org must be prefixed with "org:"`,
@@ -247,7 +246,7 @@ func TestPhaseFragments(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := fetch.OK[apitypes.PhaseResponse, *trweb.HTTPError](ctx, c, "GET", "/v1/phase?org=org:test", nil)
+	got, err := fetch.OK[apitypes.PhaseResponse, *apitypes.Error](ctx, c, "GET", "/v1/phase?org=org:test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,6 +306,25 @@ func TestTierPull(t *testing.T) {
 	}
 
 	diff.Test(t, t.Errorf, got, want)
+}
+
+func TestWhoAmI(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c, _ := newTestClient(t)
+	tc := &tier.Client{HTTPClient: c}
+	a, err := tc.WhoAmI(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a.ProviderID == "" {
+		t.Error("unexpected empty provider id")
+	}
+	if a.URL == "" {
+		t.Error("unexpected empty url")
+	}
 }
 
 func TestTierReport(t *testing.T) {

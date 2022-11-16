@@ -62,6 +62,11 @@ func NewHandler(c *control.Client, logf func(string, ...any)) *Handler {
 	return &Handler{c: c, Logf: logf, helper: func() {}}
 }
 
+func isInvalidAccount(err error) bool {
+	var e *stripe.Error
+	return errors.As(err, &e) && e.Code == "account_invalid"
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	defer func() {
@@ -69,6 +74,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 	bw := &byteCountResponseWriter{ResponseWriter: w}
 	err = h.serve(bw, r)
+	if isInvalidAccount(err) {
+		trweb.WriteError(w, &trweb.HTTPError{
+			Status: 401,
+			Code:   "account_invalid",
+		})
+		return
+	}
 	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
 		return
 	}
@@ -92,6 +104,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 	switch r.URL.Path {
+	case "/v1/whoami":
+		return h.serveWhoAmI(w, r)
 	case "/v1/whois":
 		return h.serveWhoIs(w, r)
 	case "/v1/limits":
@@ -167,6 +181,21 @@ func (h *Handler) serveWhoIs(w http.ResponseWriter, r *http.Request) error {
 	return httpJSON(w, apitypes.WhoIsResponse{
 		Org:      org,
 		StripeID: stripeID,
+	})
+}
+
+func (h *Handler) serveWhoAmI(w http.ResponseWriter, r *http.Request) error {
+	who, err := h.c.WhoAmI(r.Context())
+	if err != nil {
+		return err
+	}
+	return httpJSON(w, apitypes.WhoAmIResponse{
+		ProviderID: who.ProviderID,
+		Email:      who.Email,
+		Created:    who.Created(),
+		KeySource:  who.KeySource,
+		Isolated:   who.Isolated,
+		URL:        who.URL(),
 	})
 }
 

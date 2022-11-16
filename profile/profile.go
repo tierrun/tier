@@ -19,6 +19,8 @@ type Profile struct {
 	LivePublishableKey string `json:"livemode_key_publishable"`
 	TestAPIKey         string `json:"testmode_key_secret"`
 	TestPublishableKey string `json:"testmode_key_publishable"`
+
+	Source string `json:"-"`
 }
 
 type Profiles map[string]*Profile
@@ -85,16 +87,19 @@ func Save(name string, p *Profile) error {
 	return e.Encode(c)
 }
 
-func open() (*os.File, error) {
+var ConfigPath string // set on init; treat as const
+
+func init() {
 	home, err := os.UserHomeDir()
 	if err != nil {
+		panic(err)
+	}
+	ConfigPath = filepath.Join(home, ".config", "tier", "config.json")
+}
+
+func open() (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(ConfigPath), 0o700); err != nil {
 		return nil, err
 	}
-
-	dir := filepath.Join(home, ".config", "tier")
-	if err = os.MkdirAll(dir, 0o700); err != nil {
-		return nil, err
-	}
-
-	return os.OpenFile(filepath.Join(dir, "config.json"), os.O_CREATE|os.O_RDWR, 0o600)
+	return os.OpenFile(ConfigPath, os.O_CREATE|os.O_RDWR, 0o600)
 }

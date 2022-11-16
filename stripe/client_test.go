@@ -18,6 +18,31 @@ func newTestClient(t *testing.T, h func(w http.ResponseWriter, r *http.Request))
 	return c
 }
 
+func TestFromEnv(t *testing.T) {
+	t.Setenv("STRIPE_API_KEY", "")
+	t.Setenv("STRIPE_BASE_API_URL", "")
+	c, err := FromEnv()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if c != nil {
+		t.Fatalf("expected nil client")
+	}
+
+	t.Setenv("STRIPE_API_KEY", "foo")
+	t.Setenv("STRIPE_BASE_API_URL", "https://example.com")
+	c, err = FromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.APIKey != "foo" {
+		t.Errorf("got %q; want %q", c.APIKey, "foo")
+	}
+	if c.BaseURL != "https://example.com" {
+		t.Errorf("got %q; want %q", c.BaseURL, "https://example.com")
+	}
+}
+
 func TestSetIdempotencyKey(t *testing.T) {
 	var got string
 	c := newTestClient(t, func(_ http.ResponseWriter, r *http.Request) {

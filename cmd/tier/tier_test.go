@@ -1,12 +1,16 @@
 package main
 
 import (
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"tier.run/cmd/tier/cline"
+	"tier.run/fetch/fetchtest"
 	"tier.run/stripe"
 )
 
@@ -22,22 +26,25 @@ func testtier(t *testing.T) *cline.Data {
 		t.Fatal(err)
 	}
 	if c.Live() {
-		t.Fatal("STRIPE_API_KEY must be a live key")
+		t.Fatal("STRIPE_API_KEY must be a test key")
 	}
 
 	// Make home something other than actual home as to not pick up a real
 	// config and push to a real account.
 	home := t.TempDir()
 	os.MkdirAll(filepath.Join(home, ".config/tier"), 0700)
-	const cfg = `{ "profiles": { "tier": {} } }`
+	chdir(t, home)
+
+	cfg := fmt.Sprintf(`{"profiles":{"tier":{"testmode_key_secret": %q}}}`, c.APIKey)
 	err = os.WriteFile(filepath.Join(home, ".config/tier/config.json"), []byte(cfg), 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	setWorkingDir(t, home)
+	chdir(t, home)
 
 	ct := cline.Test(t)
+	ct.Unsetenv("STRIPE_API_KEY")
 	ct.Setenv("HOME", home)
 	ct.Setenv("TIER_DEBUG", "1")
 	ct.Setenv("DO_NOT_TRACK", "1") // prevent tests from sending events
@@ -73,6 +80,31 @@ func TestServeAddrFlag(t *testing.T) {
 	tt := testtier(t)
 	tt.RunFail("serve", "--addr", ":-1")
 	tt.GrepBoth("invalid port", "bad port accepted or ignored")
+}
+
+func TestSwitchIsoloate(t *testing.T) {
+	tt := testtier(t)
+	tt.Run("switch", "-c")
+	tt.GrepStdout("Running in isolation mode.", "helpful message not printed")
+	tt.GrepStdout(`https://dashboard.stripe.com/acct_.*/test`, "expected URL")
+
+	tt.RunFail("switch", "-c", "acct_123")
+	tt.GrepStderr("does not accept arguments", "expected error message")
+
+	tt.RunFail("switch")
+	tt.GrepStderr("Usage:", "expected usage message")
+
+	tt.RunFail("switch", "-c")
+	tt.GrepStderr("tier.state file present", "expected error message")
+	tt.GrepStderr("To switch to an ioslated account", "expected helpful hint")
+
+	if err := os.Remove("tier.state"); err != nil {
+		t.Fatal(err)
+	}
+
+	tt.Run("switch", "acct_works")
+	tt.GrepStdout("Running in isolation mode.", "helpful message not printed")
+	tt.GrepStdout(`https://dashboard.stripe.com/acct_works/test`, "expected URL")
 }
 
 func TestPushStdin(t *testing.T) {
@@ -113,14 +145,58 @@ func TestPushStdin(t *testing.T) {
 	}
 }
 
-func setWorkingDir(t *testing.T, dir string) {
-	t.Helper()
-	cwd, err := os.Getwd()
+func TestWhoAmI(t *testing.T) {
+	tt := testtier(t)
+	tt.Run("whoami")
+	tt.GrepStdout(`ID:\s+acct_.*`, "expected accountID")
+	tt.GrepStdout(`Isolated:\s+false`, "expected created")
+	tt.GrepStdout(`Created:\s+\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`, "expected created")
+	tt.GrepStdout(`https://dashboard.stripe.com/acct_.*`, "expected URL")
+	tt.GrepStdout(`KeySource:.*config.json`, "expected accountID")
+
+	tt.Run("switch", "-c")
+
+	tt.Setenv("STRIPE_API_KEY", os.Getenv("STRIPE_API_KEY"))
+	tt.Run("whoami")
+	tt.GrepStdout(`Isolated:\s+true`, "expected accountID")
+	tt.GrepStdout(`KeySource:\s+STRIPE_API_KEY`, "expected accountID")
+}
+
+func TestIsolatedAccountInvalid(t *testing.T) {
+	const errBody = `
+		{
+		  "error": {
+		    "code": "account_invalid",
+		    "doc_url": "https://stripe.com/docs/error-codes/account-invalid",
+		    "message": "The provided key 'rk_test_*********************************************************************************************0wwMmD' does not have access to account 'acct_1M2KTDCfAzqq5Iv8' (or that account does not exist). Application access may have been revoked.",
+		    "type": "invalid_request_error"
+		  }
+		}
+	`
+
+	c := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(400)
+		io.WriteString(w, errBody)
+	})
+
+	tt := testtier(t)
+	tt.Unsetenv("TIER_DEBUG")
+	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(c))
+	tt.RunFail("whoami")
+	tt.GrepStderr("Running in isloated mode without the API key that started it.", "expected error message")
+}
+
+func chdir(t *testing.T, dir string) {
+	dir0, err := os.Getwd()
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
-	os.Chdir(dir)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
-		os.Chdir(cwd)
+		if err := os.Chdir(dir0); err != nil {
+			panic(err)
+		}
 	})
 }

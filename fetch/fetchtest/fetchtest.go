@@ -14,6 +14,18 @@ func BaseURL(c *http.Client) string {
 	return ""
 }
 
+func NewServer(t *testing.T, h http.HandlerFunc) *http.Client {
+	s := httptest.NewServer(h)
+	t.Cleanup(s.Close)
+
+	c := s.Client()
+	c.Transport = &httptestTransport{
+		base:    c.Transport,
+		baseURL: s.URL,
+	}
+	return c
+}
+
 func NewTLSServer(t *testing.T, h http.HandlerFunc) *http.Client {
 	s := httptest.NewTLSServer(h)
 	t.Cleanup(s.Close)

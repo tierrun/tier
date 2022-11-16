@@ -1,3 +1,4 @@
 ./tier/cmd/tier/tier
 dist/
 *.prof
+tier.state
