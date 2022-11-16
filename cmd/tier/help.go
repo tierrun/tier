@@ -191,6 +191,7 @@ Example:
 		; tier switch -c
 		; tier push pricing.json
 		; tier pull
+		; rm tier.state
 		; tier switch -c
 		; tier pull
 		; tier push pricing2.json
