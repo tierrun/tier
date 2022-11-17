@@ -171,7 +171,7 @@ The default service address is "localhost:8080".
 
 	tier switch [-c] [accountID]
 
-Tier switch tells tier to use the provided accountID, or, if run with "-i", to
+Tier switch tells tier to use the provided accountID, or, if run with "-c", to
 create and use a new isolation account, when run from the current working
 directory.
 
@@ -212,7 +212,7 @@ Constraints:
 
 Flags:
 
-    -i    Create a new account and switch to it.
+    -c    Create a new account and switch to it.
 `,
 }
 
