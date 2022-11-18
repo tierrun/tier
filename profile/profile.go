@@ -87,19 +87,19 @@ func Save(name string, p *Profile) error {
 	return e.Encode(c)
 }
 
-var ConfigPath string // set on init; treat as const
-
-func init() {
+// ConfigPath returns the path to the config file.
+func ConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		panic(err)
 	}
-	ConfigPath = filepath.Join(home, ".config", "tier", "config.json")
+	return filepath.Join(home, ".config", "tier", "config.json")
 }
 
 func open() (*os.File, error) {
-	if err := os.MkdirAll(filepath.Dir(ConfigPath), 0o700); err != nil {
+	path := ConfigPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	return os.OpenFile(ConfigPath, os.O_CREATE|os.O_RDWR, 0o600)
+	return os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 }

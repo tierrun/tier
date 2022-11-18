@@ -174,10 +174,12 @@ func (c *Client) Push(ctx context.Context, fs []Feature, cb PushReportFunc) erro
 			for _, f := range fs {
 				f := f
 				g.Go(func() error {
-					if err := c.pushFeature(ctx, f); err != nil {
+					pid, err := c.pushFeature(ctx, f)
+					if err != nil {
 						cb(f, err)
 						return err
 					}
+					f.ProviderID = pid
 					cb(f, nil)
 					return nil
 				})
@@ -214,7 +216,7 @@ func (c *Client) maxWorkers() int {
 	return 20 // a little under the max concurrent requests in test mode
 }
 
-func (c *Client) pushFeature(ctx context.Context, f Feature) error {
+func (c *Client) pushFeature(ctx context.Context, f Feature) (providerID string, err error) {
 	// https://stripe.com/docs/api/prices/create
 	var data stripe.Form
 	data.Set("metadata", "tier.plan_title", f.PlanTitle)
@@ -237,7 +239,7 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 
 	interval := intervalToStripe[f.Interval]
 	if interval == "" {
-		return fmt.Errorf("unknown interval: %q", f.Interval)
+		return "", fmt.Errorf("unknown interval: %q", f.Interval)
 	}
 	data.Set("recurring", "interval", interval)
 	data.Set("recurring", "interval_count", 1) // TODO: support user-defined interval count
@@ -252,7 +254,7 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 		data.Set("tiers_mode", f.Mode)
 		aggregate := aggregateToStripe[f.Aggregate]
 		if aggregate == "" {
-			return fmt.Errorf("unknown aggregate: %q", f.Aggregate)
+			return "", fmt.Errorf("unknown aggregate: %q", f.Aggregate)
 		}
 		data.Set("recurring", "aggregate_usage", aggregate)
 		var limit int
@@ -276,11 +278,14 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) error {
 	// TODO(bmizerany): data.Set("transform_quantity", "?")
 	// TODO(bmizerany): data.Set("currency_options", "?")
 
-	err := c.Stripe.Do(ctx, "POST", "/v1/prices", data, nil)
-	if isExists(err) {
-		return ErrFeatureExists
+	var v struct {
+		ID string
 	}
-	return err
+	err = c.Stripe.Do(ctx, "POST", "/v1/prices", data, &v)
+	if isExists(err) {
+		return "", ErrFeatureExists
+	}
+	return v.ID, err
 }
 
 type stripePrice struct {

@@ -18,6 +18,29 @@ func newTestClient(t *testing.T, h func(w http.ResponseWriter, r *http.Request))
 	return c
 }
 
+func TestLink(t *testing.T) {
+	cases := []struct {
+		live      bool
+		accountID string
+		part      string
+		want      string
+	}{
+		{true, "acct_123", "foo", "https://dashboard.stripe.com/acct_123/foo"},
+		{true, "", "foo", "https://dashboard.stripe.com/foo"},
+		{false, "acct_123", "foo", "https://dashboard.stripe.com/acct_123/foo"},
+		{false, "", "foo", "https://dashboard.stripe.com/test/foo"},
+	}
+	for _, tc := range cases {
+		got, err := Link(tc.live, tc.accountID, tc.part)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != tc.want {
+			t.Errorf("link(%v, %q, %q) = %q; want %q", tc.live, tc.accountID, tc.part, got, tc.want)
+		}
+	}
+}
+
 func TestFromEnv(t *testing.T) {
 	t.Setenv("STRIPE_API_KEY", "")
 	t.Setenv("STRIPE_BASE_API_URL", "")

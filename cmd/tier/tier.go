@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -86,11 +85,6 @@ func isIsolationError(err error) bool {
 	return errors.As(err, &e) && e.Code == "account_invalid"
 }
 
-var dashURL = map[bool]string{
-	true:  "https://dashboard.stripe.com",
-	false: "https://dashboard.stripe.com/test",
-}
-
 var (
 	// only one trace per invoking (for now)
 	traceID = newID()
@@ -119,15 +113,8 @@ func runTier(cmd string, args []string) (err error) {
 	}
 
 	start := timeNow()
+	p := loadProfile()
 	defer func() {
-		p, pErr := profile.Load("tier")
-		if pErr != nil {
-			vlogf("tier: %v", err)
-			p = &profile.Profile{
-				DeviceName: "profile.unknown",
-			}
-		}
-
 		errStr := ""
 		if errors.Is(err, errUsage) {
 			errStr = "usage"
@@ -190,7 +177,11 @@ func runTier(cmd string, args []string) (err error) {
 		defer f.Close()
 
 		err = pushJSON(ctx, f, func(f control.Feature, err error) {
-			link, uerr := url.JoinPath(dashURL[cc().Live()], "products", f.ProviderID)
+			aid := cc().Stripe.AccountID
+			if aid == "" && envAPIKey == "" {
+				aid = p.AccountID
+			}
+			link, uerr := stripe.Link(cc().Live(), aid, "prices", f.ProviderID)
 			if uerr != nil {
 				panic(uerr)
 			}
@@ -218,7 +209,7 @@ func runTier(cmd string, args []string) (err error) {
 		})
 		if errors.Is(err, control.ErrPlanExists) {
 			//lint:ignore ST1005 this error is not used like normal errors
-			return fmt.Errorf("tier: illegal attempt to push features to exiting plan(s); aborting.")
+			return fmt.Errorf("tier: illegal attempt to push features to existing plan(s); aborting.")
 		}
 		return err
 	case "pull":
@@ -508,4 +499,15 @@ func (t *clientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	w := httptest.NewRecorder()
 	t.h.ServeHTTP(w, req)
 	return w.Result(), nil
+}
+
+func loadProfile() *profile.Profile {
+	p, err := profile.Load("tier")
+	if err != nil {
+		vlogf("tier: %v", err)
+		p = &profile.Profile{
+			DeviceName: "profile.unknown",
+		}
+	}
+	return p
 }
