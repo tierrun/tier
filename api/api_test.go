@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"os"
 	"testing"
 
 	"golang.org/x/exp/slices"
@@ -13,6 +14,7 @@ import (
 	"tier.run/fetch"
 	"tier.run/fetch/fetchtest"
 	"tier.run/refs"
+	"tier.run/stripe"
 	"tier.run/stripe/stroke"
 )
 
@@ -23,6 +25,18 @@ var (
 	mpf  = refs.MustParseFeaturePlan
 	mpfs = refs.MustParseFeaturePlans
 )
+
+func TestMain(m *testing.M) {
+	c := stripe.FromEnvTest()
+	bf := stroke.Backfiller(c)
+	if bf == nil {
+		return
+	}
+	defer bf()
+	code := m.Run()
+	bf()
+	os.Exit(code)
+}
 
 func newTestClient(t *testing.T) (*http.Client, *control.Client) {
 	sc := stroke.Client(t)
