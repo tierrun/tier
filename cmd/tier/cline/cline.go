@@ -180,6 +180,10 @@ func (d *Data) SetStdin(r io.Reader) {
 	d.stdin = r
 }
 
+func (d *Data) SetStdinString(s string) {
+	d.SetStdin(strings.NewReader(s))
+}
+
 // doGrep looks for a regular expression in a buffer and fails if it
 // is not found. The name argument is the name of the output we are
 // searching, "output" or "error". The msg argument is logged on
