@@ -69,9 +69,6 @@ func isInvalidAccount(err error) bool {
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	defer func() {
-		// h.logf("%s %s %s %s", r.RemoteAddr, r.Method, r.URL, err)
-	}()
 	bw := &byteCountResponseWriter{ResponseWriter: w}
 	err = h.serve(bw, r)
 	if isInvalidAccount(err) {
