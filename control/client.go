@@ -155,57 +155,56 @@ type PushReportFunc func(Feature, error)
 //
 // It returns the first error encountered if any.
 func (c *Client) Push(ctx context.Context, fs []Feature, cb PushReportFunc) error {
-	if err := c.pushSentinelPlans(ctx, fs, cb); err != nil {
-		return err
+	plans := map[refs.Plan][]Feature{}
+	for _, f := range fs {
+		plans[f.Plan()] = append(plans[f.Plan()], f)
 	}
+
 	var g errgroup.Group
 	g.SetLimit(c.maxWorkers())
-	for _, f := range fs {
-		f := f
+	for p, fs := range plans {
+		p, fs := p, fs
 		g.Go(func() error {
-			err := c.pushFeature(ctx, f)
-			cb(f, err)
-			return err
+			if err := c.pushSentinelPlan(ctx, p); err != nil {
+				for _, f := range fs {
+					cb(f, err) // error out all features in the plan
+				}
+				return err
+			}
+			for _, f := range fs {
+				f := f
+				g.Go(func() error {
+					if err := c.pushFeature(ctx, f); err != nil {
+						cb(f, err)
+						return err
+					}
+					cb(f, nil)
+					return nil
+				})
+			}
+			return nil
 		})
 	}
 	return g.Wait()
 }
 
-func (c *Client) pushSentinelPlans(ctx context.Context, fs []Feature, cb PushReportFunc) error {
-	seen := map[refs.Plan]bool{}
-
-	// fail fast and cancel all in-flight requests if any fail
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(c.maxWorkers())
-	for _, f := range fs {
-		f, p := f, f.Plan()
-		if p.IsZero() || seen[p] {
-			// reduce API calls to stripe by skipping zero-plans
-			// and plans already checked
-			continue
-		} else {
-			seen[p] = true
-		}
-		g.Go(func() error {
-			var data stripe.Form
-			data.Set("id", stripe.MakeID(p.String()))
-			data.Set("name", p)
-
-			// prevent sentinal products from being visible or
-			// usable in the dashboard
-			data.Set("active", false)
-
-			err := c.Stripe.Do(ctx, "POST", "/v1/products", data, nil)
-			if isExists(err) {
-				err = ErrPlanExists
-			}
-			if err != nil {
-				cb(f, err)
-			}
-			return err
-		})
+func (c *Client) pushSentinelPlan(ctx context.Context, p refs.Plan) error {
+	if p.IsZero() {
+		return nil
 	}
-	return g.Wait()
+	var data stripe.Form
+	data.Set("id", stripe.MakeID(p.String()))
+	data.Set("name", p)
+
+	// prevent sentinel products from being visible or
+	// usable in the dashboard
+	data.Set("active", false)
+
+	err := c.Stripe.Do(ctx, "POST", "/v1/products", data, nil)
+	if isExists(err) {
+		err = ErrPlanExists
+	}
+	return err
 }
 
 func (c *Client) maxWorkers() int {

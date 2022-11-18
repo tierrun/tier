@@ -148,6 +148,45 @@ func TestPushPlanImmutability(t *testing.T) {
 	}
 }
 
+func TestPushAllFeaturesLoggedOnFailure(t *testing.T) {
+	tc := newTestClient(t)
+	ctx := context.Background()
+
+	fs := []Feature{
+		{
+			FeaturePlan: refs.MustParseFeaturePlan("feature:x@plan:test@0"),
+			Interval:    "@daily",
+			Currency:    "eur",
+		},
+		{
+			FeaturePlan: refs.MustParseFeaturePlan("feature:y@plan:test@0"),
+			Interval:    "@daily",
+			Currency:    "eur",
+		},
+	}
+
+	check := func(want []error) {
+		t.Helper()
+		var wantErr bool
+		for _, err := range want {
+			if err != nil {
+				wantErr = true
+			}
+		}
+
+		var got []error
+		if err := tc.Push(ctx, fs, func(_ Feature, err error) {
+			got = append(got, err)
+		}); err == nil && wantErr {
+			t.Fatal("expected error")
+		}
+		diff.Test(t, t.Errorf, got, want)
+	}
+
+	check([]error{nil, nil})
+	check([]error{ErrPlanExists, ErrPlanExists})
+}
+
 func pushLogger(t *testing.T) func(f Feature, err error) {
 	t.Helper()
 	return func(f Feature, err error) {
