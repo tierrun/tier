@@ -12,6 +12,7 @@ import (
 
 	"tier.run/cmd/tier/cline"
 	"tier.run/fetch/fetchtest"
+	"tier.run/profile"
 	"tier.run/stripe"
 )
 
@@ -19,7 +20,7 @@ func TestMain(m *testing.M) {
 	cline.TestMain(m, main)
 }
 
-func testtier(t *testing.T) *cline.Data {
+func testtier(t *testing.T, isolatedAccountID string) *cline.Data {
 	t.Helper()
 	t.Log("=== start ===")
 	c, err := stripe.FromEnv()
@@ -32,25 +33,40 @@ func testtier(t *testing.T) *cline.Data {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	a, err := stripe.CreateAccount(ctx, c)
-	if err != nil {
-		t.Fatal(err)
+
+	var a stripe.Account
+	if isolatedAccountID == "" {
+		a, err = stripe.CreateAccount(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		a.ID = isolatedAccountID
 	}
 
 	// Make home something other than actual home as to not pick up a real
 	// config and push to a real account.
 	home := t.TempDir()
+	t.Setenv("HOME", home) // be paranoid and just set for all tests
 	chdir(t, home)
 
-	os.MkdirAll(".config/tier", 0700)
-
-	cfg := fmt.Sprintf(`{"profiles":{"tier":{"testmode_key_secret": %q}}}`, c.APIKey)
-	err = os.WriteFile(".config/tier/config.json", []byte(cfg), 0600)
+	profileAccountID := a.ID
+	if isolatedAccountID != "" {
+		// write a diff accountID to the profile so that we can
+		// distinguish using the profile vs the isolated account in the
+		// tier.state file
+		profileAccountID = "acct_profile"
+	}
+	err = profile.Save("tier", &profile.Profile{
+		TestAPIKey: c.APIKey,
+		AccountID:  profileAccountID,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// run in isolation mode
+	// Run in isolation mode by default. This will write a blank ID if
+	// isolated is true.
 	state := fmt.Sprintf("{\"ID\": %q}", a.ID)
 	err = os.WriteFile("tier.state", []byte(state), 0600)
 	if err != nil {
@@ -66,38 +82,38 @@ func testtier(t *testing.T) *cline.Data {
 }
 
 func TestVersion(t *testing.T) {
-	tt := testtier(t)
+	tt := testtier(t, "")
 	tt.Run("version")
 	tt.GrepStdout(`^\d+\.\d+\.\d+`, "unexpected version format")
 }
 
 func TestLiveFlag(t *testing.T) {
-	tt := testtier(t)
+	tt := testtier(t, "")
 	tt.Setenv("STRIPE_API_KEY", "sk_test_123")
 	tt.RunFail("--live", "pull")
 	tt.GrepStderr("^tier: --live provided with test key", "unexpected error message")
 
-	tt = testtier(t)
+	tt = testtier(t, "")
 	tt.Setenv("STRIPE_API_KEY", "sk_live_123")
 	tt.Unsetenv("TIER_DEBUG")
 	tt.RunFail("--live", "pull") // fails due to invalid key only
 	tt.GrepStderr("invalid_api_key", "expected error message")
 	tt.GrepBothNot("--live", "output contains --live flag")
 
-	tt = testtier(t)
+	tt = testtier(t, "")
 	tt.Setenv("STRIPE_API_KEY", "sk_live_123")
 	tt.RunFail("-l", "pull") // fails due to invalid key only
 	tt.GrepStderr("Usage", "-l did not produce usage")
 }
 
 func TestServeAddrFlag(t *testing.T) {
-	tt := testtier(t)
+	tt := testtier(t, "")
 	tt.RunFail("serve", "--addr", ":-1")
 	tt.GrepBoth("invalid port", "bad port accepted or ignored")
 }
 
 func TestSwitchIsoloate(t *testing.T) {
-	tt := testtier(t)
+	tt := testtier(t, "")
 	// turn off isolation to avoid error about already being in isolation
 	// mode
 	if err := os.Remove("tier.state"); err != nil {
@@ -148,7 +164,7 @@ func TestPushStdin(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run("case", func(t *testing.T) {
-			tt := testtier(t)
+			tt := testtier(t, "")
 			tt.SetStdin(strings.NewReader(c.stdin))
 			if c.shouldSucceed {
 				tt.Run("push", c.param)
@@ -166,7 +182,7 @@ func TestPushStdin(t *testing.T) {
 }
 
 func TestPushNewFeatureExistingPlan(t *testing.T) {
-	tt := testtier(t)
+	tt := testtier(t, "")
 	const pj = `{
 	    "plans": {
 		"plan:free@0": {
@@ -184,8 +200,75 @@ func TestPushNewFeatureExistingPlan(t *testing.T) {
 	tt.GrepStderr("; aborting.", "expected error message")
 }
 
+func TestPushLinks(t *testing.T) {
+	c := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, `{"id": "price_123"}`)
+	})
+
+	tt := testtier(t, "acct_test")
+	tt.Unsetenv("TIER_DEBUG")
+	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(c))
+	tt.SetStdinString(`{
+	    "plans": {
+		"plan:free@0": {
+		    "features": {
+			"feature:foo": {}
+		    }
+		}
+	    }
+	}`)
+	tt.Run("push", "-")
+	tt.GrepStdout("https://dashboard.stripe.com/acct_test/prices/price_123", "expected URL")
+
+	// get out of isolation
+	if err := os.Remove("tier.state"); err != nil {
+		t.Fatal(err)
+	}
+
+	// use accountID in profile
+	tt.SetStdinString(`{
+	    "plans": {
+		"plan:free@1": {
+		    "features": {
+			"feature:foo": {}
+		    }
+		}
+	    }
+	}`)
+	tt.Run("push", "-")
+	tt.GrepStdout("https://dashboard.stripe.com/acct_profile/prices/price_123", "expected URL")
+
+	// assume default dashboard URL is okay if STRIPE_API_KEY is set
+	tt.SetStdinString(`{
+	    "plans": {
+		"plan:free@2": {
+		    "features": {
+			"feature:foo": {}
+		    }
+		}
+	    }
+	}`)
+	tt.Setenv("STRIPE_API_KEY", "rk_test_123")
+	tt.Run("push", "-")
+	tt.GrepStdout("https://dashboard.stripe.com/test/prices/price_123", "expected URL")
+
+	// assume default dashboard URL is okay if STRIPE_API_KEY is set; live mode
+	tt.SetStdinString(`{
+	    "plans": {
+		"plan:free@2": {
+		    "features": {
+			"feature:foo": {}
+		    }
+		}
+	    }
+	}`)
+	tt.Setenv("STRIPE_API_KEY", "rk_live_123")
+	tt.Run("--live", "push", "-")
+	tt.GrepStdout("https://dashboard.stripe.com/prices/price_123", "expected URL")
+}
+
 func TestWhoAmI(t *testing.T) {
-	tt := testtier(t)
+	tt := testtier(t, "")
 	tt.Run("whoami")
 
 	// we've already "switched" in tiertier() above
@@ -223,7 +306,7 @@ func TestIsolatedAccountInvalid(t *testing.T) {
 		io.WriteString(w, errBody)
 	})
 
-	tt := testtier(t)
+	tt := testtier(t, "")
 	tt.Unsetenv("TIER_DEBUG")
 	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(c))
 	tt.RunFail("whoami")

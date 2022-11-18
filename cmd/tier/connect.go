@@ -119,9 +119,9 @@ func getKey() (key, source string, err error) {
 		return "", "", err
 	}
 	if *flagLive {
-		return p.LiveAPIKey, profile.ConfigPath, nil
+		return p.LiveAPIKey, profile.ConfigPath(), nil
 	}
-	return p.TestAPIKey, profile.ConfigPath, nil
+	return p.TestAPIKey, profile.ConfigPath(), nil
 }
 
 //lint:ignore U1000 this type is used as a type parameter, but staticcheck seems to not be able to detect that yet. Remove this comment when staticcheck will stop complaining.

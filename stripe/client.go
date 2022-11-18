@@ -35,6 +35,21 @@ func MakeID(parts ...string) string {
 	return "tier__" + string(id)
 }
 
+// Link creates and returns a link to the Stripe dashboard for the provided
+// accountID followed by parts.
+//
+// If live is true, a link to the live dashboard is returned, otherwise a test
+// link is returned.
+func Link(live bool, accountID string, parts ...string) (string, error) {
+	var base string
+	if !live && accountID == "" {
+		base = "https://dashboard.stripe.com/test"
+	} else {
+		base = "https://dashboard.stripe.com"
+	}
+	return url.JoinPath(base, append([]string{accountID}, parts...)...)
+}
+
 type Error struct {
 	AccountID string
 	Type      string
