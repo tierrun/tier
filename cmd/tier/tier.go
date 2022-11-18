@@ -189,7 +189,7 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		defer f.Close()
 
-		return pushJSON(ctx, f, func(f control.Feature, err error) {
+		err = pushJSON(ctx, f, func(f control.Feature, err error) {
 			link, uerr := url.JoinPath(dashURL[cc().Live()], "products", f.ProviderID)
 			if uerr != nil {
 				panic(uerr)
@@ -216,6 +216,11 @@ func runTier(cmd string, args []string) (err error) {
 				reason,
 			)
 		})
+		if errors.Is(err, control.ErrPlanExists) {
+			//lint:ignore ST1005 this error is not used like normal errors
+			return fmt.Errorf("tier: illegal attempt to push features to exiting plan(s); aborting.")
+		}
+		return err
 	case "pull":
 		data, err := tc().PullJSON(ctx)
 		if err != nil {

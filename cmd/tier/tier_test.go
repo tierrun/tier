@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"tier.run/cmd/tier/cline"
 	"tier.run/fetch/fetchtest"
@@ -29,22 +30,35 @@ func testtier(t *testing.T) *cline.Data {
 		t.Fatal("STRIPE_API_KEY must be a test key")
 	}
 
-	// Make home something other than actual home as to not pick up a real
-	// config and push to a real account.
-	home := t.TempDir()
-	os.MkdirAll(filepath.Join(home, ".config/tier"), 0700)
-	chdir(t, home)
-
-	cfg := fmt.Sprintf(`{"profiles":{"tier":{"testmode_key_secret": %q}}}`, c.APIKey)
-	err = os.WriteFile(filepath.Join(home, ".config/tier/config.json"), []byte(cfg), 0600)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a, err := stripe.CreateAccount(ctx, c)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// Make home something other than actual home as to not pick up a real
+	// config and push to a real account.
+	home := t.TempDir()
 	chdir(t, home)
 
+	os.MkdirAll(".config/tier", 0700)
+
+	cfg := fmt.Sprintf(`{"profiles":{"tier":{"testmode_key_secret": %q}}}`, c.APIKey)
+	err = os.WriteFile(".config/tier/config.json", []byte(cfg), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// run in isolation mode
+	state := fmt.Sprintf("{\"ID\": %q}", a.ID)
+	err = os.WriteFile("tier.state", []byte(state), 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	ct := cline.Test(t)
-	ct.Unsetenv("STRIPE_API_KEY")
+	ct.Unsetenv("STRIPE_API_KEY") // force use of config file
 	ct.Setenv("HOME", home)
 	ct.Setenv("TIER_DEBUG", "1")
 	ct.Setenv("DO_NOT_TRACK", "1") // prevent tests from sending events
@@ -84,6 +98,12 @@ func TestServeAddrFlag(t *testing.T) {
 
 func TestSwitchIsoloate(t *testing.T) {
 	tt := testtier(t)
+	// turn off isolation to avoid error about already being in isolation
+	// mode
+	if err := os.Remove("tier.state"); err != nil {
+		t.Fatal(err)
+	}
+
 	tt.Run("switch", "-c")
 	tt.GrepStdout("Running in isolation mode.", "helpful message not printed")
 	tt.GrepStdout(`https://dashboard.stripe.com/acct_.*/test`, "expected URL")
@@ -145,20 +165,44 @@ func TestPushStdin(t *testing.T) {
 	}
 }
 
+func TestPushNewFeatureExistingPlan(t *testing.T) {
+	tt := testtier(t)
+	const pj = `{
+	    "plans": {
+		"plan:free@0": {
+		    "features": {
+			"feature:foo": {}
+		    }
+		}
+	    }
+	}`
+	tt.SetStdinString(pj)
+	tt.Run("push", "-")
+	tt.SetStdinString(pj)
+	tt.RunFail("push", "-")
+	tt.GrepStdout("plan already exists", "expected error message")
+	tt.GrepStderr("; aborting.", "expected error message")
+}
+
 func TestWhoAmI(t *testing.T) {
 	tt := testtier(t)
 	tt.Run("whoami")
+
+	// we've already "switched" in tiertier() above
 	tt.GrepStdout(`ID:\s+acct_.*`, "expected accountID")
-	tt.GrepStdout(`Isolated:\s+false`, "expected created")
+	tt.GrepStdout(`Isolated:\s+true`, "expected created")
 	tt.GrepStdout(`Created:\s+\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`, "expected created")
 	tt.GrepStdout(`https://dashboard.stripe.com/acct_.*`, "expected URL")
 	tt.GrepStdout(`KeySource:.*config.json`, "expected accountID")
 
-	tt.Run("switch", "-c")
+	// undo the "switch"
+	if err := os.Remove("tier.state"); err != nil {
+		t.Fatal(err)
+	}
 
 	tt.Setenv("STRIPE_API_KEY", os.Getenv("STRIPE_API_KEY"))
 	tt.Run("whoami")
-	tt.GrepStdout(`Isolated:\s+true`, "expected accountID")
+	tt.GrepStdout(`Isolated:\s+false`, "expected accountID")
 	tt.GrepStdout(`KeySource:\s+STRIPE_API_KEY`, "expected accountID")
 }
 

@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -78,7 +79,9 @@ func TestRoundTrip(t *testing.T) {
 		},
 	}
 
-	tc.Push(ctx, want, pushLogger(t))
+	if err := tc.Push(ctx, want, pushLogger(t)); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := tc.Pull(ctx, 0)
 	if err != nil {
@@ -105,6 +108,44 @@ func TestRoundTrip(t *testing.T) {
 			t.Errorf("got %q, want %q", got.Name, want)
 		}
 	})
+}
+
+func TestPushPlanImmutability(t *testing.T) {
+	tc := newTestClient(t)
+	ctx := context.Background()
+
+	pushes := []struct {
+		featurePlan string
+		err         error
+	}{
+		{"feature:x@plan:test@0", nil},
+		{"feature:y@plan:test@0", ErrPlanExists},
+		{"feature:x@plan:test@1", nil},
+		{"feature:y@plan:test@1", ErrPlanExists},
+	}
+
+	for i, push := range pushes {
+		fs := []Feature{{
+			FeaturePlan: refs.MustParseFeaturePlan(push.featurePlan),
+			Interval:    "@daily",
+			Currency:    "eur",
+		}}
+		var errs []error
+		cb := func(_ Feature, err error) {
+			errs = append(errs, err)
+		}
+		if err := tc.Push(ctx, fs, cb); !errors.Is(err, push.err) {
+			t.Errorf("[%d]: got %v, want %v", i, err, push.err)
+		}
+		if push.err != nil {
+			if len(errs) == 0 {
+				t.Fatalf("[%d]: expected errors", i)
+			}
+			if !errors.Is(errs[0], push.err) {
+				t.Errorf("[%d]: got %v, want %v", i, errs[0], push.err)
+			}
+		}
+	}
 }
 
 func pushLogger(t *testing.T) func(f Feature, err error) {

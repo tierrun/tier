@@ -17,6 +17,7 @@ var (
 	ErrFeatureExists     = errors.New("feature already exists")
 	ErrFeatureNotFound   = errors.New("feature not found")
 	ErrFeatureNotMetered = errors.New("feature is not metered")
+	ErrPlanExists        = errors.New("plan already exists")
 )
 
 const Inf = 1<<63 - 1
@@ -136,14 +137,27 @@ type Client struct {
 // Live reports if APIKey is set to a "live" key.
 func (c *Client) Live() bool { return c.Stripe.Live() }
 
+// PushReportFunc is called for each feature pushed to Stripe. Implementations
+// must be safe to use accross goroutines.
+type PushReportFunc func(Feature, error)
+
 // Push pushes each feature in fs to Stripe as a product and price combination.
 // A new price and product are created in Stripe if one does not already exist.
+//
+// All features intended to be in the same plan must all be pushed in a single
+// call to Push. Any subsequent calls attempting to push a feature in a plan
+// that has already been pushed, will result in ErrPlanExists, and no
+// attempt to push any feature in fs will be made. This constraint keeps plan
+// immutable.
 //
 // Each call to push is subject to rate limiting via the clients shared rate
 // limit.
 //
 // It returns the first error encountered if any.
-func (c *Client) Push(ctx context.Context, fs []Feature, cb func(f Feature, err error)) error {
+func (c *Client) Push(ctx context.Context, fs []Feature, cb PushReportFunc) error {
+	if err := c.pushSentinelPlans(ctx, fs, cb); err != nil {
+		return err
+	}
 	var g errgroup.Group
 	g.SetLimit(c.maxWorkers())
 	for _, f := range fs {
@@ -151,6 +165,43 @@ func (c *Client) Push(ctx context.Context, fs []Feature, cb func(f Feature, err 
 		g.Go(func() error {
 			err := c.pushFeature(ctx, f)
 			cb(f, err)
+			return err
+		})
+	}
+	return g.Wait()
+}
+
+func (c *Client) pushSentinelPlans(ctx context.Context, fs []Feature, cb PushReportFunc) error {
+	seen := map[refs.Plan]bool{}
+
+	// fail fast and cancel all in-flight requests if any fail
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(c.maxWorkers())
+	for _, f := range fs {
+		f, p := f, f.Plan()
+		if p.IsZero() || seen[p] {
+			// reduce API calls to stripe by skipping zero-plans
+			// and plans already checked
+			continue
+		} else {
+			seen[p] = true
+		}
+		g.Go(func() error {
+			var data stripe.Form
+			data.Set("id", stripe.MakeID(p.String()))
+			data.Set("name", p)
+
+			// prevent sentinal products from being visible or
+			// usable in the dashboard
+			data.Set("active", false)
+
+			err := c.Stripe.Do(ctx, "POST", "/v1/products", data, nil)
+			if isExists(err) {
+				err = ErrPlanExists
+			}
+			if err != nil {
+				cb(f, err)
+			}
 			return err
 		})
 	}

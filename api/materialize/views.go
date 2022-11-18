@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 
 	"github.com/tailscale/hujson"
-	"kr.dev/errorfmt"
 	"tier.run/api/apitypes"
 	"tier.run/control"
 	"tier.run/refs"
@@ -19,7 +18,6 @@ func FromPricingHuJSON(data []byte) (fs []control.Feature, err error) {
 	dbg := func(k string) {
 		debug = append(debug, k)
 	}
-	defer errorfmt.Handlef("FromPricingHuJSON: %q: %w", &debug, &err)
 
 	data, err = hujson.Standardize(data)
 	if err != nil {
