@@ -3,7 +3,6 @@ module tier.run
 go 1.19
 
 require (
-	github.com/felixge/fgprof v0.9.3
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/kr/pretty v0.3.0
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
@@ -19,7 +18,6 @@ require (
 
 require (
 	github.com/BurntSushi/toml v0.4.1 // indirect
-	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/kr/text v0.2.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220218215828-6cf2b201936e // indirect
 )

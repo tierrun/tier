@@ -165,6 +165,17 @@ type Client struct {
 	KeyPrefix string
 }
 
+func FromEnvTest() *Client {
+	c, err := FromEnv()
+	if err != nil {
+		panic(err)
+	}
+	if c.Live() {
+		panic("refusing to use live key in test")
+	}
+	return c
+}
+
 func FromEnv() (*Client, error) {
 	key := os.Getenv("STRIPE_API_KEY")
 	if key == "" {

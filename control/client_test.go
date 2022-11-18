@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/felixge/fgprof"
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/refs"
@@ -16,15 +16,14 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	f, err := os.Create("test.prof")
-	if err != nil {
-		panic(err)
+	c := stripe.FromEnvTest()
+	bf := stroke.Backfiller(c)
+	if bf == nil {
+		return
 	}
-	defer f.Close()
-	stop := fgprof.Start(f, fgprof.FormatPprof)
-	defer stop() // be paranoid
+	defer bf() // be paranoid
 	code := m.Run()
-	stop()
+	bf()
 	os.Exit(code)
 }
 
@@ -174,8 +173,11 @@ func TestPushAllFeaturesLoggedOnFailure(t *testing.T) {
 			}
 		}
 
+		var mu sync.Mutex
 		var got []error
 		if err := tc.Push(ctx, fs, func(_ Feature, err error) {
+			mu.Lock()
+			defer mu.Unlock()
 			got = append(got, err)
 		}); err == nil && wantErr {
 			t.Fatal("expected error")
