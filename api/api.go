@@ -71,6 +71,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	bw := &byteCountResponseWriter{ResponseWriter: w}
 	err = h.serve(bw, r)
+	if err != nil {
+		h.Logf("%s %s %s: %v", r.RemoteAddr, r.Method, r.URL, err)
+	}
+
 	if isInvalidAccount(err) {
 		trweb.WriteError(w, &trweb.HTTPError{
 			Status: 401,

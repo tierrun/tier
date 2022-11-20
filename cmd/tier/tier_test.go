@@ -82,38 +82,43 @@ func testtier(t *testing.T, isolatedAccountID string) *cline.Data {
 }
 
 func TestVersion(t *testing.T) {
-	tt := testtier(t, "")
+	tt := testtier(t, "acct_test")
 	tt.Run("version")
 	tt.GrepStdout(`^\d+\.\d+\.\d+`, "unexpected version format")
 }
 
 func TestLiveFlag(t *testing.T) {
-	tt := testtier(t, "")
+	tt := testtier(t, "acct_test")
 	tt.Setenv("STRIPE_API_KEY", "sk_test_123")
 	tt.RunFail("--live", "pull")
 	tt.GrepStderr("^tier: --live provided with test key", "unexpected error message")
 
-	tt = testtier(t, "")
+	tt = testtier(t, "acct_test")
 	tt.Setenv("STRIPE_API_KEY", "sk_live_123")
 	tt.Unsetenv("TIER_DEBUG")
 	tt.RunFail("--live", "pull") // fails due to invalid key only
 	tt.GrepStderr("invalid_api_key", "expected error message")
 	tt.GrepBothNot("--live", "output contains --live flag")
 
-	tt = testtier(t, "")
+	tt = testtier(t, "acct_test")
 	tt.Setenv("STRIPE_API_KEY", "sk_live_123")
 	tt.RunFail("-l", "pull") // fails due to invalid key only
 	tt.GrepStderr("Usage", "-l did not produce usage")
 }
 
 func TestServeAddrFlag(t *testing.T) {
-	tt := testtier(t, "")
+	tt := testtier(t, "acct_test")
 	tt.RunFail("serve", "--addr", ":-1")
 	tt.GrepBoth("invalid port", "bad port accepted or ignored")
 }
 
 func TestSwitchIsoloate(t *testing.T) {
-	tt := testtier(t, "")
+	s := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, `{"id": "acct_123"}`)
+	})
+	tt := testtier(t, "acct_test")
+	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
+
 	// turn off isolation to avoid error about already being in isolation
 	// mode
 	if err := os.Remove("tier.state"); err != nil {
@@ -144,6 +149,10 @@ func TestSwitchIsoloate(t *testing.T) {
 }
 
 func TestPushStdin(t *testing.T) {
+	s := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, `{"id": "price_123"}`)
+	})
+
 	cases := []struct {
 		stdin         string
 		param         string
@@ -164,7 +173,10 @@ func TestPushStdin(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run("case", func(t *testing.T) {
-			tt := testtier(t, "")
+			tt := testtier(t, "acct_test")
+			tt.Unsetenv("TIER_DEBUG")
+			tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
+
 			tt.SetStdin(strings.NewReader(c.stdin))
 			if c.shouldSucceed {
 				tt.Run("push", c.param)
@@ -182,7 +194,18 @@ func TestPushStdin(t *testing.T) {
 }
 
 func TestPushNewFeatureExistingPlan(t *testing.T) {
-	tt := testtier(t, "")
+	s := fetchtest.NewServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+		io.WriteString(w, `{
+			"error": {
+				"code": "resource_already_exists"
+			}
+		}`)
+	})
+
+	tt := testtier(t, "acct_test")
+	tt.Unsetenv("TIER_DEBUG")
+	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
 	const pj = `{
 	    "plans": {
 		"plan:free@0": {
@@ -192,8 +215,6 @@ func TestPushNewFeatureExistingPlan(t *testing.T) {
 		}
 	    }
 	}`
-	tt.SetStdinString(pj)
-	tt.Run("push", "-")
 	tt.SetStdinString(pj)
 	tt.RunFail("push", "-")
 	tt.GrepStdout("plan already exists", "expected error message")
@@ -268,7 +289,14 @@ func TestPushLinks(t *testing.T) {
 }
 
 func TestWhoAmI(t *testing.T) {
-	tt := testtier(t, "")
+	s := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, `{
+			"id": "acct_123",
+			"created": 1668981628
+		}`)
+	})
+	tt := testtier(t, "acct_test")
+	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
 	tt.Run("whoami")
 
 	// we've already "switched" in tiertier() above
@@ -283,7 +311,7 @@ func TestWhoAmI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tt.Setenv("STRIPE_API_KEY", os.Getenv("STRIPE_API_KEY"))
+	tt.Setenv("STRIPE_API_KEY", "sk_test_123")
 	tt.Run("whoami")
 	tt.GrepStdout(`Isolated:\s+false`, "expected accountID")
 	tt.GrepStdout(`KeySource:\s+STRIPE_API_KEY`, "expected accountID")
@@ -306,7 +334,7 @@ func TestIsolatedAccountInvalid(t *testing.T) {
 		io.WriteString(w, errBody)
 	})
 
-	tt := testtier(t, "")
+	tt := testtier(t, "acct_test")
 	tt.Unsetenv("TIER_DEBUG")
 	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(c))
 	tt.RunFail("whoami")

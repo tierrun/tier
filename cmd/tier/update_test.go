@@ -31,7 +31,7 @@ func TestUpdate(t *testing.T) {
 		}
 	}
 
-	tt := testtier(t, "")
+	tt := testtier(t, "acct_test")
 	tt.Setenv("TIER_UPDATE_URL", c.URL+"?test=v100")
 	tt.Run("version")
 	tt.GrepStderrNot(`\bv100\b`, "unexpected mention of new version")

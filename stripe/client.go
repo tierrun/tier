@@ -280,12 +280,17 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 		if err := json.NewDecoder(body).Decode(&e); err != nil {
 			return fmt.Errorf("stripe: error parsing error response: %w", err)
 		}
-		e.Error.AccountID = c.AccountID
-		e.Error.RequestID = resp.Header.Get("Request-Id")
-		if isInvalidAPIKey(e.Error) {
-			return ErrInvalidAPIKey
+		err := e.Error
+		if err != nil {
+			err.AccountID = c.AccountID
+			err.RequestID = resp.Header.Get("Request-Id")
+			if isInvalidAPIKey(err) {
+				return ErrInvalidAPIKey
+			}
+			return err
+		} else {
+			return fmt.Errorf("stripe: expected error in response: %s", resp.Status)
 		}
-		return e.Error
 	}
 	if out != nil {
 		return json.NewDecoder(body).Decode(out)

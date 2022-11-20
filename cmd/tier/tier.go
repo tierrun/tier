@@ -529,11 +529,15 @@ func createAccount(ctx context.Context) (stripe.Account, error) {
 			// someone beat us, try another
 			continue
 		}
-		appendBackgroundTasks("preallocateAccount")
 		a := stripe.Account{ID: filepath.Base(f)}
 		return a, nil
 	}
-	return stripe.CreateAccount(ctx, cc().Stripe)
+	a, err := stripe.CreateAccount(ctx, cc().Stripe)
+	if err != nil {
+		return stripe.Account{}, err
+	}
+	appendBackgroundTasks("preallocateAccount")
+	return a, nil
 }
 
 func preallocateAccount() error {
