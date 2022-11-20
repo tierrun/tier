@@ -28,6 +28,13 @@ func background() func() {
 	}
 }
 
+// owned by funcs in this file only
+var backgroundTasks []string
+
+func appendBackgroundTasks(names ...string) {
+	backgroundTasks = append(backgroundTasks, names...)
+}
+
 func startBackgroundTasks() {
 	lim := &frate.Limiter{
 		Dir: filepath.Join(envknobs.XDGDataHome(), "tier", "buckets"),
@@ -40,7 +47,9 @@ func startBackgroundTasks() {
 		vlogf("errors touching: %v", lim.Errs())
 	}
 
-	if len(lim.Touched()) > 0 {
+	appendBackgroundTasks(lim.Touched()...)
+
+	if len(backgroundTasks) > 0 {
 		exe, err := os.Executable()
 		if err != nil {
 			vlogf("background: %v", err)
@@ -59,7 +68,7 @@ func startBackgroundTasks() {
 		_, err = os.StartProcess(exe, []string{exe, "version"}, &os.ProcAttr{
 			Files: []*os.File{devNull, devNull, devNull},
 			Env: append(os.Environ(),
-				"_TIER_BG_TASKS="+strings.Join(lim.Touched(), ","),
+				"_TIER_BG_TASKS="+strings.Join(backgroundTasks, ","),
 				"_TIER_EVENTS="+vhs.buf.String(),
 			),
 		})
@@ -79,6 +88,8 @@ func processBackgroundTasks(tasks []string) error {
 			g.Go(sendEvents)
 		case "update":
 			g.Go(checkForUpdate)
+		case "preallocateAccount":
+			g.Go(preallocateAccount)
 		default:
 			vlogf("background: unknown task %q", name)
 		}
