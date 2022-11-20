@@ -33,7 +33,7 @@ func TestReport(t *testing.T) {
 	defer s.Close()
 
 	// test background process in foreground
-	tt := testtier(t, "")
+	tt := testtier(t, "acct_test")
 	tt.Unsetenv("DO_NOT_TRACK")
 	tt.Setenv("_TIER_BG_TASKS", "track")
 	tt.Setenv("_TIER_EVENTS", "{}")
@@ -46,7 +46,7 @@ func TestReport(t *testing.T) {
 	}
 
 	// test tier reports errors correctly
-	tt = testtier(t, "")
+	tt = testtier(t, "acct_test")
 	tt.Unsetenv("DO_NOT_TRACK")
 	tt.Setenv("TIER_TRACK_BASE_URL", s.URL)
 	tt.Setenv("STRIPE_API_KEY", "bad_key")

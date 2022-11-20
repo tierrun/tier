@@ -15,6 +15,16 @@ jobs: {
 				"go-version": "1.19"
 			}
 		}, {
+			name: "Stroke Cache"
+			id:   "stroke-cache"
+			uses: "actions/cache@v3"
+			with: {
+				path: """
+					~/.cache/stroke
+					"""
+				key: "stroke-cache"
+			}
+		}, {
 			name: "Go Test"
 			env: STRIPE_API_KEY: "${{ secrets.STRIPE_API_KEY }}"
 			run: """

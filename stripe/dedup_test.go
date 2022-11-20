@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 
@@ -13,6 +14,10 @@ import (
 )
 
 func TestDedup(t *testing.T) {
+	if os.Getenv("CI") == "" {
+		t.Skip("skipping test in local environment")
+	}
+
 	ctx := context.Background()
 	c := stroke.WithAccount(t, stroke.Client(t))
 
