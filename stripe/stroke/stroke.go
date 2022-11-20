@@ -37,10 +37,6 @@ func randomString() string {
 }
 
 func WithAccount(t *testing.T, c *stripe.Client) *stripe.Client {
-	if id := NextAccount(c); id != "" {
-		t.Logf("using existing account %s", id)
-		return c.CloneAs(id)
-	}
 	accountID, err := createAccount(c, t.Logf)
 	if err != nil {
 		t.Fatalf("error creating account: %v", err)
@@ -67,10 +63,12 @@ func createAccount(c *stripe.Client, logf func(string, ...any)) (string, error) 
 		var f stripe.Form
 		f.Set("type", "standard")
 		err := c.Do(ctx, "POST", "/v1/accounts", f, &v)
-		if err == nil {
-			return v.ProviderID(), nil
+		if err != nil {
+			logf("error creating account: %v; backing off", err)
+			bo.BackOff(ctx, err)
+			continue
 		}
-		bo.BackOff(ctx, err)
+		return v.ProviderID(), nil
 	}
 
 }

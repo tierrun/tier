@@ -8,12 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -364,6 +362,7 @@ func runTier(cmd string, args []string) (err error) {
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
+
 		var a stripe.Account
 		if *create {
 			if cc().Live() {
@@ -412,6 +411,16 @@ The account dashboard is located at:
 `), a.ID)
 		fmt.Fprintln(stdout)
 		return nil
+	case "clean":
+		fs := flag.NewFlagSet("clean", flag.ExitOnError)
+		accountAge := fs.Duration("switchaccounts", -1, "garbage collect switch accounts older than a duration; default is -1")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		if *accountAge >= 0 {
+			return cleanAccounts(*accountAge)
+		}
+		return errUsage
 	default:
 		return errUsage
 	}
@@ -512,65 +521,4 @@ func loadProfile() *profile.Profile {
 		}
 	}
 	return p
-}
-
-func createAccount(ctx context.Context) (stripe.Account, error) {
-	path, err := cachePath("switch", "a")
-	if err != nil {
-		return stripe.Account{}, err
-	}
-	free, err := fs.Glob(os.DirFS(path), "acct_*")
-	if err != nil {
-		return stripe.Account{}, err
-	}
-	vlogf("createAccount: free accounts: %v", free)
-	for _, f := range free {
-		if err := os.Remove(filepath.Join(path, f)); err != nil {
-			// someone beat us, try another
-			continue
-		}
-		a := stripe.Account{ID: filepath.Base(f)}
-		return a, nil
-	}
-	a, err := stripe.CreateAccount(ctx, cc().Stripe)
-	if err != nil {
-		return stripe.Account{}, err
-	}
-	appendBackgroundTasks("preallocateAccount")
-	return a, nil
-}
-
-func preallocateAccount() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	sc := cc().Stripe.CloneAs("") // use root account
-	if sc.Live() {
-		// be paranoid
-		vlogf("preallocateAccount: skipping in live mode")
-		return nil
-	}
-
-	a, err := stripe.CreateAccount(ctx, sc)
-	if err != nil {
-		return err
-	}
-	cp, err := cachePath("switch", "a")
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(cp, a.ID)
-	return os.WriteFile(path, nil, 0600)
-}
-
-func cachePath(parts ...string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(append([]string{home, ".cache", "tier"}, parts...)...)
-	if err := os.MkdirAll(path, 0755); err != nil {
-		return "", err
-	}
-	return path, nil
 }
