@@ -8,10 +8,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -209,7 +211,7 @@ func runTier(cmd string, args []string) (err error) {
 		})
 		if errors.Is(err, control.ErrPlanExists) {
 			//lint:ignore ST1005 this error is not used like normal errors
-			return fmt.Errorf("tier: illegal attempt to push features to existing plan(s); aborting.")
+			return fmt.Errorf("illegal attempt to push features to existing plan(s); aborting.")
 		}
 		return err
 	case "pull":
@@ -365,10 +367,10 @@ func runTier(cmd string, args []string) (err error) {
 		var a stripe.Account
 		if *create {
 			if cc().Live() {
-				return fmt.Errorf("isolation mode not allowed in live mode")
+				return fmt.Errorf("switch -c not allowed in live mode")
 			}
 			if fs.NArg() != 0 {
-				return fmt.Errorf("isolation mode does not accept arguments")
+				return fmt.Errorf("switch does not accept arguments")
 			}
 			ca, _ := getState()
 			if ca.ID != "" {
@@ -379,7 +381,7 @@ To switch to an ioslated account, run from a different directory, or remove
 the tier.state file.`)
 			}
 			var err error
-			a, err = stripe.CreateAccount(ctx, cc().Stripe)
+			a, err = createAccount(ctx)
 			if errors.Is(err, stripe.ErrConnectUnavailable) {
 				fmt.Fprintf(stderr, "tier: stripe connect not enabled\n")
 				return errUsage
@@ -510,4 +512,61 @@ func loadProfile() *profile.Profile {
 		}
 	}
 	return p
+}
+
+func createAccount(ctx context.Context) (stripe.Account, error) {
+	path, err := cachePath("switch", "a")
+	if err != nil {
+		return stripe.Account{}, err
+	}
+	free, err := fs.Glob(os.DirFS(path), "acct_*")
+	if err != nil {
+		return stripe.Account{}, err
+	}
+	vlogf("createAccount: free accounts: %v", free)
+	for _, f := range free {
+		if err := os.Remove(filepath.Join(path, f)); err != nil {
+			// someone beat us, try another
+			continue
+		}
+		appendBackgroundTasks("preallocateAccount")
+		a := stripe.Account{ID: filepath.Base(f)}
+		return a, nil
+	}
+	return stripe.CreateAccount(ctx, cc().Stripe)
+}
+
+func preallocateAccount() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	sc := cc().Stripe.CloneAs("") // use root account
+	if sc.Live() {
+		// be paranoid
+		vlogf("preallocateAccount: skipping in live mode")
+		return nil
+	}
+
+	a, err := stripe.CreateAccount(ctx, sc)
+	if err != nil {
+		return err
+	}
+	cp, err := cachePath("switch", "a")
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(cp, a.ID)
+	return os.WriteFile(path, nil, 0600)
+}
+
+func cachePath(parts ...string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(append([]string{home, ".cache", "tier"}, parts...)...)
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return "", err
+	}
+	return path, nil
 }
