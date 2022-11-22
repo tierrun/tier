@@ -30,6 +30,7 @@ The commands are:
 	switch     create and switch to clean rooms
 	whois      display the Stripe customer ID for an org
 	serve      run the sidecar API
+	clean      remove objects in Stripe Test Mode
 	help       display this help message
 
 The flags are:
@@ -169,7 +170,7 @@ The default service address is "localhost:8080".
 `,
 	"switch": `Usage:
 
-	tier switch [-c] [accountID]
+	tier switch [flags] [accountID]
 
 Tier switch tells tier to use the provided accountID, or, if run with "-c", to
 create and use a new isolation account, when run from the current working
@@ -212,7 +213,30 @@ Constraints:
 
 Flags:
 
-    -c    Create a new account and switch to it.
+    -c
+	Create a new account and switch to it.
+`,
+	"clean": `Usage:
+
+	tier clean <flags>
+
+Clean removes objects from Stripe Test Mode accounts. It can be used with a
+cron job to keep your test accounts clean.
+
+The -switchaccounts flag, takes a duration as its value and causes clean to
+remove connected Stripe accounts created by the switch command. Accounts are
+only considered for removal if they were created by the switch command, older
+than the provided duration of time specified in the flag, and exist in Test
+Mode. The duration may be an integer representing seconds, or a duration string
+such as "1h30m". The default duration is -1 which disables the cleaning of
+accounts.
+
+Examples:
+
+	; tier clean -switchaccounts 1h   # remove all switch accounts older than 1 hour
+	; tier clean -switchaccounts 730h # remove all switch accounts older than 30 days
+	; tier clean -switchaccounts 0    # remove all switch accounts
+	; tier clean -switchaccounts -1   # nop
 `,
 }
 

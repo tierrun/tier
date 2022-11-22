@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -14,18 +13,6 @@ import (
 	"tier.run/stripe"
 	"tier.run/stripe/stroke"
 )
-
-func TestMain(m *testing.M) {
-	c := stripe.FromEnvTest()
-	bf := stroke.Backfiller(c)
-	if bf == nil {
-		return
-	}
-	defer bf() // be paranoid
-	code := m.Run()
-	bf()
-	os.Exit(code)
-}
 
 func newTestClient(t *testing.T) *Client {
 	t.Helper()

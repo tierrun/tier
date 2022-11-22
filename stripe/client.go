@@ -25,6 +25,11 @@ var (
 
 var debugMode = os.Getenv("STRIPE_DEBUG") == "1"
 
+// Meta represents metadata in Stripe.
+type Meta map[string]string
+
+func (m Meta) Get(k string) string { return m[k] }
+
 func MakeID(parts ...string) string {
 	id := []rune(strings.Join(parts, "__"))
 	for i, r := range id {
@@ -178,17 +183,6 @@ type Client struct {
 	// KeyPrefix is prepended to all idempotentcy keys. Use a new key prefix
 	// after deleting test data. It is not recommended for use with live mode.
 	KeyPrefix string
-}
-
-func FromEnvTest() *Client {
-	c, err := FromEnv()
-	if err != nil {
-		panic(err)
-	}
-	if c.Live() {
-		panic("refusing to use live key in test")
-	}
-	return c
 }
 
 func FromEnv() (*Client, error) {

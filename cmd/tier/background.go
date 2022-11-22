@@ -32,6 +32,7 @@ func background() func() {
 var backgroundTasks []string
 
 func appendBackgroundTasks(names ...string) {
+	vlogf("background: appending tasks: %q", names)
 	backgroundTasks = append(backgroundTasks, names...)
 }
 

@@ -6,14 +6,19 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"kr.dev/diff"
 	"tier.run/cmd/tier/cline"
 	"tier.run/fetch/fetchtest"
 	"tier.run/profile"
 	"tier.run/stripe"
+	"tier.run/stripe/stroke"
 )
 
 func TestMain(m *testing.M) {
@@ -23,10 +28,7 @@ func TestMain(m *testing.M) {
 func testtier(t *testing.T, isolatedAccountID string) *cline.Data {
 	t.Helper()
 	t.Log("=== start ===")
-	c, err := stripe.FromEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := stroke.Client(t)
 	if c.Live() {
 		t.Fatal("STRIPE_API_KEY must be a test key")
 	}
@@ -34,14 +36,13 @@ func testtier(t *testing.T, isolatedAccountID string) *cline.Data {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var a stripe.Account
-	if isolatedAccountID == "" {
-		a, err = stripe.CreateAccount(ctx, c)
+	a := stripe.Account{ID: isolatedAccountID}
+	if a.ID == "" {
+		var err error
+		a, err = createSwitchAccount(ctx, c) // make sure we use an account we can GC later
 		if err != nil {
 			t.Fatal(err)
 		}
-	} else {
-		a.ID = isolatedAccountID
 	}
 
 	// Make home something other than actual home as to not pick up a real
@@ -57,7 +58,7 @@ func testtier(t *testing.T, isolatedAccountID string) *cline.Data {
 		// tier.state file
 		profileAccountID = "acct_profile"
 	}
-	err = profile.Save("tier", &profile.Profile{
+	err := profile.Save("tier", &profile.Profile{
 		TestAPIKey: c.APIKey,
 		AccountID:  profileAccountID,
 	})
@@ -113,8 +114,17 @@ func TestServeAddrFlag(t *testing.T) {
 }
 
 func TestSwitchIsoloate(t *testing.T) {
-	s := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		io.WriteString(w, `{"id": "acct_123"}`)
+	s := fetchtest.NewServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if g := r.FormValue("type"); g != "standard" {
+			t.Fatalf("unexpected type: %q", g)
+		}
+		if g := r.FormValue("metadata[tier.account]"); g != "switch" {
+			t.Fatalf("unexpected metadata[tier.account]: %q", g)
+		}
+		io.WriteString(w, `{
+			"id": "acct_123",
+			"created": 12123123
+		}`)
 	})
 	tt := testtier(t, "acct_test")
 	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
@@ -127,7 +137,7 @@ func TestSwitchIsoloate(t *testing.T) {
 
 	tt.Run("switch", "-c")
 	tt.GrepStdout("Running in isolation mode.", "helpful message not printed")
-	tt.GrepStdout(`https://dashboard.stripe.com/acct_.*/test`, "expected URL")
+	tt.GrepStdout(`https://dashboard.stripe.com/acct_123/test`, "expected URL")
 
 	tt.RunFail("switch", "-c", "acct_123")
 	tt.GrepStderr("does not accept arguments", "expected error message")
@@ -146,6 +156,46 @@ func TestSwitchIsoloate(t *testing.T) {
 	tt.Run("switch", "acct_works")
 	tt.GrepStdout("Running in isolation mode.", "helpful message not printed")
 	tt.GrepStdout(`https://dashboard.stripe.com/acct_works/test`, "expected URL")
+}
+
+func TestSwitchPreallocateTask(t *testing.T) {
+	type T struct {
+		Type string
+		Meta string
+	}
+
+	var got atomic.Value
+	s := fetchtest.NewServer(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("req: %s %s: %s", r.Method, r.URL.Path, r.Form)
+
+		if !got.CompareAndSwap(nil, T{
+			Type: r.FormValue("type"),
+			Meta: r.FormValue("metadata[tier.account]"),
+		}) {
+			panic("unexpected second request")
+		}
+
+		io.WriteString(w, `{
+			"id": "acct_123",
+			"created": 12123123
+		}`)
+	})
+	tt := testtier(t, "acct_test")
+	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
+	tt.Setenv("_TIER_BG_TASKS", "preallocateAccount")
+
+	// turn off isolation to avoid error about already being in isolation
+	// mode
+	if err := os.Remove("tier.state"); err != nil {
+		t.Fatal(err)
+	}
+
+	tt.Run("version")
+
+	diff.Test(t, t.Errorf, got.Load(), T{
+		Type: "standard",
+		Meta: "switch",
+	})
 }
 
 func TestPushStdin(t *testing.T) {
@@ -339,6 +389,71 @@ func TestIsolatedAccountInvalid(t *testing.T) {
 	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(c))
 	tt.RunFail("whoami")
 	tt.GrepStderr("Running in isloated mode without the API key that started it.", "expected error message")
+}
+
+func ttWithHandler(t *testing.T, h http.HandlerFunc) *cline.Data {
+	t.Helper()
+	c := fetchtest.NewServer(t, h.ServeHTTP)
+	tt := testtier(t, "acct_test_with_handler")
+	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(c))
+	return tt
+}
+
+func TestCleanSwitchAccounts(t *testing.T) {
+	wants := func(r *http.Request, method, path string) bool {
+		re := regexp.MustCompile(path)
+		return r.Method == method && re.MatchString(r.URL.Path)
+	}
+	var (
+		mu     sync.Mutex
+		delLog []string
+	)
+	tt := ttWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case wants(r, "GET", "^/v1/accounts$"):
+			io.WriteString(w, `{
+				"data": [
+					{
+						"id": "acct_123",
+						"created": 1669098188,
+						"metadata": {
+							"tier.account": "switch"
+						}
+					},
+					{
+						"id": "acct_456",
+						"created": 1669098188
+					},
+					{
+						"id": "acct_999",
+						"created": 1669098188
+					}
+				]
+			}`)
+		case wants(r, "DELETE", "^/v1/accounts/.*"):
+			mu.Lock()
+			defer mu.Unlock()
+			delLog = append(delLog, r.URL.Path)
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	})
+	tt.Run("clean", "--switchaccounts=0")
+	tt.GrepBoth("^acct_123$", "expected message")
+	tt.GrepStdoutNot("acct_456", "unexpected message")
+	tt.GrepStdoutNot("acct_999", "unexpected message")
+
+	want := []string{"/v1/accounts/acct_123"}
+	diff.Test(t, t.Errorf, delLog, want)
+}
+
+func TestSwitchGCLiveMode(t *testing.T) {
+	tt := ttWithHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		panic("unexpected request")
+	})
+	tt.Setenv("STRIPE_API_KEY", "sk_live_123")
+	tt.RunFail("--live", "clean", "--switchaccounts=0")
+	tt.GrepBoth("refusing.*live mode", "expected hint")
 }
 
 func chdir(t *testing.T, dir string) {

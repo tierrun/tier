@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,20 +36,18 @@ func updateAvailable() string {
 	return ""
 }
 
-// checkForUpdate reports a new version if one is available; otherwise it
-// returns the empty string.
 func checkForUpdate() error {
 	ver, err := fetchLatestVersion()
 	if err != nil {
-		log.Printf("error fetching latest version: %v", err)
+		vlogf("error fetching latest version: %v", err)
 		return err
 	}
 	os.MkdirAll(filepath.Dir(versionFileName), 0755)
 	if err := os.WriteFile(versionFileName, []byte(ver), 0644); err != nil {
-		log.Printf("error writing version file: %v", err)
+		vlogf("error writing version file: %v", err)
 		return err
 	}
-	log.Printf("updated version file to %q", ver)
+	vlogf("updated version file to %q", ver)
 	return nil
 }
 
@@ -76,7 +73,7 @@ func fetchLatestVersion() (string, error) {
 	}
 
 	var v struct {
-		Latest string
+		Latest string `json:"latest"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		return "", err
