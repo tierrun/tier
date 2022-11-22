@@ -1,16 +1,44 @@
-# Tier <!-- omit in toc -->
+<p align="center">
+  <img src="https://uploads-ssl.webflow.com/61e0906dfb20ab2b1c79f6af/637c2c2292525072c3cd8da9_qC_sM_xDz.jpg" />
+ </p>
 
-- [About](#about)
-- [Install](#install)
-  - [Homebrew (macOS)](#homebrew-macos)
-  - [Binary (macOS, linux, Windows)](#binary-macos-linux-windows)
-  - [Go (most operating systems and architectures)](#go-most-operating-systems-and-architectures)
-- [Further Reading](#further-reading)
 
-## About
-tier is a tool that lets you define and manage your SaaS application's pricing model in one place (pricing.json). Tier will handle setting up and managing Stripe in a way that is much more friendly for SaaS and consumption based billing models. Tier's SDK can then be implemented for access checking, metering/reporting, and more.
+# Pricing as Code
 
-[More detail and documentation is available on the Tier website.](https://tier.run/docs)
+`tier` is a tool that lets you define and manage your SaaS application's pricing model in one place (pricing.json). 
+
+Tier will handle setting up and managing Stripe in a way that is much more friendly for SaaS and consumption based billing models. Tier's SDK can then be implemented for access checking, metering/reporting, and more.
+
+  [![GPLv3 License](https://img.shields.io/github/license/tierrun/tier?style=for-the-badge)](https://opensource.org/licenses/)
+  [![Commit Activity](https://img.shields.io/github/commit-activity/m/tierrun/tier?style=for-the-badge)]()
+  [![Discussions](https://img.shields.io/github/discussions/tierrun/tier?style=for-the-badge
+  )](https://github.com/tierrun/tier/discussions)
+  [![](https://img.shields.io/github/go-mod/go-version/tierrun/tier?style=for-the-badge
+  )]()
+
+
+## Docs and Community
+- [Documentation is available here](https://tier.run/docs)
+- Join our Slack here: [<img src="https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white" />](https://join.slack.com/t/tier-community/shared_invite/zt-1blotqjb9-wvkYMo8QkhaEWziprdjnIA)
+
+# Key Features and Capabilities
+- Manage your features, plans and their pricing in one place
+- On demand test environments and preview deployments allow you to work with confidence
+- Create custom plans and variants as needed for specific customers or tests
+- Stripe is kept in sync and fully managed by Tier
+- Access Checking and Entitlements are handled by the Tier SDKs 
+
+## How to use Tier
+
+1. [Install Tier CLI](#install)
+2. [Create your first pricing.json]() and `tier push` to your dev or live environment
+3. [Get a Tier SDK and add it](https://www.tier.run/docs/sdk/) to enable Access Checks and Metering
+
+You can see and example here: [Tier Hello World!](https://blog.tier.run/tier-hello-world-demo)
+
+<p align="center">
+  <img src="https://uploads-ssl.webflow.com/61e0906dfb20ab2b1c79f6af/637c39698d3ba183d982e32a_Screenshot%202022-11-21%20at%2010.43.54%20PM.png">
+</p>
 
 ## Install
 
@@ -37,6 +65,10 @@ or
 go install tier.run/cmd/tier@latest
 ```
 
-## Further Reading
 
-https://tier.run/docs
+## Authors
+
+- [@bmizerany](https://www.github.com/bmizerany)
+- [@isaacs](https://www.github.com/isaacs)
+- [@jevon](https://www.github.com/jevon)
+
