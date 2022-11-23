@@ -195,7 +195,7 @@ func FromEnv() (*Client, error) {
 }
 
 func IsLiveKey(key string) bool {
-	return !strings.Contains(key, "_test_")
+	return strings.Contains(key, "_live_")
 }
 
 func (c *Client) Live() bool {

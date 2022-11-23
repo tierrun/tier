@@ -68,7 +68,7 @@ func main() {
 	cmd := args[0]
 	if err := runTier(cmd, args[1:]); err != nil {
 		if isIsolationError(err) {
-			log.Fatalf("tier: Running in isloated mode without the API key that started it; See 'tier switch -h'.")
+			log.Fatalf("tier: Running in isolated mode without the API key that started it; See 'tier switch -h'.")
 		}
 		if errors.Is(err, errUsage) {
 			if err := help(stderr, cmd); err != nil {
