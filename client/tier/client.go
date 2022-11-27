@@ -28,7 +28,7 @@ func (c *Client) client() *http.Client {
 	return c.HTTPClient
 }
 
-// Pull fetches the complete pricing model from Stripe.
+// Push pushes the provided pricing model to Stripe.
 func (c *Client) Push(ctx context.Context, m apitypes.Model) (apitypes.PushResponse, error) {
 	return fetch.OK[apitypes.PushResponse, *apitypes.Error](ctx, c.client(), "POST", "/v1/push", m)
 }
