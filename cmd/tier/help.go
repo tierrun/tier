@@ -116,12 +116,15 @@ The output is in the format:
 `,
 	"subscribe": `Usage:
 
-	tier [--live] subscribe <org> <plan|featurePlan>...
+	tier [--live] subscribe [--email=<email>] <org> [plan|featurePlan]...
 
 Tier subscribe creates or updates a subscription for the provided org, applying
 the features in the plan.
 
 If the --live flag is provided, your accounts live mode will be used.
+
+If the --email flag is provided, the org's email address will be set to the
+provided email address.
 `,
 	"limits": `Usage:
 

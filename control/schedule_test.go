@@ -469,6 +469,107 @@ func TestSubscribeToUnknownFeatures(t *testing.T) {
 	}
 }
 
+func TestSchedulePutCustomer(t *testing.T) {
+	// TODO(bmizerany): convert this all to table tests
+	tc := newTestClient(t)
+	ctx := context.Background()
+
+	type o = OrgInfo
+	copyOrg := new(o)
+
+	check := func(org string, in, want *OrgInfo, wantPutErr, wantLookupErr error) {
+		t.Helper()
+		err := tc.PutCustomer(ctx, org, in)
+		if !errors.Is(err, wantPutErr) {
+			t.Fatalf("got %v, want %v", err, wantPutErr)
+		}
+		got, err := tc.LookupOrg(ctx, org)
+		if !errors.Is(err, wantLookupErr) {
+			t.Fatalf("got %v, want %v", err, wantLookupErr)
+		}
+		if want == copyOrg {
+			want = in
+			if want.Metadata == nil {
+				want.Metadata = map[string]string{}
+			}
+		}
+		diff.Test(t, t.Errorf, got, want)
+	}
+
+	check("org:invalid", &o{Email: "invalid"}, nil, ErrInvalidEmail, ErrOrgNotFound)
+
+	check("org:a", &o{Email: "a@a.com"}, copyOrg, nil, nil)
+	check("org:b", &o{Email: "b@b.com"}, copyOrg, nil, nil)
+	check("org:a", &o{Email: "aa@aa.com"}, copyOrg, nil, nil)
+
+	c0 := &o{
+		Email: "c@c.com",
+		Metadata: map[string]string{
+			"foo": "bar",
+		},
+	}
+
+	check("org:c", c0, copyOrg, nil, nil)
+	check("org:c", &o{
+		Email: "do@notUpdate.com",
+		Metadata: map[string]string{
+			"foo":      "XXXX",
+			"tier.baz": "qux", // should cause aborted update
+		},
+	}, c0, ErrInvalidMetadata, nil)
+
+	check("org:c", &o{
+		Email: "c1@c.com",
+		Metadata: map[string]string{
+			"foo": "bar",
+			"c":   "ccc",
+		},
+	}, copyOrg, nil, nil)
+
+	check("org:c", &o{
+		Email: "c1@c.com",
+		Metadata: map[string]string{
+			"foo": "",
+		},
+	}, &o{
+		Email: "c1@c.com",
+		Metadata: map[string]string{
+			// "foo" is removed
+			"c": "ccc",
+		},
+	}, nil, nil)
+
+	check("org:c", &o{
+		Email:       "c1@c.com",
+		Name:        "The Name",
+		Description: "The Desc",
+		Phone:       "111-111-1111",
+		Metadata: map[string]string{
+			"c": "ccc",
+		},
+	}, &o{
+		Email:       "c1@c.com",
+		Name:        "The Name",
+		Description: "The Desc",
+		Phone:       "111-111-1111",
+		Metadata: map[string]string{
+			"c": "ccc",
+		},
+	}, nil, nil)
+
+	check("org:c", &o{
+		// nothing to update; nop
+	}, &o{
+		Email:       "c1@c.com",
+		Name:        "The Name",
+		Description: "The Desc",
+		Phone:       "111-111-1111",
+		Metadata: map[string]string{
+			"c": "ccc",
+		},
+	}, nil, nil)
+}
+
 func ciOnly(t *testing.T) {
 	if os.Getenv("CI") == "" {
 		t.Skip("not in CI; skipping long test")

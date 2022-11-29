@@ -3,12 +3,12 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/kr/pretty"
+	"golang.org/x/exp/slices"
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/control"
@@ -29,10 +29,20 @@ var errorLookup = map[error]error{
 		Code:    "feature_not_found",
 		Message: "feature not found",
 	},
-	control.ErrFeatureNotMetered: &trweb.HTTPError{
+	control.ErrFeatureNotMetered: &trweb.HTTPError{ // TODO(bmizerany): this may be relaxed if we decide to log and accept
 		Status:  400,
 		Code:    "invalid_request",
 		Message: "feature not reportable",
+	},
+	control.ErrInvalidEmail: &trweb.HTTPError{
+		Status:  400,
+		Code:    "invalid_email",
+		Message: "invalid email",
+	},
+	control.ErrInvalidMetadata: &trweb.HTTPError{
+		Status:  400,
+		Code:    "invalid_metadata",
+		Message: "metadata keys must not use reserved prefix ('tier.')",
 	},
 	stripe.ErrInvalidAPIKey: &trweb.HTTPError{
 		Status:  401,
@@ -127,37 +137,32 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
-	var sr apitypes.SubscribeRequest
+	var sr apitypes.ScheduleRequest
 	if err := trweb.DecodeStrict(r, &sr); err != nil {
 		return err
 	}
 
-	if len(sr.Phases) == 0 {
-		return invalidRequestf("a minimum of one phase is required")
-	}
-
-	if !sr.Phases[0].Effective.IsZero() {
-		return invalidRequestf("effective must not be specified for the first phase; for now")
-	}
-
-	m, err := h.c.Pull(r.Context(), 0)
-	if err != nil {
-		return err
-	}
-
 	var phases []control.Phase
-	for _, p := range sr.Phases {
-		fs, err := control.Expand(m, p.Features...)
+	if len(sr.Phases) > 0 {
+		m, err := h.c.Pull(r.Context(), 0)
 		if err != nil {
 			return err
 		}
-		phases = append(phases, control.Phase{
-			Effective: p.Effective,
-			Features:  fs,
-		})
+
+		for _, p := range sr.Phases {
+			fs, err := control.Expand(m, p.Features...)
+			if err != nil {
+				return err
+			}
+			phases = append(phases, control.Phase{
+				Effective: p.Effective,
+				Features:  fs,
+			})
+		}
 	}
 
-	return h.c.ScheduleNow(r.Context(), sr.Org, phases)
+	info := (*control.OrgInfo)(sr.Info)
+	return h.c.ScheduleNow(r.Context(), sr.Org, info, phases)
 }
 
 func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
@@ -179,10 +184,18 @@ func (h *Handler) serveWhoIs(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return httpJSON(w, apitypes.WhoIsResponse{
-		Org:      org,
-		StripeID: stripeID,
-	})
+
+	res := &apitypes.WhoIsResponse{Org: org, StripeID: stripeID}
+	inc := r.URL.Query()["include"]
+	if slices.Contains(inc, "info") {
+		info, err := h.c.LookupOrg(r.Context(), org)
+		if err != nil {
+			return err
+		}
+		res.OrgInfo = (*apitypes.OrgInfo)(info)
+	}
+
+	return httpJSON(w, res)
 }
 
 func (h *Handler) serveWhoAmI(w http.ResponseWriter, r *http.Request) error {
@@ -292,14 +305,6 @@ func httpJSON(w http.ResponseWriter, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "\t")
 	return enc.Encode(v)
-}
-
-func invalidRequestf(reason string, args ...any) *trweb.HTTPError {
-	return &trweb.HTTPError{
-		Status:  400,
-		Code:    "invalid_request",
-		Message: fmt.Sprintf(reason, args...),
-	}
 }
 
 type byteCountResponseWriter struct {

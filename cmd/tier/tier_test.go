@@ -444,6 +444,46 @@ func TestSwitchGCLiveMode(t *testing.T) {
 	tt.GrepBoth("refusing.*live mode", "expected hint")
 }
 
+func TestSubscribe(t *testing.T) {
+	tt := testtier(t, fatalHandler(t))
+	tt.Unsetenv("TIER_DEBUG")
+	tt.RunFail("subscribe", "plan:free@2")
+	tt.GrepStderr("org must be prefixed", "expected prefix error")
+
+	tt.RunFail("subscribe")
+	tt.GrepStderr("Usage:", "expected URL")
+
+	tt.RunFail("subscribe", "--email")
+	tt.GrepStderr("flag needs an argument", "expected flag error")
+
+	tt.RunFail("subscribe", "--email", "foo")
+	tt.GrepStderr("Usage:", "expected usage")
+
+	tt = testtier(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/customers" {
+			io.WriteString(w, `{}`)
+		}
+		email := r.FormValue("email")
+		if !strings.Contains(email, "@") {
+			w.WriteHeader(400)
+			io.WriteString(w, `{"code": "invalid_email"}`)
+		} else {
+			io.WriteString(w, `{}`)
+		}
+	})
+	tt.Unsetenv("TIER_DEBUG")
+	tt.RunFail("subscribe", "--email", "foo", "org:test")
+	tt.GrepBothNot("invalid_email", "expected invalid email code")
+
+	tt = testtier(t, okHandler(t))
+	tt.Unsetenv("TIER_DEBUG")
+	tt.Run("subscribe", "--email", "foo@test.com", "org:test")
+	tt.GrepBothNot(".+", "unexpected output")
+
+	tt.Run("subscribe", "org:test")
+	tt.GrepBothNot(".+", "unexpected output")
+}
+
 func chdir(t *testing.T, dir string) {
 	dir0, err := os.Getwd()
 	if err != nil {

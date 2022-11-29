@@ -70,25 +70,24 @@ func (e *Error) Error() string {
 	b.WriteString("stripe: ")
 	if e.RequestID != "" {
 		b.WriteString(e.RequestID)
-		b.WriteString(": ")
 	}
 	if e.AccountID != "" {
 		b.WriteString(e.AccountID)
 	}
 	if e.Code != "" {
-		b.WriteString(": ")
+		b.WriteString(" code:")
 		b.WriteString(e.Code)
 	}
 	if e.Type != "" {
-		b.WriteString(": ")
+		b.WriteString(" type:")
 		b.WriteString(e.Type)
 	}
 	if e.Param != "" {
-		b.WriteString(": ")
+		b.WriteString(" param:")
 		b.WriteString(e.Param)
 	}
 	if e.Message != "" {
-		b.WriteString(": ")
+		b.WriteString(" message:")
 		b.WriteString(e.Message)
 	}
 	return b.String()
@@ -136,6 +135,13 @@ func (f *Form) Set(args ...any) {
 		f.v = url.Values{}
 	}
 	f.v.Set(formKeyVal(args...))
+}
+
+func MaybeSet[T comparable](f *Form, key string, val T) {
+	var zero T
+	if val != zero {
+		f.Set(key, val)
+	}
 }
 
 // Encode encodes the values into “URL encoded” form ("bar=baz&foo=quux")
@@ -249,11 +255,13 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 	if debugMode {
 		requestID := resp.Header.Get("Request-Id")
 		traceID := randomString()
-		writeIndentedJSON(&trutil.LineWriter{
+		w := &trutil.LineWriter{
 			Prefix:    fmt.Sprintf("STRIPE: >> %s: %s: ", traceID, requestID),
 			Logf:      c.Logf,
 			AutoFlush: true,
-		}, f.v)
+		}
+		fmt.Fprintf(w, "%s %s\n", method, urlStr)
+		writeIndentedJSON(w, f.v)
 
 		c.Logf("STRIPE: -- %s: %s:", traceID, requestID)
 
