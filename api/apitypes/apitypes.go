@@ -30,8 +30,17 @@ type PhaseResponse struct {
 	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
 }
 
-type SubscribeRequest struct {
+type OrgInfo struct {
+	Email       string            `json:"email"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Phone       string            `json:"phone"`
+	Metadata    map[string]string `json:"metadata"`
+}
+
+type ScheduleRequest struct {
 	Org    string
+	Info   *OrgInfo
 	Phases []Phase
 }
 
@@ -44,6 +53,7 @@ type ReportRequest struct {
 }
 
 type WhoIsResponse struct {
+	*OrgInfo
 	Org      string `json:"org"`
 	StripeID string `json:"stripe_id"`
 }

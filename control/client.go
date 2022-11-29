@@ -18,6 +18,7 @@ var (
 	ErrFeatureNotFound   = errors.New("feature not found")
 	ErrFeatureNotMetered = errors.New("feature is not metered")
 	ErrPlanExists        = errors.New("plan already exists")
+	ErrInvalidEmail      = errors.New("invalid email")
 )
 
 const Inf = 1<<63 - 1

@@ -53,6 +53,13 @@ func (c *Client) WhoIs(ctx context.Context, org string) (apitypes.WhoIsResponse,
 	return fetch.OK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c.client(), "GET", "/v1/whois?org="+org, nil)
 }
 
+// LookupOrg reports all known information about the provided org. The
+// information is not cached by the server. If only the Stripe customer ID is
+// needed and speed is of concern, users should use WhoIs.
+func (c *Client) LookupOrg(ctx context.Context, org string) (apitypes.WhoIsResponse, error) {
+	return fetch.OK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c.client(), "GET", "/v1/whois?include=info&org="+org, nil)
+}
+
 // LookupPhase reports information about the current phase the provided org is scheduled in.
 func (c *Client) LookupPhase(ctx context.Context, org string) (apitypes.PhaseResponse, error) {
 	return fetch.OK[apitypes.PhaseResponse, *apitypes.Error](ctx, c.client(), "GET", "/v1/phase?org="+org, nil)
@@ -175,11 +182,36 @@ func (c *Client) ReportUsage(ctx context.Context, r apitypes.ReportRequest) erro
 // Any in-progress scheduled is overwritten and the customer is billed with
 // prorations immediately.
 func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...string) error {
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", "/v1/subscribe", apitypes.SubscribeRequest{
+	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", "/v1/subscribe", apitypes.ScheduleRequest{
 		Org:    org,
 		Phases: []apitypes.Phase{{Features: featuresAndPlans}},
 	})
 	return err
+}
+
+type Phase = apitypes.Phase
+type OrgInfo = apitypes.OrgInfo
+
+type ScheduleParams struct {
+	Info   *OrgInfo
+	Phases []Phase
+}
+
+func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) error {
+	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", "/v1/subscribe", &apitypes.ScheduleRequest{
+		Org:    org,
+		Info:   (*apitypes.OrgInfo)(p.Info),
+		Phases: copyPhases(p.Phases),
+	})
+	return err
+}
+
+func copyPhases(phases []Phase) []apitypes.Phase {
+	c := make([]apitypes.Phase, len(phases))
+	for i, p := range phases {
+		c[i] = apitypes.Phase(p)
+	}
+	return c
 }
 
 func (c *Client) WhoAmI(ctx context.Context) (apitypes.WhoAmIResponse, error) {

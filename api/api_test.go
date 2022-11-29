@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
@@ -99,6 +101,7 @@ func TestAPISubscribe(t *testing.T) {
 		err := tc.ReportUsage(ctx, apitypes.ReportRequest{
 			Org:     org,
 			Feature: fn,
+			At:      time.Now().Add(1 * time.Minute),
 			N:       n,
 		})
 		diff.Test(t, t.Errorf, err, wantErr)
@@ -336,15 +339,15 @@ func TestTierReport(t *testing.T) {
 
 	pr, err := tc.PushJSON(ctx, []byte(`
 		{
-			"plans": {
-				"plan:test@0": {
-					"features": {
-						"feature:t": {
-							"tiers": [{}]
-						}
-					}
-				}
+		  "plans": {
+		    "plan:test@0": {
+		      "features": {
+			"feature:t": {
+			  "tiers": [{}]
 			}
+		      }
+		    }
+		  }
 		}
 	`))
 	if err != nil {
@@ -361,7 +364,22 @@ func TestTierReport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tc.Report(ctx, "org:test", "feature:t", 10); err != nil {
+	if err := tc.ReportUsage(ctx, apitypes.ReportRequest{
+		Org:     "org:test",
+		Feature: mpn("feature:t"),
+		N:       10,
+
+		// Report the usage at a time in the near future to avoid
+		// complaints from Stripe about being too early (e.g. the same
+		// start time as the current phase) or too late (e.g. > 5mins
+		// into the future.
+		//
+		// If this test becomes flaky, we should use Test Clocks. For
+		// now, avoid the slowness of the Test Clock API.
+		At: time.Now().Add(1 * time.Minute),
+
+		Clobber: false,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -375,6 +393,71 @@ func TestTierReport(t *testing.T) {
 	}
 	if used != 10 {
 		t.Errorf("used = %d, want 10", used)
+	}
+}
+
+func TestScheduleWithCustomerInfoNoPhases(t *testing.T) {
+	ctx := context.Background()
+	c, _ := newTestClient(t)
+	tc := &tier.Client{HTTPClient: c}
+
+	p := &tier.ScheduleParams{
+		Info: &tier.OrgInfo{
+			Email:       "test@example.com",
+			Name:        "Test Name",
+			Description: "Test Desc",
+			Phone:       "555-555-5555",
+			Metadata: map[string]string{
+				"foo":            "bar",
+				"tier.filter.me": "xxxx",
+			},
+		},
+	}
+
+	diff.Test(t, t.Fatalf,
+		tc.Schedule(ctx, "org:test", p),
+		&apitypes.Error{
+			Status:  400,
+			Code:    "invalid_metadata",
+			Message: "metadata keys must not use reserved prefix ('tier.')",
+		},
+	)
+
+	got, err := tc.LookupOrg(ctx, "org:test2")
+	diff.Test(t, t.Errorf,
+		err,
+		&apitypes.Error{
+			Status:  400,
+			Code:    "org_not_found",
+			Message: "org not found",
+		},
+	)
+	diff.Test(t, t.Fatalf, got, apitypes.WhoIsResponse{})
+
+	if err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
+		Info: &tier.OrgInfo{
+			Email: "test2@example2.com",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = tc.LookupOrg(ctx, "org:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Email != "test2@example2.com" {
+		t.Errorf("unexpected email: %q", got.Email)
+	}
+
+	_, err = tc.LookupPhase(ctx, "org:test")
+	var e *apitypes.Error
+	if !errors.As(err, &e) {
+		t.Fatal("unexpected error type")
+	}
+	if e.Code != "not_found" {
+		t.Errorf("unexpected error: %v", e)
 	}
 }
 

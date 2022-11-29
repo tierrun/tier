@@ -252,16 +252,27 @@ func runTier(cmd string, args []string) (err error) {
 	case "connect":
 		return connect()
 	case "subscribe":
-		if len(args) < 2 {
+		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+		email := fs.String("email", "", "sets the customer email address")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 {
 			return errUsage
 		}
-		org := args[0]
-		refs := args[1:]
-		if org == "" || len(refs) == 0 {
-			return errUsage
+		org := fs.Arg(0)
+		p := &tier.ScheduleParams{
+			Info: &tier.OrgInfo{
+				Email: *email,
+			},
+		}
+		var refs []string
+		if fs.NArg() > 1 {
+			refs = fs.Args()[1:]
+			p.Phases = []tier.Phase{{Features: refs}}
 		}
 		vlogf("subscribing %s to %v", org, refs)
-		return tc().Subscribe(ctx, org, refs...)
+		return tc().Schedule(ctx, org, p)
 	case "phases":
 		if len(args) < 1 {
 			return errUsage

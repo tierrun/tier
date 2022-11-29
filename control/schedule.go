@@ -23,7 +23,8 @@ const scheduleNameTODO = "default"
 
 // Errors
 var (
-	ErrOrgNotFound = errors.New("org not found")
+	ErrOrgNotFound     = errors.New("org not found")
+	ErrInvalidMetadata = errors.New("invalid metadata")
 )
 
 type ValidationError struct {
@@ -31,6 +32,14 @@ type ValidationError struct {
 }
 
 func (e *ValidationError) Error() string { return e.Message }
+
+type OrgInfo struct {
+	Email       string
+	Name        string
+	Description string
+	Phone       string
+	Metadata    map[string]string
+}
 
 type Phase struct {
 	Org       string // set on read
@@ -123,12 +132,16 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (subs
 	return s, nil
 }
 
-func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub string, phases []Phase) (err error) {
+func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub string, info *OrgInfo, phases []Phase) (err error) {
 	defer errorfmt.Handlef("stripe: createSubscription: %q: %w", org, &err)
 
-	cid, err := c.putCustomer(ctx, org)
+	cid, err := c.putCustomer(ctx, org, info)
 	if err != nil {
 		return err
+	}
+
+	if len(phases) == 0 {
+		return nil
 	}
 
 	c.Logf("keyprefix: %q", c.Stripe.KeyPrefix)
@@ -189,9 +202,9 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 	var f stripe.Form
 	if name != "" {
 		// When creating a schedule using from_schedule we cannot set
-		// metadata, so we must wait until the update that immediatly
+		// metadata, so we must wait until the update that immediately
 		// follows to do so. This is why updating the name is allowed
-		// if neccessary.
+		// if necessary.
 		//
 		// Error from stripe: "You cannot set `metadata` if `from_subscription` is set."
 		f.Set("metadata[tier.subscription]", name)
@@ -222,32 +235,35 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+id, f, nil)
 }
 
-func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) (err error) {
+func (c *Client) Schedule(ctx context.Context, org string, info *OrgInfo, phases []Phase) (err error) {
 	defer errorfmt.Handlef("tier: subscribe: %q: %w", org, &err)
-	if len(phases) == 0 {
-		return errors.New("at least one phase required")
-	}
 
 	c.Logf("Subscribe phases: %# v", pretty.Formatter(phases))
+
+	if info != nil {
+		if _, err := c.putCustomer(ctx, org, info); err != nil {
+			return err
+		}
+	}
 
 	s, err := c.lookupSubscription(ctx, org, scheduleNameTODO)
 	if errors.Is(err, ErrOrgNotFound) {
 		// We only need to pay the API penalty of creating a customer
 		// if we know in fact it does not exist.
-		if _, err := c.putCustomer(ctx, org); err != nil {
+		if _, err := c.putCustomer(ctx, org, info); err != nil {
 			return err
 		}
-		return c.createSchedule(ctx, org, scheduleNameTODO, "", phases)
+		return c.createSchedule(ctx, org, scheduleNameTODO, "", info, phases)
 	}
 	if errors.Is(err, stripe.ErrNotFound) {
-		return c.createSchedule(ctx, org, scheduleNameTODO, "", phases)
+		return c.createSchedule(ctx, org, scheduleNameTODO, "", info, phases)
 	}
 	if err != nil {
 		return err
 	}
 	err = c.updateSchedule(ctx, s.ScheduleID, scheduleNameTODO, phases)
 	if isReleased(err) {
-		return c.createSchedule(ctx, org, scheduleNameTODO, s.ScheduleID, phases)
+		return c.createSchedule(ctx, org, scheduleNameTODO, s.ScheduleID, info, phases)
 	}
 	return err
 }
@@ -270,12 +286,11 @@ func isReleased(err error) bool {
 //
 // The first phase must have a zero Effective time to indicate that it should
 // start now.
-func (c *Client) ScheduleNow(ctx context.Context, org string, phases []Phase) error {
-	if len(phases) == 0 {
-		return errors.New("at least one phase required")
-	}
-	if !phases[0].Effective.IsZero() {
-		return errors.New("first phase must be effective now")
+func (c *Client) ScheduleNow(ctx context.Context, org string, info *OrgInfo, phases []Phase) error {
+	if len(phases) > 0 {
+		if !phases[0].Effective.IsZero() {
+			return errors.New("first phase must be effective now")
+		}
 	}
 	cps, err := c.LookupPhases(ctx, org)
 	if err != nil && !errors.Is(err, ErrOrgNotFound) {
@@ -289,14 +304,14 @@ func (c *Client) ScheduleNow(ctx context.Context, org string, phases []Phase) er
 			break
 		}
 	}
-	return c.Schedule(ctx, org, phases)
+	return c.Schedule(ctx, org, info, phases)
 }
 
 // SubscribeTo subscribes org to the provided features effective immediately,
 // taking over any in-progress schedule. The customer is billed immediately
 // with prorations if any.
 func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeaturePlan) error {
-	return c.ScheduleNow(ctx, org, []Phase{{
+	return c.ScheduleNow(ctx, org, nil, []Phase{{
 		Features: fs,
 	}})
 }
@@ -434,6 +449,18 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	return ps, nil
 }
 
+// PutCustomer safely creates or updates a customer in Stripe. It does this
+// being careful to not duplicate customer records. If the customer already exists, it
+// will be updated with the provided info.
+func (c *Client) PutCustomer(ctx context.Context, org string, info *OrgInfo) error {
+	_, err := c.putCustomer(ctx, org, info)
+	var e *stripe.Error
+	if errors.As(err, &e) && e.Code == "email_invalid" {
+		return ErrInvalidEmail
+	}
+	return err
+}
+
 // putCustomer safely creates a customer in Stripe for the provided org
 // identifier if one does not already exists.
 //
@@ -447,12 +474,20 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 // without an error if no customer exists with the provided email.
 //
 // It only returns errors encountered while communicating with Stripe.
-func (c *Client) putCustomer(ctx context.Context, org string) (string, error) {
+func (c *Client) putCustomer(ctx context.Context, org string, info *OrgInfo) (string, error) {
 	cid, err := c.WhoIs(ctx, org)
 	if errors.Is(err, ErrOrgNotFound) {
-		return c.createCustomer(ctx, org)
+		return c.createCustomer(ctx, org, info)
 	}
-	return cid, err
+	if err != nil {
+		return "", err
+	}
+
+	// finally, update the already created customer
+	if err := c.updateCustomer(ctx, cid, info); err != nil {
+		return "", err
+	}
+	return cid, nil
 }
 
 type Account struct {
@@ -495,6 +530,7 @@ func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 		c.Logf("WhoIs: cache miss: looking up customer for %q", org)
 		type T struct {
 			stripe.ID
+			Email    string
 			Metadata struct {
 				Org string `json:"tier.org"`
 			}
@@ -514,12 +550,36 @@ func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 	return cid, err
 }
 
-func (c *Client) createCustomer(ctx context.Context, org string) (id string, err error) {
+// LookupOrg returns the org information on file with Stripe, uncached.
+func (c *Client) LookupOrg(ctx context.Context, org string) (*OrgInfo, error) {
+	cid, err := c.WhoIs(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	var f stripe.Form
+	var info *OrgInfo
+	if err := c.Stripe.Do(ctx, "GET", "/v1/customers/"+cid, f, &info); err != nil {
+		return nil, err
+	}
+
+	for k := range info.Metadata {
+		if strings.HasPrefix(k, "tier.") {
+			delete(info.Metadata, k)
+		}
+	}
+
+	return info, nil
+}
+
+func (c *Client) createCustomer(ctx context.Context, org string, info *OrgInfo) (id string, err error) {
 	defer errorfmt.Handlef("createCustomer: %w", &err)
 	return c.cache.load(org, func() (string, error) {
 		var f stripe.Form
 		f.SetIdempotencyKey("customer:create:" + org)
 		f.Set("metadata[tier.org]", org)
+		if err := setOrgInfo(&f, info); err != nil {
+			return "", err
+		}
 		if c.Clock != "" {
 			f.Set("test_clock", c.Clock)
 		}
@@ -531,6 +591,35 @@ func (c *Client) createCustomer(ctx context.Context, org string) (id string, err
 		}
 		return created.ProviderID(), nil
 	})
+}
+
+func setOrgInfo(f *stripe.Form, info *OrgInfo) error {
+	if info == nil {
+		return nil
+	}
+	stripe.MaybeSet(f, "email", info.Email)
+	stripe.MaybeSet(f, "name", info.Name)
+	stripe.MaybeSet(f, "phone", info.Phone)
+	stripe.MaybeSet(f, "description", info.Description)
+	for k, v := range info.Metadata {
+		if strings.HasPrefix(k, "tier.") {
+			return fmt.Errorf("%w: %q", ErrInvalidMetadata, k)
+		}
+		f.Set("metadata", k, v)
+	}
+	return nil
+}
+
+func (c *Client) updateCustomer(ctx context.Context, id string, info *OrgInfo) error {
+	if info == nil {
+		return nil
+	}
+	// update customer in stripe
+	var f stripe.Form
+	if err := setOrgInfo(&f, info); err != nil {
+		return err
+	}
+	return c.Stripe.Do(ctx, "POST", "/v1/customers/"+id, f, nil)
 }
 
 func nowOrSpecific(t time.Time) any {

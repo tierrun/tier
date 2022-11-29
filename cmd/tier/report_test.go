@@ -100,3 +100,9 @@ func fatalHandler(t *testing.T) http.HandlerFunc {
 		t.Fatalf("unexpected request: %s %s", r.Method, r.URL)
 	}
 }
+
+func okHandler(t *testing.T) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "{}")
+	}
+}
