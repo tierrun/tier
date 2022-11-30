@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -403,7 +404,21 @@ the tier.state file.`)
 			if fs.NArg() < 1 {
 				return errUsage
 			}
-			a.ID = fs.Arg(0)
+			aid := fs.Arg(0)
+			u, _ := url.Parse(aid)
+			if u != nil {
+				parts := strings.Split(u.Path, "/")
+				for _, p := range parts {
+					if strings.HasPrefix(p, "acct_") {
+						aid = p
+						break
+					}
+				}
+			}
+			if !strings.HasPrefix(aid, "acct_") {
+				return fmt.Errorf("invalid account id or URL: %s", aid)
+			}
+			a.ID = aid
 		}
 		if err := saveState(a); err != nil {
 			return err

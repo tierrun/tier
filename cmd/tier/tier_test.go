@@ -137,7 +137,7 @@ func TestSwitchIsoloate(t *testing.T) {
 
 	tt.Run("switch", "-c")
 	tt.GrepStdout("Running in isolation mode.", "helpful message not printed")
-	tt.GrepStdout(`https://dashboard.stripe.com/acct_123/test`, "expected URL")
+	tt.GrepStdout(`\shttps://dashboard.stripe.com/acct_123/test`, "expected URL")
 
 	tt.RunFail("switch", "-c", "acct_123")
 	tt.GrepStderr("does not accept arguments", "expected error message")
@@ -155,7 +155,11 @@ func TestSwitchIsoloate(t *testing.T) {
 
 	tt.Run("switch", "acct_works")
 	tt.GrepStdout("Running in isolation mode.", "helpful message not printed")
-	tt.GrepStdout(`https://dashboard.stripe.com/acct_works/test`, "expected URL")
+	tt.GrepStdout(`\shttps://dashboard.stripe.com/acct_works/test`, "expected URL")
+
+	tt.Run("switch", "https://dashboard.stripe.com/acct_1M9f6lCYptJuIvl3/test/invoices/in_1M9fFICYptJuIvl3JQCXUdXj")
+	tt.GrepStdout("Running in isolation mode.", "helpful message not printed")
+	tt.GrepStdout(`\shttps://dashboard.stripe.com/acct_1M9f6lCYptJuIvl3/test$`, "expected URL")
 }
 
 func TestSwitchPreallocateTask(t *testing.T) {
