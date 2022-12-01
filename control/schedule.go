@@ -25,6 +25,7 @@ const scheduleNameTODO = "default"
 var (
 	ErrOrgNotFound     = errors.New("org not found")
 	ErrInvalidMetadata = errors.New("invalid metadata")
+	ErrInvalidPhase    = errors.New("invalid phase")
 )
 
 type ValidationError struct {
@@ -236,9 +237,27 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, info *OrgInfo, phases []Phase) (err error) {
-	defer errorfmt.Handlef("tier: subscribe: %q: %w", org, &err)
+	err = c.schedule(ctx, org, info, phases)
+	var e *stripe.Error
+	if errors.As(err, &e) && strings.Contains(e.Message, "maximum number of items") {
+		return ErrTooManyItems
+	}
+	return err
+}
+
+func (c *Client) schedule(ctx context.Context, org string, info *OrgInfo, phases []Phase) (err error) {
+	defer errorfmt.Handlef("tier: schedule: %q: %w", org, &err)
 
 	c.Logf("Subscribe phases: %# v", pretty.Formatter(phases))
+
+	for i, p := range phases {
+		if len(p.Features) > 20 {
+			return ErrTooManyItems
+		}
+		if len(p.Features) == 0 {
+			return fmt.Errorf("%w: phase %d must contain a minimum of one item", ErrInvalidPhase, i)
+		}
+	}
 
 	if info != nil {
 		if _, err := c.putCustomer(ctx, org, info); err != nil {
@@ -317,26 +336,48 @@ func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeatureP
 }
 
 func (c *Client) lookupFeatures(ctx context.Context, keys []refs.FeaturePlan) ([]Feature, error) {
-	// TODO(bmizerany): return error if len(keys) == 0. No keys means
-	// stripe returns all known prices.
-	var f stripe.Form
-	f.Add("expand[]", "data.tiers")
-	for _, k := range keys {
-		f.Add("lookup_keys[]", stripe.MakeID(k.String()))
-	}
-	pp, err := stripe.Slurp[stripePrice](ctx, c.Stripe, "GET", "/v1/prices", f)
-	if err != nil {
-		return nil, err
+	if len(keys) == 0 {
+		return nil, errors.New("lookupFeatures: no features provided")
 	}
 
-	if len(pp) != len(keys) {
-		// TODO(bmizerany): return a more specific error with omitted features
-		return nil, ErrFeatureNotFound
+	lookup := func(keys []refs.FeaturePlan) ([]Feature, error) {
+		// TODO(bmizerany): return error if len(keys) == 0. No keys means
+		// stripe returns all known prices.
+		var f stripe.Form
+		f.Add("expand[]", "data.tiers")
+		for _, k := range keys {
+			f.Add("lookup_keys[]", stripe.MakeID(k.String()))
+		}
+		pp, err := stripe.Slurp[stripePrice](ctx, c.Stripe, "GET", "/v1/prices", f)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(pp) != len(keys) {
+			// TODO(bmizerany): return a more specific error with omitted features
+			return nil, ErrFeatureNotFound
+		}
+
+		fs := make([]Feature, len(pp))
+		for i, p := range pp {
+			fs[i] = stripePriceToFeature(p)
+		}
+		return fs, nil
 	}
 
-	fs := make([]Feature, len(pp))
-	for i, p := range pp {
-		fs[i] = stripePriceToFeature(p)
+	var fs []Feature
+	// lookup 10 keys at a time
+	for len(keys) > 0 {
+		n := 10
+		if len(keys) < n {
+			n = len(keys)
+		}
+		lfs, err := lookup(keys[:n])
+		if err != nil {
+			return nil, err
+		}
+		fs = append(fs, lfs...)
+		keys = keys[n:]
 	}
 	return fs, nil
 }
