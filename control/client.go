@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
+	"github.com/golang/groupcache/singleflight"
 	"golang.org/x/sync/errgroup"
 	"tier.run/refs"
 	"tier.run/stripe"
@@ -19,6 +21,7 @@ var (
 	ErrFeatureNotMetered = errors.New("feature is not metered")
 	ErrPlanExists        = errors.New("plan already exists")
 	ErrInvalidEmail      = errors.New("invalid email")
+	ErrTooManyItems      = errors.New("too many subscription items")
 )
 
 const Inf = 1<<63 - 1
@@ -102,7 +105,7 @@ type Feature struct {
 // IsMetered reports if the feature is metered.
 func (f *Feature) IsMetered() bool {
 	// checking the mode is more reliable than checking the existence of
-	// tiers becauase not all responses from stripe containing prices
+	// tiers because not all responses from stripe containing prices
 	// include tiers, but they all include the mode, which is empty for
 	// license prices.
 	return f.Mode != ""
@@ -161,32 +164,41 @@ func (c *Client) Push(ctx context.Context, fs []Feature, cb PushReportFunc) erro
 		plans[f.Plan()] = append(plans[f.Plan()], f)
 	}
 
+	var fg singleflight.Group
+	var mu sync.Mutex
+	pushed := map[refs.Plan]error{}
 	var g errgroup.Group
 	g.SetLimit(c.maxWorkers())
 	for p, fs := range plans {
 		p, fs := p, fs
-		g.Go(func() error {
-			if err := c.pushSentinelPlan(ctx, p); err != nil {
-				for _, f := range fs {
-					cb(f, err) // error out all features in the plan
-				}
-				return err
-			}
-			for _, f := range fs {
-				f := f
-				g.Go(func() error {
-					pid, err := c.pushFeature(ctx, f)
-					if err != nil {
-						cb(f, err)
-						return err
+		for _, f := range fs {
+			f := f
+			g.Go(func() error {
+				_, err := fg.Do(f.String(), func() (any, error) {
+					mu.Lock()
+					defer mu.Unlock()
+					if err, ok := pushed[p]; ok {
+						return nil, err
 					}
-					f.ProviderID = pid
-					cb(f, nil)
-					return nil
+					err := c.pushSentinelPlan(ctx, p)
+					pushed[p] = err
+					return nil, err
 				})
-			}
-			return nil
-		})
+				if err != nil {
+					cb(f, err) // error out all features in the plan
+					return err
+				}
+
+				pid, err := c.pushFeature(ctx, f)
+				if err != nil {
+					cb(f, err)
+					return err
+				}
+				f.ProviderID = pid
+				cb(f, nil)
+				return nil
+			})
+		}
 	}
 	return g.Wait()
 }

@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -130,6 +131,51 @@ func TestSchedule(t *testing.T) {
 			Plans:     plans("plan:free@0"),
 		},
 	})
+}
+
+func TestScheduleMinMaxItems(t *testing.T) {
+	c := newTestClient(t)
+	ctx := context.Background()
+
+	var fs []Feature
+	for i := 0; i < 21; i++ {
+		fs = append(fs, Feature{
+			FeaturePlan: mpf(fmt.Sprintf("feature:%d@plan:test@0", i)),
+			Interval:    "@daily",
+			Currency:    "usd",
+		})
+	}
+
+	c.Push(ctx, fs, pushLogger(t))
+
+	err := c.SubscribeTo(ctx, "org:example", nil)
+	if !errors.Is(err, ErrInvalidPhase) {
+		t.Fatalf("got %v, want %v", err, ErrTooManyItems)
+	}
+
+	fps := FeaturePlans(fs)
+	err = c.SubscribeTo(ctx, "org:example", fps)
+	if !errors.Is(err, ErrTooManyItems) {
+		t.Fatalf("got %v, want %v", err, ErrTooManyItems)
+	}
+
+	// check that we can still subscribe to the max number of items
+	wantFeatures := fps[:20]
+	if err := c.SubscribeTo(ctx, "org:example", wantFeatures); err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.LookupPhases(ctx, "org:example")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []Phase{{
+		Org:      "org:example",
+		Features: wantFeatures,
+		Current:  true,
+		Plans:    nil, // fragments only
+	}}
+	diff.Test(t, t.Errorf, got, want, diff.ZeroFields[Phase]("Effective"))
 }
 
 func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
