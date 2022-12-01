@@ -235,16 +235,18 @@ func runTier(cmd string, args []string) (err error) {
 			"MODE",
 			"AGG",
 			"BASE",
+			"HIDDEN",
 		}, "\t"))
 
 		for plan, p := range m.Plans {
 			for feature, f := range p.Features {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n",
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%v\n",
 					plan,
 					feature,
 					f.Mode,
 					f.Aggregate,
 					f.Base,
+					f.Hidden,
 				)
 			}
 		}

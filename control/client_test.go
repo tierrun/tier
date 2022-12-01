@@ -43,6 +43,13 @@ func TestRoundTrip(t *testing.T) {
 
 	want := []Feature{
 		{
+			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@2"),
+			Interval:    "@daily",
+			Currency:    "usd",
+			Title:       "Test2",
+			Hidden:      true,
+		},
+		{
 			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@3"),
 			Interval:    "@daily",
 			Currency:    "eur",

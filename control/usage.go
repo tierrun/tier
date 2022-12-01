@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -82,6 +83,9 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) 
 
 	type T struct {
 		stripe.ID
+		Metadata struct {
+			Hidden string `json:"tier.h"`
+		}
 		Price    stripePrice
 		Period   struct{ Start, End int64 }
 		Quantity int
@@ -105,6 +109,41 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) 
 				End:     time.Unix(line.Period.End, 0),
 				Used:    line.Quantity,
 				Limit:   f.Limit(),
+			}
+		}
+
+		ss := strings.Split(line.Metadata.Hidden, ",")
+		fps, err := refs.ParseFeaturePlanShorts(ss)
+		if err != nil {
+			return nil, err
+		}
+
+		// avoid looking up the same feature twice
+		var notSeen []refs.FeaturePlan
+		for _, fp := range fps {
+			if _, ok := seen[fp]; !ok {
+				notSeen = append(notSeen, fp)
+			}
+		}
+		if len(notSeen) == 0 {
+			continue
+		}
+		fs, err := c.lookupFeatures(ctx, notSeen)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range fs {
+			seen[f.FeaturePlan] = Usage{
+				Feature: f.FeaturePlan,
+				Used:    1,
+				Limit:   f.Limit(),
+
+				// TODO(bmizerany): Add Start and End; but hold
+				// off until shadow schedules are implemented,
+				// that way we'll have real schedule dates, and
+				// can avoid calculating them on our own based
+				// on line item start and end dates that depend
+				// on the type (e.g. "metered").
 			}
 		}
 	}

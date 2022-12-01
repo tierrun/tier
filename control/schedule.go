@@ -23,9 +23,10 @@ const scheduleNameTODO = "default"
 
 // Errors
 var (
-	ErrOrgNotFound     = errors.New("org not found")
-	ErrInvalidMetadata = errors.New("invalid metadata")
-	ErrInvalidPhase    = errors.New("invalid phase")
+	ErrOrgNotFound               = errors.New("org not found")
+	ErrInvalidMetadata           = errors.New("invalid metadata")
+	ErrInvalidPhase              = errors.New("invalid phase")
+	ErrInvalidFeatureCombination = errors.New("invalid feature combination")
 )
 
 type ValidationError struct {
@@ -169,24 +170,8 @@ func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub s
 		var f stripe.Form
 		f.Set("customer", cid)
 		f.Set("metadata[tier.subscription]", name)
-		for i, p := range phases {
-			fs, err := c.lookupFeatures(ctx, p.Features)
-			if err != nil {
-				return err
-			}
-
-			if i == 0 {
-				f.Set("start_date", nowOrSpecific(p.Effective))
-			}
-
-			if i > 0 && i < len(phases)-1 {
-				f.Set("phases", i-1, "end_date", nowOrSpecific(p.Effective))
-			}
-
-			for j, fe := range fs {
-				c.Logf("phase %d, item %d: %v", i, j, fe)
-				f.Set("phases", i, "items", j, "price", fe.ProviderID)
-			}
+		if err := addPhases(ctx, c, &f, false, phases); err != nil {
+			return err
 		}
 		_, err := do(f)
 		return err
@@ -210,6 +195,13 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 		// Error from stripe: "You cannot set `metadata` if `from_subscription` is set."
 		f.Set("metadata[tier.subscription]", name)
 	}
+	if err := addPhases(ctx, c, &f, true, phases); err != nil {
+		return err
+	}
+	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+id, f, nil)
+}
+
+func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, phases []Phase) error {
 	for i, p := range phases {
 		if len(p.Features) == 0 {
 			return fmt.Errorf("phase %d must contain at least one feature", i)
@@ -224,16 +216,37 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 		}
 
 		if i == 0 {
-			f.Set("phases", 0, "start_date", nowOrSpecific(p.Effective))
+			if update {
+				f.Set("phases", 0, "start_date", nowOrSpecific(p.Effective))
+			} else {
+				f.Set("start_date", nowOrSpecific(p.Effective))
+			}
 		} else {
 			f.Set("phases", i-1, "end_date", nowOrSpecific(p.Effective))
-			f.Set("phases", i, "start_date", nowOrSpecific(p.Effective))
+			if update {
+				f.Set("phases", i, "start_date", nowOrSpecific(p.Effective))
+			}
 		}
-		for j, fe := range fs {
-			f.Set("phases", i, "items", j, "price", fe.ProviderID)
+
+		var j int
+		var h []string
+		for _, fe := range fs {
+			if fe.Hidden {
+				h = append(h, fe.Short())
+			} else {
+				c.Logf("adding visible feature: %q", fe)
+				f.Set("phases", i, "items", j, "price", fe.ProviderID)
+				j++
+			}
 		}
+		if j == 0 {
+			return fmt.Errorf("%w: phase %d must contain at least one visible feature", ErrInvalidFeatureCombination, i)
+		}
+		hs := strings.Join(h, ",")
+		c.Logf("phase[%d]: hidden features: %q", i, hs)
+		f.Set("phases", i, "metadata[tier.h]", hs)
 	}
-	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+id, f, nil)
+	return nil
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, info *OrgInfo, phases []Phase) (err error) {
@@ -408,7 +421,10 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 			End   int64 `json:"end_date"`
 		} `json:"current_phase"`
 		Phases []struct {
-			Start int64 `json:"start_date"`
+			Start    int64 `json:"start_date"`
+			Metadata struct {
+				Hidden string `json:"tier.h"`
+			}
 			Items []struct {
 				Price stripePrice
 			}
@@ -453,19 +469,28 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		if s.Metadata.Name != name {
 			continue
 		}
+		// TODO(bmizerany): check we have not seen another schedule by
+		// the same name; be paranoid
 		for _, p := range s.Phases {
-			fs := make([]refs.FeaturePlan, 0, len(p.Items))
+			fps := make([]refs.FeaturePlan, 0, len(p.Items))
 			for _, pi := range p.Items {
-				fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
+				fps = append(fps, featureByProviderID[pi.Price.ProviderID()])
 			}
-
+			if p.Metadata.Hidden != "" {
+				ss := strings.Split(p.Metadata.Hidden, ",")
+				hfps, err := refs.ParseFeaturePlanShorts(ss)
+				if err != nil {
+					return nil, err
+				}
+				fps = append(fps, hfps...)
+			}
 			var plans []refs.Plan
-			for _, f := range fs {
+			for _, f := range fps {
 				if slices.Contains(plans, f.Plan()) {
 					continue
 				}
 				inModel := numFeaturesInPlan(m, f.Plan())
-				inPhase := numFeaturesInPlan(fs, f.Plan())
+				inPhase := numFeaturesInPlan(fps, f.Plan())
 				if inModel == inPhase {
 					plans = append(plans, f.Plan())
 				}
@@ -475,7 +500,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 			ps = append(ps, Phase{
 				Org:       org,
 				Effective: time.Unix(p.Start, 0),
-				Features:  fs,
+				Features:  fps,
 				Current:   p.Start == s.Current.Start,
 
 				Plans: plans,

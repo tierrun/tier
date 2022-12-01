@@ -41,6 +41,7 @@ func FromPricingHuJSON(data []byte) (fs []control.Feature, err error) {
 			fn := feature.WithPlan(plan)
 			ff := control.Feature{
 				FeaturePlan: fn,
+				Hidden:      f.Hidden,
 
 				Currency: values.Coalesce(p.Currency, "usd"),
 				Interval: values.Coalesce(p.Interval, "@monthly"),
@@ -100,9 +101,10 @@ func ToPricingJSON(fs []control.Feature) ([]byte, error) {
 		}
 
 		p.Features[f.FeaturePlan.Name()] = apitypes.Feature{
-			Title: values.ZeroIf(f.Title, f.FeaturePlan.String()),
-			Base:  f.Base,
-			Tiers: tiers,
+			Title:  values.ZeroIf(f.Title, f.FeaturePlan.String()),
+			Hidden: f.Hidden,
+			Base:   f.Base,
+			Tiers:  tiers,
 		}
 		m.Plans[f.Plan()] = p
 	}

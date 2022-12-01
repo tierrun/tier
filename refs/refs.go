@@ -25,7 +25,7 @@ type ParseError struct {
 }
 
 func (e *ParseError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Message, e.ID)
+	return fmt.Sprintf("%s: %q", e.Message, e.ID)
 }
 
 type Plan struct {
@@ -164,6 +164,49 @@ func ParseFeaturePlans(s ...string) ([]FeaturePlan, error) {
 	return fps, nil
 }
 
+// ParseFeaturePlanShort parses the short for of a feature plan.
+//
+// The short "x@y@z" is interpreted as "feature:x@plan:y@z". The short "x@y" is
+// interpreted as "feature:x@y".
+func ParseFeaturePlanShort(s string) (FeaturePlan, error) {
+	name, version, _ := strings.Cut(s, "@")
+	if version == "" {
+		return FeaturePlan{}, invalid("feature plan short must have version", s)
+	}
+	if isIllegalName(name) {
+		return FeaturePlan{}, invalid("feature name must match [a-zA-Z0-9:]+", s)
+	}
+	pname, pversion, _ := strings.Cut(version, "@")
+	if pversion == "" {
+		fp := FeaturePlan{name: name, version: version}
+		return fp, nil
+	}
+	fp := FeaturePlan{
+		name: name,
+		plan: Plan{
+			name:    pname,
+			version: pversion,
+		},
+	}
+	return fp, nil
+
+}
+
+func ParseFeaturePlanShorts(ss []string) ([]FeaturePlan, error) {
+	fps := make([]FeaturePlan, 0, len(ss))
+	for _, s := range ss {
+		if s == "" {
+			continue
+		}
+		fp, err := ParseFeaturePlanShort(s)
+		if err != nil {
+			return nil, err
+		}
+		fps = append(fps, fp)
+	}
+	return fps, nil
+}
+
 func ParseFeaturePlan(s string) (FeaturePlan, error) {
 	prefix, rest, hasPrefix := strings.Cut(s, ":")
 	if !hasPrefix || prefix != "feature" {
@@ -236,6 +279,20 @@ func (fp FeaturePlan) IsZero() bool {
 
 func (fp FeaturePlan) String() string   { return fmt.Sprintf("feature:%s@%s", fp.name, fp.Version()) }
 func (fp FeaturePlan) GoString() string { return fmt.Sprintf("<%s>", fp) }
+
+func (fp FeaturePlan) Short() string {
+	var b strings.Builder
+	b.WriteString(fp.name)
+	b.WriteString("@")
+	if fp.version != "" {
+		b.WriteString(fp.version)
+	} else {
+		b.WriteString(fp.plan.name)
+		b.WriteString("@")
+		b.WriteString(fp.plan.version)
+	}
+	return b.String()
+}
 
 func (fp FeaturePlan) Name() Name             { return Name{name: fp.name} }
 func (fp FeaturePlan) Plan() Plan             { return fp.plan }

@@ -61,9 +61,11 @@ func FeaturePlans(fs []Feature) []refs.FeaturePlan {
 type Feature struct {
 	refs.FeaturePlan // the feature name prefixed with ("feature:")
 
+	Hidden bool // if true, the feature is not visible to the user
+
 	ProviderID string // identifier set by the billing engine provider
-	PlanTitle  string // a human readable title for the plan
-	Title      string // a human readable title for the feature
+	PlanTitle  string // human readable title for the plan
+	Title      string // human readable title for the feature
 
 	// Interval specifies the billing interval for the feature.
 	//
@@ -251,6 +253,7 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) (providerID string,
 	data.Set("metadata", "tier.plan_title", f.PlanTitle)
 	data.Set("metadata", "tier.title", f.Title)
 	data.Set("metadata", "tier.feature", f.FeaturePlan)
+	data.Set("metadata", "tier.hidden", f.Hidden)
 
 	c.Logf("tier: pushing feature %q", f.ID())
 	data.Set("lookup_key", f.ID())
@@ -326,6 +329,7 @@ type stripePrice struct {
 		Feature   refs.FeaturePlan `json:"tier.feature"`
 		Limit     string           `json:"tier.limit"`
 		Title     string           `json:"tier.title"`
+		Hidden    string           `json:"tier.hidden"`
 	}
 	Recurring struct {
 		Interval       string
@@ -346,10 +350,12 @@ type stripePrice struct {
 }
 
 func stripePriceToFeature(p stripePrice) Feature {
+	hidden, _ := strconv.ParseBool(p.Metadata.Hidden)
 	f := Feature{
 		ProviderID:  p.ProviderID(),
 		PlanTitle:   p.Metadata.PlanTitle,
 		FeaturePlan: p.Metadata.Feature,
+		Hidden:      hidden,
 		Title:       p.Metadata.Title,
 		Currency:    p.Currency,
 		Interval:    intervalFromStripe[p.Recurring.Interval],

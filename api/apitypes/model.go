@@ -49,6 +49,7 @@ func (t *Tier) UnmarshalJSON(data []byte) error {
 
 type Feature struct {
 	Title     string `json:"title,omitempty"`
+	Hidden    bool   `json:"hidden,omitempty"`
 	Base      int    `json:"base,omitempty"`
 	Mode      string `json:"mode,omitempty"`
 	Aggregate string `json:"aggregate,omitempty"`

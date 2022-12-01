@@ -158,6 +158,36 @@ func TestRoundTrips(t *testing.T) {
 	testRoundTrip(t, ParsePlan, "plan:foo@0")
 }
 
+func TestFeaturePlanShort(t *testing.T) {
+	cases := []struct {
+		in  string
+		out string
+	}{
+		{in: "feature:foo@0", out: "foo@0"},
+		{in: "feature:foo@1", out: "foo@1"},
+		{in: "feature:foo@plan:free@0", out: "foo@free@0"},
+		{in: "feature:foo@plan:free@y", out: "foo@free@y"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.in, func(t *testing.T) {
+			fp, err := ParseFeaturePlan(tt.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := fp.Short(); got != tt.out {
+				t.Errorf("%q: Short() = %v, want %v", tt.in, got, tt.out)
+			}
+			rtfp, err := ParseFeaturePlanShort(fp.Short())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fp != rtfp {
+				t.Errorf("roundtrip failed: %v != %v", fp, rtfp)
+			}
+		})
+	}
+}
+
 func testRoundTrip[T fmt.Stringer](t *testing.T, parse func(string) (T, error), s string) {
 	t.Helper()
 	n, err := parse(s)

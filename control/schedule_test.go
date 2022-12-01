@@ -26,7 +26,6 @@ var (
 var (
 	t0 = time.Date(2020, 1, 0, 0, 0, 0, 0, time.UTC)
 	t1 = time.Date(2020, 2, 0, 0, 0, 0, 0, time.UTC)
-	t2 = time.Date(2020, 3, 0, 0, 0, 0, 0, time.UTC)
 )
 
 var ignoreProviderIDs = diff.OptionList(
@@ -44,7 +43,12 @@ func TestSchedule(t *testing.T) {
 	plan := func(ff []Feature) []refs.FeaturePlan {
 		model = append(model, ff...)
 		var fps []refs.FeaturePlan
+		var last refs.Plan
 		for _, f := range ff {
+			if !last.IsZero() && f.Plan() != last {
+				panic(fmt.Sprintf("plan mismatch: %v != %v", f.Plan(), last))
+			}
+			last = f.Plan()
 			fps = append(fps, f.FeaturePlan)
 		}
 		return fps
@@ -207,13 +211,10 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 		},
 	}
 
-	fps := make([]refs.FeaturePlan, len(fs))
-	for i, f := range fs {
-		fps[i] = f.FeaturePlan
-	}
-
-	c.setClock(t, t0)
 	c.Push(ctx, fs, pushLogger(t))
+
+	fps := FeaturePlans(fs)
+	c.setClock(t, t0)
 	if err := c.SubscribeTo(ctx, "org:example", fps); err != nil {
 		t.Fatal(err)
 	}
@@ -221,6 +222,9 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 	got, err := c.LookupPhases(ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, p := range got {
+		refs.SortGroupedByVersion(p.Features)
 	}
 
 	want := []Phase{{
@@ -406,8 +410,10 @@ func TestReportUsage(t *testing.T) {
 			Mode:        "graduated",
 			Aggregate:   "sum",
 		},
+		// Ensure hidden features come out in reported limits
 		{
 			FeaturePlan: mpf("feature:lic@plan:test@0"),
+			Hidden:      true,
 			Interval:    "@monthly",
 			Currency:    "usd",
 		},
@@ -455,7 +461,7 @@ func TestReportUsage(t *testing.T) {
 	want := []Usage{
 		{Feature: mpf("feature:10@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
 		{Feature: mpf("feature:inf@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
-		{Feature: mpf("feature:lic@plan:test@0"), Start: t1, End: t2, Used: 1, Limit: Inf},
+		{Feature: mpf("feature:lic@plan:test@0"), Used: 1, Limit: Inf},
 	}
 
 	diff.Test(t, t.Errorf, got, want)
@@ -614,6 +620,27 @@ func TestSchedulePutCustomer(t *testing.T) {
 			"c": "ccc",
 		},
 	}, nil, nil)
+}
+
+func TestSubscribeNothingVisible(t *testing.T) {
+	tc := newTestClient(t)
+	ctx := context.Background()
+	// make only plan:a valid
+	tc.Push(ctx, []Feature{{
+		Hidden:      true,
+		FeaturePlan: mpf("feature:A@plan:a@0"),
+		Interval:    "@monthly",
+		Currency:    "usd",
+		Tiers:       []Tier{{Upto: Inf}},
+		Mode:        "graduated",
+		Aggregate:   "sum",
+	}}, pushLogger(t))
+
+	fs := refs.MustParseFeaturePlans("feature:A@plan:a@0")
+	got := tc.SubscribeTo(ctx, "org:example", fs)
+	if !errors.Is(got, ErrInvalidFeatureCombination) {
+		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
+	}
 }
 
 func ciOnly(t *testing.T) {

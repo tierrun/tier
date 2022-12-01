@@ -16,6 +16,13 @@ import (
 func TestPricingHuJSON(t *testing.T) {
 	data := []byte(`{
 		"plans": {
+			"plan:hidden@1": {
+				"features": {
+					"feature:hidden": {
+						"hidden": true,
+					}
+				}
+			},
 			"plan:example@1": {
 				"title": "Just an example plan to show off features",
 				"features": {
@@ -73,6 +80,16 @@ func TestPricingHuJSON(t *testing.T) {
 				{Upto: tier.Inf, Price: 50, Base: 0},
 			},
 		},
+		{
+			PlanTitle:   "plan:hidden@1",
+			Title:       "feature:hidden@plan:hidden@1",
+			Hidden:      true,
+			FeaturePlan: refs.MustParseFeaturePlan("feature:hidden@plan:hidden@1"),
+			Currency:    "usd",
+			Interval:    "@monthly",
+			Mode:        "graduated",
+			Aggregate:   "sum",
+		},
 	}
 
 	diff.Test(t, t.Errorf, got, want)
@@ -103,6 +120,14 @@ func TestPricingHuJSON(t *testing.T) {
 						"base": 100,
 					}
 				}
+			},
+			"plan:hidden@1": {
+				"title": "plan:hidden@1",
+				"features": {
+					"feature:hidden": {
+						"hidden": true,
+					}
+				}
 			}
 		}
 	}`)
@@ -114,6 +139,7 @@ func diffJSON(t *testing.T, got, want []byte) {
 	t.Helper()
 
 	format := func(b []byte) string {
+		t.Helper()
 		b, err := hujson.Standardize(b)
 		if err != nil {
 			t.Fatal(err)
