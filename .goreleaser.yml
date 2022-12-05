@@ -36,18 +36,35 @@ builds:
     binary: "tier"   
     ldflags:
       - -X tier.run/version.Long={{.Env.VERSION_LONG}} -X tier.run/version.Short={{.Env.VERSION_SHORT}} -X tier.run/version.GitCommit={{.Env.VERSION_GIT_HASH}}
-# dockers:
-#   - image_templates:
-#     - "tier/tier:latest"
-#     - "tier/tier:{{ .Tag }}"
-#     build_flag_templates:
-#     - "--pull"
-#     - "--label=org.opencontainers.image.created={{.Date}}"
-#     - "--label=org.opencontainers.image.title={{.ProjectName}}"
-#     - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-#     - "--label=org.opencontainers.image.version={{.Version}}"
-#     - "--label=org.opencontainers.image.source={{.GitURL}}"
-#     dockerfile: Dockerfile.goreleaser
+dockers:
+  - use: buildx
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "tier/{{ .ProjectName }}:{{ .Tag }}-arm64"
+      - "tier/{{ .ProjectName }}:latest-arm64"
+    build_flag_templates:
+    - "--pull"
+    - "--label=org.opencontainers.image.created={{.Date}}"
+    - "--label=org.opencontainers.image.title={{.ProjectName}}"
+    - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+    - "--label=org.opencontainers.image.version={{.Version}}"
+    - "--label=org.opencontainers.image.source={{.GitURL}}"
+    dockerfile: Dockerfile.goreleaser
+  - use: buildx
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "tier/{{ .ProjectName }}:{{ .Tag }}-amd64"
+      - "tier/{{ .ProjectName }}:latest-amd64"
+    build_flag_templates:
+    - "--pull"
+    - "--label=org.opencontainers.image.created={{.Date}}"
+    - "--label=org.opencontainers.image.title={{.ProjectName}}"
+    - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+    - "--label=org.opencontainers.image.version={{.Version}}"
+    - "--label=org.opencontainers.image.source={{.GitURL}}"
+    dockerfile: Dockerfile.goreleaser
 nfpms:
   - maintainer: Tier
     description: The Tier CLI
