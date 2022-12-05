@@ -63,6 +63,9 @@ func (c *Client) ReportUsage(ctx context.Context, org string, feature refs.Name,
 		default:
 		}
 		err := c.Stripe.Do(ctx, "POST", "/v1/subscription_items/"+itemID+"/usage_records", f, nil)
+		if stripe.IsInvalidRequest(err) {
+			return err
+		}
 		c.Logf("ReportUsage: %v", err)
 		bo.BackOff(ctx, err)
 		if err == nil {

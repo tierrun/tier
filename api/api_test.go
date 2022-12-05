@@ -41,8 +41,11 @@ func newTestClient(t *testing.T) (*http.Client, *control.Client) {
 func TestAPISubscribe(t *testing.T) {
 	t.Parallel()
 
+	t0 := time.Now()
+
 	ctx := context.Background()
 	c, cc := newTestClient(t)
+	setClock(t, cc, t0)
 
 	tc := &tier.Client{HTTPClient: c}
 
@@ -101,7 +104,7 @@ func TestAPISubscribe(t *testing.T) {
 		err := tc.ReportUsage(ctx, apitypes.ReportRequest{
 			Org:     org,
 			Feature: fn,
-			At:      time.Now().Add(1 * time.Minute),
+			At:      t0.Add(1 * time.Minute),
 			N:       n,
 		})
 		diff.Test(t, t.Errorf, err, wantErr)
@@ -371,8 +374,11 @@ func TestWhoAmI(t *testing.T) {
 func TestTierReport(t *testing.T) {
 	t.Parallel()
 
+	t0 := time.Now()
+
 	ctx := context.Background()
-	c, _ := newTestClient(t)
+	c, cc := newTestClient(t)
+	setClock(t, cc, t0)
 	tc := &tier.Client{HTTPClient: c}
 
 	pr, err := tc.PushJSON(ctx, []byte(`
@@ -407,14 +413,7 @@ func TestTierReport(t *testing.T) {
 		Feature: mpn("feature:t"),
 		N:       10,
 
-		// Report the usage at a time in the near future to avoid
-		// complaints from Stripe about being too early (e.g. the same
-		// start time as the current phase) or too late (e.g. > 5mins
-		// into the future.
-		//
-		// If this test becomes flaky, we should use Test Clocks. For
-		// now, avoid the slowness of the Test Clock API.
-		At: time.Now().Add(1 * time.Minute),
+		At: t0.Add(time.Minute),
 
 		Clobber: false,
 	}); err != nil {
@@ -504,4 +503,10 @@ func maybeFailNow(t *testing.T) {
 	if t.Failed() {
 		t.FailNow()
 	}
+}
+
+func setClock(t *testing.T, c *control.Client, now time.Time) *stroke.Clock {
+	clock := stroke.NewClock(t, c.Stripe, t.Name(), now)
+	c.Clock = clock.ID()
+	return clock
 }
