@@ -96,6 +96,29 @@ func TestRoundTrip(t *testing.T) {
 	})
 }
 
+func TestPushPlanInvalidDecimal(t *testing.T) {
+	tc := newTestClient(t) // TODO(bmizerany): use a client without creating an account
+	ctx := context.Background()
+
+	fs := []Feature{
+		{
+			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@theVersion"),
+			Interval:    "@yearly",
+			Currency:    "usd",
+			Mode:        "volume",
+			Aggregate:   "perpetual",
+			Tiers: []Tier{
+				// 13 decimals is greater than the max allowed by Stripe: 12 decimals
+				{Upto: 1, Price: 0.1111111111111, Base: 1},
+			},
+		},
+	}
+	got := tc.Push(ctx, fs, pushLogWith(t, t.Logf))
+	if !errors.Is(got, ErrInvalidPrice) {
+		t.Fatalf("got %v, want ErrInvalidDecimal", got)
+	}
+}
+
 func TestPushPlanImmutability(t *testing.T) {
 	tc := newTestClient(t)
 	ctx := context.Background()
@@ -178,12 +201,17 @@ func TestPushAllFeaturesLoggedOnFailure(t *testing.T) {
 
 func pushLogger(t *testing.T) func(f Feature, err error) {
 	t.Helper()
+	return pushLogWith(t, t.Fatalf)
+}
+
+func pushLogWith(t *testing.T, fatalf func(string, ...any)) func(f Feature, err error) {
+	t.Helper()
 	return func(f Feature, err error) {
 		t.Helper()
 		if err == nil {
 			t.Logf("pushed %q", f.FeaturePlan)
 		} else {
-			t.Fatalf("error pushing %q: %v", f.FeaturePlan, err)
+			fatalf("error pushing %q: %v", f.FeaturePlan, err)
 		}
 	}
 }
