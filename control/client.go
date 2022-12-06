@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/golang/groupcache/singleflight"
@@ -22,6 +23,7 @@ var (
 	ErrPlanExists        = errors.New("plan already exists")
 	ErrInvalidEmail      = errors.New("invalid email")
 	ErrTooManyItems      = errors.New("too many subscription items")
+	ErrInvalidPrice      = errors.New("invalid price")
 )
 
 const Inf = 1<<63 - 1
@@ -124,9 +126,9 @@ func (f *Feature) Limit() int {
 
 // Tier holds the pricing information for a single tier.
 type Tier struct {
-	Upto  int // the upper limit of the tier
-	Price int // the price of the tier
-	Base  int // the base price of the tier
+	Upto  int     // the upper limit of the tier
+	Price float64 // the price of the tier
+	Base  int     // the base price of the tier
 }
 
 type Client struct {
@@ -161,6 +163,20 @@ type PushReportFunc func(Feature, error)
 func (c *Client) Push(ctx context.Context, fs []Feature, cb PushReportFunc) error {
 	plans := map[refs.Plan][]Feature{}
 	for _, f := range fs {
+		for _, t := range f.Tiers {
+			// Check the price has less than or equal to 12 decimal
+			// places as required by stripe.
+			//
+			// We do the pre-flight check here because we don't
+			// want to push a sentinel product if we can't push the
+			// prices; otherwise we'll have to delete the product
+			// manaully, which leads to crummy UX.
+			if countDecimals(t.Price) > 12 {
+				err := fmt.Errorf("%w: %.13f; tier prices must not exceed 12 decimal places", ErrInvalidPrice, t.Price)
+				cb(f, err)
+				return err
+			}
+		}
 		plans[f.Plan()] = append(plans[f.Plan()], f)
 	}
 
@@ -280,7 +296,7 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) (providerID string,
 			if limit < t.Upto {
 				limit = t.Upto
 			}
-			data.Set("tiers", i, "unit_amount", t.Price)
+			data.Set("tiers", i, "unit_amount_decimal", t.Price)
 			data.Set("tiers", i, "flat_amount", t.Base)
 		}
 		data.Set("metadata", "tier.limit", limit)
@@ -321,9 +337,10 @@ type stripePrice struct {
 	TiersMode     string `json:"tiers_mode"`
 	UnitAmount    int    `json:"unit_amount"`
 	Tiers         []struct {
-		Upto  int `json:"up_to"`
-		Price int `json:"unit_amount"`
-		Base  int `json:"flat_amount"`
+		Upto         int     `json:"up_to"`
+		Price        float64 `json:"unit_amount"`
+		PriceDecimal float64 `json:"unit_amount_decimal,string"`
+		Base         int     `json:"flat_amount"`
 	}
 	Currency string
 }
@@ -341,7 +358,11 @@ func stripePriceToFeature(p stripePrice) Feature {
 		Base:        p.UnitAmount,
 	}
 	for i, t := range p.Tiers {
-		f.Tiers = append(f.Tiers, Tier(t))
+		f.Tiers = append(f.Tiers, Tier{
+			Upto:  t.Upto,
+			Price: values.Coalesce(t.PriceDecimal, t.Price),
+			Base:  t.Base,
+		})
 		if i == len(p.Tiers)-1 {
 			f.Tiers[i].Upto = parseLimit(p.Metadata.Limit)
 		}
@@ -447,4 +468,10 @@ func parseLimit(s string) int {
 func isExists(err error) bool {
 	var e *stripe.Error
 	return errors.As(err, &e) && e.Code == "resource_already_exists"
+}
+
+func countDecimals(f float64) int {
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	_, dec, _ := strings.Cut(s, ".")
+	return len(dec)
 }

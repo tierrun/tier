@@ -311,6 +311,44 @@ func TestTierPull(t *testing.T) {
 	diff.Test(t, t.Errorf, got, want)
 }
 
+func TestPushInvalidPrice(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	c, _ := newTestClient(t)
+
+	tc := &tier.Client{HTTPClient: c}
+
+	in := apitypes.Model{
+		Plans: map[refs.Plan]apitypes.Plan{
+			mpp("plan:test@0"): {
+				Title: "plan:test@0",
+				Features: map[refs.Name]apitypes.Feature{
+					mpn("feature:t"): {
+						Tiers: []apitypes.Tier{{
+							Price: 0.1111111111111111,
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	got, err := tc.Push(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff.Test(t, t.Errorf, got, apitypes.PushResponse{
+		Results: []apitypes.PushResult{
+			{
+				Feature: mpf("feature:t@plan:test@0"),
+				Status:  "failed",
+				Reason:  "invalid price: 0.1111111111111; tier prices must not exceed 12 decimal places",
+			},
+		},
+	})
+}
+
 func TestWhoAmI(t *testing.T) {
 	t.Parallel()
 

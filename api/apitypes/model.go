@@ -10,16 +10,16 @@ import (
 const Inf = 1<<63 - 1
 
 type Tier struct {
-	Upto  int `json:"upto,omitempty"`
-	Price int `json:"price,omitempty"`
-	Base  int `json:"base,omitempty"`
+	Upto  int     `json:"upto,omitempty"`
+	Price float64 `json:"price,omitempty"`
+	Base  int     `json:"base,omitempty"`
 }
 
 func (t *Tier) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Upto  int `json:"upto,omitempty"`
-		Price int `json:"price,omitempty"`
-		Base  int `json:"base,omitempty"`
+		Upto  int     `json:"upto,omitempty"`
+		Price float64 `json:"price,omitempty"`
+		Base  int     `json:"base,omitempty"`
 	}{
 		Upto:  values.ZeroIf(t.Upto, Inf),
 		Price: t.Price,
@@ -31,7 +31,7 @@ func (t *Tier) UnmarshalJSON(data []byte) error {
 	*t = Tier{}
 	var v struct {
 		Upto  *int
-		Price int
+		Price float64
 		Base  int
 	}
 	if err := json.Unmarshal(data, &v); err != nil {
