@@ -310,17 +310,17 @@ func (c *Client) ScheduleNow(ctx context.Context, org string, info *OrgInfo, pha
 		if !phases[0].Effective.IsZero() {
 			return errors.New("first phase must be effective now")
 		}
-	}
-	cps, err := c.LookupPhases(ctx, org)
-	if err != nil && !errors.Is(err, ErrOrgNotFound) {
-		return err
-	}
-	for _, p := range cps {
-		if p.Current {
-			p0 := phases[0]
-			p.Features = p0.Features
-			phases[0] = p
-			break
+		cps, err := c.LookupPhases(ctx, org)
+		if err != nil && !errors.Is(err, ErrOrgNotFound) {
+			return err
+		}
+		for _, p := range cps {
+			if p.Current {
+				p0 := phases[0]
+				p.Features = p0.Features
+				phases[0] = p
+				break
+			}
 		}
 	}
 	return c.Schedule(ctx, org, info, phases)
