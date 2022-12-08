@@ -133,6 +133,27 @@ func TestSchedule(t *testing.T) {
 	})
 }
 
+func TestScheduleUpdateOrgOnSchedule(t *testing.T) {
+	info := &OrgInfo{Email: "test@foo.com"}
+	c := newTestClient(t)
+	ctx := context.Background()
+	c.Push(ctx, []Feature{{
+		FeaturePlan: mpf("feature:x@plan:test@0"),
+		Interval:    "@daily",
+		Currency:    "usd",
+	}}, pushLogger(t))
+	err := c.Schedule(ctx, "org:example", info, []Phase{{
+		Features: []refs.FeaturePlan{mpf("feature:x@plan:test@0")},
+	}})
+	if err != nil {
+		t.Fatalf("got %v, want nil", err)
+	}
+	err = c.ScheduleNow(ctx, "org:example", info, nil) // org update only
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestScheduleMinMaxItems(t *testing.T) {
 	c := newTestClient(t)
 	ctx := context.Background()
