@@ -100,9 +100,11 @@ func ToPricingJSON(fs []control.Feature) ([]byte, error) {
 		}
 
 		p.Features[f.FeaturePlan.Name()] = apitypes.Feature{
-			Title: values.ZeroIf(f.Title, f.FeaturePlan.String()),
-			Base:  f.Base,
-			Tiers: tiers,
+			Title:     values.ZeroIf(f.Title, f.FeaturePlan.String()),
+			Base:      f.Base,
+			Mode:      values.ZeroIf(f.Mode, "graduated"),
+			Aggregate: values.ZeroIf(f.Aggregate, "sum"),
+			Tiers:     tiers,
 		}
 		m.Plans[f.Plan()] = p
 	}

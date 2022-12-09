@@ -19,8 +19,9 @@ func TestPricingHuJSON(t *testing.T) {
 			"plan:example@1": {
 				"title": "Just an example plan to show off features",
 				"features": {
-					"feature:graduated": {
-						"mode": "graduated",
+					"feature:volume": {
+						"mode": "volume",
+						"aggregate": "perpetual",
 						"tiers": [
 							{ "upto": 10 },
 							{ "upto": 20, "price": 100 },
@@ -61,12 +62,12 @@ func TestPricingHuJSON(t *testing.T) {
 		},
 		{
 			PlanTitle:   "Just an example plan to show off features",
-			Title:       "feature:graduated@plan:example@1",
-			FeaturePlan: refs.MustParseFeaturePlan("feature:graduated@plan:example@1"),
+			Title:       "feature:volume@plan:example@1",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:volume@plan:example@1"),
 			Currency:    "usd",
 			Interval:    "@monthly",
-			Mode:        "graduated",
-			Aggregate:   "sum",
+			Mode:        "volume",
+			Aggregate:   "perpetual",
 			Tiers: []control.Tier{
 				{Upto: 10, Price: 0, Base: 0},
 				{Upto: 20, Price: 100, Base: 0},
@@ -87,7 +88,9 @@ func TestPricingHuJSON(t *testing.T) {
 			"plan:example@1": {
 				"title": "Just an example plan to show off features",
 				"features": {
-					"feature:graduated": {
+					"feature:volume": {
+						"mode": "volume",
+						"aggregate": "perpetual",
 						"tiers": [
 							{ "upto": 10 },
 							{ "upto": 20, "price": 100 },
