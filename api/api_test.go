@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"errors"
-	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -12,8 +12,6 @@ import (
 	"tier.run/api/apitypes"
 	"tier.run/client/tier"
 	"tier.run/control"
-	"tier.run/fetch"
-	"tier.run/fetch/fetchtest"
 	"tier.run/refs"
 	"tier.run/stripe/stroke"
 )
@@ -26,25 +24,29 @@ var (
 	mpfs = refs.MustParseFeaturePlans
 )
 
-func newTestClient(t *testing.T) (*http.Client, *control.Client) {
+func newTestClient(t *testing.T) (*tier.Client, *control.Client) {
 	sc := stroke.Client(t)
 	sc = stroke.WithAccount(t, sc)
-	tc := &control.Client{
+	cc := &control.Client{
 		Stripe: sc,
 		Logf:   t.Logf,
 	}
-	h := NewHandler(tc, t.Logf)
+	h := NewHandler(cc, t.Logf)
 	h.helper = t.Helper
-	return fetchtest.NewTLSServer(t, h.ServeHTTP), tc
+	s := httptest.NewTLSServer(h)
+	t.Cleanup(s.Close)
+	tc := &tier.Client{
+		BaseURL:    s.URL,
+		HTTPClient: s.Client(),
+	}
+	return tc, cc
 }
 
 func TestAPISubscribe(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	c, cc := newTestClient(t)
-
-	tc := &tier.Client{HTTPClient: c}
+	tc, cc := newTestClient(t)
 
 	m := []control.Feature{
 		{
@@ -195,15 +197,14 @@ func TestPhaseBadOrg(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	c, _ := newTestClient(t)
-
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c, "GET", "/v1/phase?org=org:nope", nil)
+	tc, _ := newTestClient(t)
+	_, err := tc.LookupPhase(ctx, "org:nope")
 	diff.Test(t, t.Errorf, err, &apitypes.Error{
 		Status:  404,
 		Code:    "not_found",
 		Message: "Not Found",
 	})
-	_, err = fetch.OK[struct{}, *apitypes.Error](ctx, c, "GET", "/v1/phase", nil)
+	_, err = tc.LookupPhase(ctx, "")
 	diff.Test(t, t.Errorf, err, &apitypes.Error{
 		Status:  400,
 		Code:    "invalid_request",
@@ -215,7 +216,7 @@ func TestPhaseFragments(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	c, tc := newTestClient(t)
+	tc, cc := newTestClient(t)
 
 	m := []control.Feature{
 		{
@@ -234,7 +235,7 @@ func TestPhaseFragments(t *testing.T) {
 			},
 		},
 	}
-	if err := tc.Push(ctx, m, func(f control.Feature, err error) {
+	if err := cc.Push(ctx, m, func(f control.Feature, err error) {
 		if err != nil {
 			t.Logf("error pushing %q: %v", f.FeaturePlan, err)
 		}
@@ -245,11 +246,11 @@ func TestPhaseFragments(t *testing.T) {
 	// cheating and using the tier client because ATM the API only supports
 	// subscribing to plans.
 	frag := m[1:]
-	if err := tc.SubscribeTo(ctx, "org:test", control.FeaturePlans(frag)); err != nil {
+	if err := cc.SubscribeTo(ctx, "org:test", control.FeaturePlans(frag)); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := fetch.OK[apitypes.PhaseResponse, *apitypes.Error](ctx, c, "GET", "/v1/phase?org=org:test", nil)
+	got, err := tc.LookupPhase(ctx, "org:test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,9 +275,7 @@ func TestTierPull(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	c, _ := newTestClient(t)
-
-	tc := &tier.Client{HTTPClient: c}
+	tc, _ := newTestClient(t)
 
 	want := apitypes.Model{
 		Plans: map[refs.Plan]apitypes.Plan{
@@ -315,9 +314,7 @@ func TestPushInvalidPrice(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	c, _ := newTestClient(t)
-
-	tc := &tier.Client{HTTPClient: c}
+	tc, _ := newTestClient(t)
 
 	in := apitypes.Model{
 		Plans: map[refs.Plan]apitypes.Plan{
@@ -353,8 +350,7 @@ func TestWhoAmI(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	c, _ := newTestClient(t)
-	tc := &tier.Client{HTTPClient: c}
+	tc, _ := newTestClient(t)
 	a, err := tc.WhoAmI(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -372,8 +368,7 @@ func TestTierReport(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	c, _ := newTestClient(t)
-	tc := &tier.Client{HTTPClient: c}
+	tc, _ := newTestClient(t)
 
 	pr, err := tc.PushJSON(ctx, []byte(`
 		{
@@ -436,8 +431,7 @@ func TestTierReport(t *testing.T) {
 
 func TestScheduleWithCustomerInfoNoPhases(t *testing.T) {
 	ctx := context.Background()
-	c, _ := newTestClient(t)
-	tc := &tier.Client{HTTPClient: c}
+	tc, _ := newTestClient(t)
 
 	p := &tier.ScheduleParams{
 		Info: &tier.OrgInfo{

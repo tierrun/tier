@@ -3,16 +3,16 @@ package stripe
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"testing"
-
-	"tier.run/fetch/fetchtest"
 )
 
 func newTestClient(t *testing.T, h func(w http.ResponseWriter, r *http.Request)) *Client {
-	hc := fetchtest.NewTLSServer(t, h)
+	s := httptest.NewServer(http.HandlerFunc(h))
+	t.Cleanup(s.Close)
 	c := &Client{
-		BaseURL:    fetchtest.BaseURL(hc),
-		HTTPClient: hc,
+		BaseURL:    s.URL,
+		HTTPClient: s.Client(),
 		Logf:       t.Logf,
 	}
 	return c

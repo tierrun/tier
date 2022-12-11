@@ -82,7 +82,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	bw := &byteCountResponseWriter{ResponseWriter: w}
 	err = h.serve(bw, r)
 	if err != nil {
-		h.Logf("%s %s %s: %v", r.RemoteAddr, r.Method, r.URL, err)
+		h.Logf("%s %s %s %s: %v", r.RemoteAddr, r.Method, r.Host, r.URL, err)
 	}
 
 	if isInvalidAccount(err) {
