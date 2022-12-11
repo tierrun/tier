@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"os"
 	"time"
 
 	"tier.run/api/apitypes"
@@ -18,7 +20,32 @@ import (
 const Inf = 1<<63 - 1
 
 type Client struct {
+	BaseURL    string // the base URL of the tier sidecar; default is http://127.0.0.1:8080
 	HTTPClient *http.Client
+}
+
+// FromEnv returns a Client configured from the environment. The BaseURL is set
+// to the value of the TIER_BASE_URL environment variable, or
+// http://127.0.0.1:8080 if unset.
+//
+// It returns an error if the TIER_BASE_URL environment variable is set to an
+// invalid URL.
+func FromEnv() (*Client, error) {
+	baseURL := os.Getenv("TIER_BASE_URL")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+	}
+	_, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{BaseURL: baseURL}, nil
+}
+
+const defaultBaseURL = "http://127.0.0.1:8080"
+
+func (c *Client) baseURL(pathStartingWithSlash string) string {
+	return c.BaseURL + pathStartingWithSlash
 }
 
 func (c *Client) client() *http.Client {
@@ -30,44 +57,44 @@ func (c *Client) client() *http.Client {
 
 // Push pushes the provided pricing model to Stripe.
 func (c *Client) Push(ctx context.Context, m apitypes.Model) (apitypes.PushResponse, error) {
-	return fetch.OK[apitypes.PushResponse, *apitypes.Error](ctx, c.client(), "POST", "/v1/push", m)
+	return fetch.OK[apitypes.PushResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/push"), m)
 }
 
 func (c *Client) PushJSON(ctx context.Context, m []byte) (apitypes.PushResponse, error) {
-	return fetch.OK[apitypes.PushResponse, *apitypes.Error](ctx, c.client(), "POST", "/v1/push", json.RawMessage(m))
+	return fetch.OK[apitypes.PushResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/push"), json.RawMessage(m))
 }
 
 // Pull fetches the complete pricing model from Stripe.
 func (c *Client) Pull(ctx context.Context) (apitypes.Model, error) {
-	return fetch.OK[apitypes.Model, *apitypes.Error](ctx, c.client(), "GET", "/v1/pull", nil)
+	return fetch.OK[apitypes.Model, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/pull"), nil)
 }
 
 // PullJSON fetches the complete pricing model from Stripe and returns the raw
 // JSON response.
 func (c *Client) PullJSON(ctx context.Context) ([]byte, error) {
-	return fetch.OK[[]byte, *apitypes.Error](ctx, c.client(), "GET", "/v1/pull", nil)
+	return fetch.OK[[]byte, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/pull"), nil)
 }
 
 // WhoIS reports the Stripe ID for the given organization.
 func (c *Client) WhoIs(ctx context.Context, org string) (apitypes.WhoIsResponse, error) {
-	return fetch.OK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c.client(), "GET", "/v1/whois?org="+org, nil)
+	return fetch.OK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/whois?org="+org), nil)
 }
 
 // LookupOrg reports all known information about the provided org. The
 // information is not cached by the server. If only the Stripe customer ID is
 // needed and speed is of concern, users should use WhoIs.
 func (c *Client) LookupOrg(ctx context.Context, org string) (apitypes.WhoIsResponse, error) {
-	return fetch.OK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c.client(), "GET", "/v1/whois?include=info&org="+org, nil)
+	return fetch.OK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/whois?include=info&org="+org), nil)
 }
 
 // LookupPhase reports information about the current phase the provided org is scheduled in.
 func (c *Client) LookupPhase(ctx context.Context, org string) (apitypes.PhaseResponse, error) {
-	return fetch.OK[apitypes.PhaseResponse, *apitypes.Error](ctx, c.client(), "GET", "/v1/phase?org="+org, nil)
+	return fetch.OK[apitypes.PhaseResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/phase?org="+org), nil)
 }
 
 // LookupLimits reports the current usage and limits for the provided org.
 func (c *Client) LookupLimits(ctx context.Context, org string) (apitypes.UsageResponse, error) {
-	return fetch.OK[apitypes.UsageResponse, *apitypes.Error](ctx, c.client(), "GET", "/v1/limits?org="+org, nil)
+	return fetch.OK[apitypes.UsageResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/limits?org="+org), nil)
 }
 
 // LookupLimit reports the current usage and limits for the provided org and
@@ -161,18 +188,19 @@ func (c *Client) Report(ctx context.Context, org, feature string, n int) error {
 	if err != nil {
 		return err
 	}
-	_, err = fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", "/v1/report", apitypes.ReportRequest{
+	_, err = fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/report"), apitypes.ReportRequest{
 		Org:     org,
 		Feature: fn,
 		N:       n,
 		At:      time.Now(),
 	})
+
 	return err
 }
 
 // ReportUsage reports usage based on the provided ReportRequest fields.
 func (c *Client) ReportUsage(ctx context.Context, r apitypes.ReportRequest) error {
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", "/v1/report", r)
+	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/report"), r)
 	return err
 }
 
@@ -182,10 +210,11 @@ func (c *Client) ReportUsage(ctx context.Context, r apitypes.ReportRequest) erro
 // Any in-progress scheduled is overwritten and the customer is billed with
 // prorations immediately.
 func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...string) error {
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", "/v1/subscribe", apitypes.ScheduleRequest{
+	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/subscribe"), apitypes.ScheduleRequest{
 		Org:    org,
 		Phases: []apitypes.Phase{{Features: featuresAndPlans}},
 	})
+
 	return err
 }
 
@@ -198,11 +227,12 @@ type ScheduleParams struct {
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) error {
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", "/v1/subscribe", &apitypes.ScheduleRequest{
+	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/subscribe"), &apitypes.ScheduleRequest{
 		Org:    org,
 		Info:   (*apitypes.OrgInfo)(p.Info),
 		Phases: copyPhases(p.Phases),
 	})
+
 	return err
 }
 
@@ -215,5 +245,5 @@ func copyPhases(phases []Phase) []apitypes.Phase {
 }
 
 func (c *Client) WhoAmI(ctx context.Context) (apitypes.WhoAmIResponse, error) {
-	return fetch.OK[apitypes.WhoAmIResponse, *apitypes.Error](ctx, c.client(), "GET", "/v1/whoami", nil)
+	return fetch.OK[apitypes.WhoAmIResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/whoami"), nil)
 }

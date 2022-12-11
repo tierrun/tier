@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"regexp"
 	"strings"
@@ -14,7 +15,6 @@ import (
 
 	"kr.dev/diff"
 	"tier.run/cmd/tier/cline"
-	"tier.run/fetch/fetchtest"
 	"tier.run/profile"
 	"tier.run/stripe"
 	"tier.run/stripe/stroke"
@@ -62,9 +62,11 @@ func testtier(t *testing.T, h http.HandlerFunc) *cline.Data {
 
 	var a stripe.Account
 	if h != nil {
-		c := fetchtest.NewServer(t, h)
+		s := httptest.NewServer(h)
+		t.Cleanup(s.Close)
+
 		ct.Unsetenv("STRIPE_API_KEY")
-		ct.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(c))
+		ct.Setenv("STRIPE_BASE_API_URL", s.URL)
 		a = stripe.Account{ID: "acct_state"}
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -114,7 +116,7 @@ func TestServeAddrFlag(t *testing.T) {
 }
 
 func TestSwitchIsoloate(t *testing.T) {
-	s := fetchtest.NewServer(t, func(w http.ResponseWriter, r *http.Request) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if g := r.FormValue("type"); g != "standard" {
 			t.Fatalf("unexpected type: %q", g)
 		}
@@ -125,9 +127,9 @@ func TestSwitchIsoloate(t *testing.T) {
 			"id": "acct_123",
 			"created": 12123123
 		}`)
-	})
+	}))
 	tt := testtier(t, fatalHandler(t))
-	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
+	tt.Setenv("STRIPE_BASE_API_URL", s.URL)
 
 	// turn off isolation to avoid error about already being in isolation
 	// mode
@@ -169,7 +171,7 @@ func TestSwitchPreallocateTask(t *testing.T) {
 	}
 
 	var got atomic.Value
-	s := fetchtest.NewServer(t, func(w http.ResponseWriter, r *http.Request) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Logf("req: %s %s: %s", r.Method, r.URL.Path, r.Form)
 
 		if !got.CompareAndSwap(nil, T{
@@ -183,9 +185,9 @@ func TestSwitchPreallocateTask(t *testing.T) {
 			"id": "acct_123",
 			"created": 12123123
 		}`)
-	})
+	}))
 	tt := testtier(t, fatalHandler(t))
-	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
+	tt.Setenv("STRIPE_BASE_API_URL", s.URL)
 	tt.Setenv("_TIER_BG_TASKS", "preallocateAccount")
 
 	// turn off isolation to avoid error about already being in isolation
@@ -203,9 +205,9 @@ func TestSwitchPreallocateTask(t *testing.T) {
 }
 
 func TestPushStdin(t *testing.T) {
-	s := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		io.WriteString(w, `{"id": "price_123"}`)
-	})
+	}))
 
 	cases := []struct {
 		stdin         string
@@ -229,7 +231,7 @@ func TestPushStdin(t *testing.T) {
 		t.Run("case", func(t *testing.T) {
 			tt := testtier(t, fatalHandler(t))
 			tt.Unsetenv("TIER_DEBUG")
-			tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
+			tt.Setenv("STRIPE_BASE_API_URL", s.URL)
 
 			tt.SetStdin(strings.NewReader(c.stdin))
 			if c.shouldSucceed {
@@ -248,18 +250,18 @@ func TestPushStdin(t *testing.T) {
 }
 
 func TestPushNewFeatureExistingPlan(t *testing.T) {
-	s := fetchtest.NewServer(t, func(w http.ResponseWriter, r *http.Request) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		io.WriteString(w, `{
 			"error": {
 				"code": "resource_already_exists"
 			}
 		}`)
-	})
+	}))
 
 	tt := testtier(t, fatalHandler(t))
 	tt.Unsetenv("TIER_DEBUG")
-	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
+	tt.Setenv("STRIPE_BASE_API_URL", s.URL)
 	const pj = `{
 	    "plans": {
 		"plan:free@0": {
@@ -276,13 +278,13 @@ func TestPushNewFeatureExistingPlan(t *testing.T) {
 }
 
 func TestPushLinks(t *testing.T) {
-	c := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
+	c := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		io.WriteString(w, `{"id": "price_123"}`)
-	})
+	}))
 
 	tt := testtier(t, fatalHandler(t))
 	tt.Unsetenv("TIER_DEBUG")
-	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(c))
+	tt.Setenv("STRIPE_BASE_API_URL", c.URL)
 	tt.SetStdinString(`{
 	    "plans": {
 		"plan:free@0": {
@@ -343,14 +345,15 @@ func TestPushLinks(t *testing.T) {
 }
 
 func TestWhoAmI(t *testing.T) {
-	s := fetchtest.NewServer(t, func(w http.ResponseWriter, _ *http.Request) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		io.WriteString(w, `{
 			"id": "acct_123",
 			"created": 1668981628
 		}`)
-	})
+	}))
+
 	tt := testtier(t, fatalHandler(t))
-	tt.Setenv("STRIPE_BASE_API_URL", fetchtest.BaseURL(s))
+	tt.Setenv("STRIPE_BASE_API_URL", s.URL)
 	tt.Run("whoami")
 
 	// we've already "switched" in tiertier() above
