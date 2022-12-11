@@ -11,7 +11,7 @@ import (
 )
 
 func ExampleClient() {
-	c := &tier.Client{}
+	c := tier.NewTierSidecarClient("http://localhost:8080")
 
 	m := http.NewServeMux()
 	m.HandleFunc("/convert", func(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +39,7 @@ func ExampleClient() {
 }
 
 func ExampleClient_Can_basic() {
-	c := &tier.Client{}
+	c := tier.NewTierSidecarClient("http://localhost:8080")
 
 	// Check if the user can convert a temperature.
 	if c.Can(context.Background(), "org:example", "feature:convert").OK() {
@@ -50,7 +50,7 @@ func ExampleClient_Can_basic() {
 }
 
 func ExampleClient_Can_report() {
-	c := &tier.Client{}
+	c := tier.NewTierSidecarClient("http://localhost:8080")
 	ans := c.Can(context.Background(), "org:example", "feature:convert")
 	if !ans.OK() {
 		// The user cannot convert a temperature.
