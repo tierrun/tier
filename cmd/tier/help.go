@@ -38,6 +38,14 @@ The flags are:
 	-live      use live Stripe key (default is false)
 	-v         verbose output
 	-h         show this message
+
+Environment variables:
+
+	STRIPE_API_KEY
+
+	  Stripe API key. If not set, the CLI will use
+	  $HOME/.config/tier/config.json if present; otherwise an error will
+	  occur.
 `)
 )
 
