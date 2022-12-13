@@ -124,15 +124,23 @@ The output is in the format:
 `,
 	"subscribe": `Usage:
 
-	tier [--live] subscribe [--email=<email>] <org> [plan|featurePlan]...
+	tier [--live] subscribe [flags] <org> [plan|featurePlan]...
 
 Tier subscribe creates or updates a subscription for the provided org, applying
 the features in the plan.
 
-If the --live flag is provided, your accounts live mode will be used.
+Flags:
 
-If the --email flag is provided, the org's email address will be set to the
-provided email address.
+	--email
+		set the org's email address
+	--trial days
+		set the org's trial period to the provided number of days. If
+		negative, the tial period will last indefinitely, and no other
+		phase will come after it.
+
+Global Flags:
+
+If the --live flag is provided, your accounts live mode will be used.
 `,
 	"limits": `Usage:
 

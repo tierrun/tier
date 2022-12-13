@@ -14,6 +14,7 @@ import (
 	"kr.dev/diff"
 	"kr.dev/errorfmt"
 	"tier.run/refs"
+	"tier.run/stripe/stroke"
 )
 
 var (
@@ -131,6 +132,220 @@ func TestSchedule(t *testing.T) {
 			Plans:     plans("plan:free@0"),
 		},
 	})
+}
+
+type scheduleTester struct {
+	t     *testing.T
+	cc    *Client
+	clock *stroke.Clock
+}
+
+func newScheduleTester(t *testing.T) *scheduleTester {
+	t.Helper()
+	c := newTestClient(t)
+	clock := c.setClock(t, t0)
+	return &scheduleTester{t: t, cc: c, clock: clock}
+}
+
+func (s *scheduleTester) push(model []Feature) {
+	s.t.Helper()
+	s.cc.Push(context.Background(), model, pushLogger(s.t))
+	if s.t.Failed() {
+		s.t.FailNow()
+	}
+}
+
+func (s *scheduleTester) advance(days int) {
+	s.clock.Advance(s.clock.Now().AddDate(0, 0, days))
+}
+
+//lint:ignore U1000 saving for a rainy day
+func (s *scheduleTester) advanceToNextPeriod() {
+	// TODO(bmizerany): make Phase aware so that it jumps based on the
+	// start of the next phase if the current phase ends sooner than than 1
+	// interval of the current phase.
+	now := s.clock.Now()
+	eop := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	s.t.Logf("advancing to end of period %s", eop)
+	s.clock.Advance(eop)
+}
+
+func (s *scheduleTester) schedule(org string, trialDays int, fs ...refs.FeaturePlan) {
+	s.t.Helper()
+	s.t.Logf("subscribing %s to %v with trialDays=%d", org, fs, trialDays)
+
+	var ps []Phase
+	if trialDays < 0 {
+		ps = []Phase{{Trial: true, Features: fs}}
+	} else if trialDays == 0 {
+		ps = []Phase{{Features: fs}}
+	} else {
+		ps = []Phase{{
+			Trial:    true,
+			Features: fs,
+		}, {
+			Effective: t0.AddDate(0, 1, 0),
+			Features:  fs,
+		}}
+	}
+	if err := s.cc.ScheduleNow(context.Background(), org, nil, ps); err != nil {
+		s.t.Fatalf("error subscribing: %v", err)
+	}
+}
+
+func (s *scheduleTester) report(org, name string, n int) {
+	s.t.Helper()
+	if err := s.cc.ReportUsage(context.Background(), org, mpn(name), Report{
+		N: n,
+	}); err != nil {
+		s.t.Fatal(err)
+	}
+}
+
+// ignores start/end times, and usage
+//
+//lint:ignore U1000 saving for a rainy day
+func (s *scheduleTester) checkLimits(org string, want []Usage) {
+	s.t.Helper()
+	got, err := s.cc.LookupLimits(context.Background(), org)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	s.diff(got, want, diff.ZeroFields[Usage]("Start", "End", "Feature"))
+	if s.t.Failed() {
+		s.t.FailNow()
+	}
+}
+
+// ignores period dates
+func (s *scheduleTester) checkInvoices(org string, want []Invoice) {
+	s.t.Helper()
+	got, err := s.cc.LookupInvoices(context.Background(), org)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	ignorePeriod := diff.KeepFields[Period]()
+	s.diff(got, want, ignorePeriod)
+}
+
+func (s *scheduleTester) diff(got, want any, opts ...diff.Option) {
+	s.t.Helper()
+	diff.Test(s.t, s.t.Errorf, got, want, opts...)
+}
+
+func lineItem(fp refs.FeaturePlan, quantity int, amount float64) InvoiceLineItem {
+	return InvoiceLineItem{
+		Feature:  fp,
+		Quantity: quantity,
+		Amount:   amount,
+	}
+}
+
+func TestScheduleFreeTrials(t *testing.T) {
+	s := newScheduleTester(t)
+
+	featureX := mpf("feature:x@plan:test@0")
+
+	s.push([]Feature{{
+		FeaturePlan: featureX,
+		Interval:    "@monthly",
+		Currency:    "usd",
+		Mode:        "graduated",
+		Aggregate:   "sum",
+		Tiers:       []Tier{{Upto: Inf, Price: 1}},
+	}})
+
+	s.schedule("org:paid", 0, featureX)
+	s.schedule("org:trial", 14, featureX)
+	s.schedule("org:free", -1, featureX)
+
+	s.report("org:paid", "feature:x", 1)
+	s.report("org:trial", "feature:x", 1)
+	s.report("org:free", "feature:x", 1)
+
+	s.advance(15)
+
+	s.report("org:paid", "feature:x", 1)
+	s.report("org:trial", "feature:x", 1)
+	s.report("org:free", "feature:x", 1)
+
+	s.advance(31)
+
+	zero := lineItem(featureX, 0, 0)
+	s.checkInvoices("org:paid", []Invoice{{
+		Lines: []InvoiceLineItem{
+			lineItem(featureX, 2, 2),
+			zero,
+		},
+		SubtotalPreTax: 2,
+		Subtotal:       2,
+		TotalPreTax:    2,
+		Total:          2,
+	}, {
+		Lines: []InvoiceLineItem{
+			zero,
+		},
+	}})
+
+	s.checkInvoices("org:trial", []Invoice{{
+		Lines: []InvoiceLineItem{
+			lineItem(featureX, 2, 0),
+		},
+	}, {
+		Lines: []InvoiceLineItem{
+			zero,
+		},
+	}})
+
+	s.checkInvoices("org:free", []Invoice{{
+		Lines: []InvoiceLineItem{
+			lineItem(featureX, 2, 0),
+		},
+	}, {
+		Lines: []InvoiceLineItem{
+			zero,
+		},
+	}})
+}
+
+func TestSchedule_TrialSwapWithPaid(t *testing.T) {
+	s := newScheduleTester(t)
+
+	featureX := mpf("feature:x@plan:test@0")
+
+	s.push([]Feature{{
+		FeaturePlan: featureX,
+		Interval:    "@monthly",
+		Currency:    "usd",
+		Mode:        "graduated",
+		Aggregate:   "sum",
+		Tiers:       []Tier{{Upto: Inf}},
+	}})
+
+	steps := []struct {
+		trialDays  int
+		wantStatus string
+	}{
+		{0, "active"},
+		{14, "trialing"},
+		{0, "active"},
+		{-1, "trialing"},
+		{0, "active"},
+		{14, "trialing"},
+		{0, "active"},
+	}
+
+	for i, step := range steps {
+		t.Logf("step: %+v", step)
+		s.schedule("org:test", step.trialDays, featureX)
+		status, err := s.cc.LookupStatus(context.Background(), "org:test")
+		if err != nil {
+			t.Fatalf("[%d]: unexpected error: %v", i, err)
+		}
+		if status != step.wantStatus {
+			t.Errorf("[%d]: status = %q, want %q", i, status, step.wantStatus)
+		}
+	}
 }
 
 func TestScheduleUpdateOrgOnSchedule(t *testing.T) {

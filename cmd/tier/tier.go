@@ -255,6 +255,7 @@ func runTier(cmd string, args []string) (err error) {
 	case "subscribe":
 		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 		email := fs.String("email", "", "sets the customer email address")
+		trial := fs.Int("trial", 0, "sets the trial period in days")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -270,7 +271,24 @@ func runTier(cmd string, args []string) (err error) {
 		var refs []string
 		if fs.NArg() > 1 {
 			refs = fs.Args()[1:]
-			p.Phases = []tier.Phase{{Features: refs}}
+			switch {
+			case *trial > 0:
+				p.Phases = []tier.Phase{{
+					Trial:    true,
+					Features: refs,
+				}, {
+					Effective: time.Now().AddDate(0, 0, *trial),
+					Features:  refs,
+				}}
+			case *trial < 0:
+				// Indefinite trial, effective immediately.
+				p.Phases = []tier.Phase{{
+					Trial:    true,
+					Features: refs,
+				}}
+			default:
+				p.Phases = []tier.Phase{{Features: refs}}
+			}
 		}
 		vlogf("subscribing %s to %v", org, refs)
 		return tc().Schedule(ctx, org, p)

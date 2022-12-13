@@ -19,6 +19,7 @@ func (e *Error) Error() string {
 }
 
 type Phase struct {
+	Trial     bool
 	Effective time.Time
 	Features  []string
 }
