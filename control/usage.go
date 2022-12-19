@@ -29,7 +29,7 @@ type Usage struct {
 }
 
 func (c *Client) ReportUsage(ctx context.Context, org string, feature refs.Name, use Report) error {
-	itemID, isMetered, err := c.lookupSubscriptionItemID(ctx, org, scheduleNameTODO, feature)
+	itemID, isMetered, err := c.lookupSubscriptionItemID(ctx, org, subscriptionNameTODO, feature)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) 
 }
 
 func (c *Client) lookupSubscriptionItemID(ctx context.Context, org, name string, feature refs.Name) (id string, isMetered bool, err error) {
-	defer errorfmt.Handlef("lookupSubscriptionItemID: %w", &err)
+	defer errorfmt.Handlef("lookupSubscriptionItemID: %s: %s: %s: %w", org, name, feature, &err)
 	s, err := c.lookupSubscription(ctx, org, name)
 	if err != nil {
 		return "", false, err

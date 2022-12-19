@@ -160,6 +160,7 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			phases = append(phases, control.Phase{
+				Trial:     p.Trial,
 				Effective: p.Effective,
 				Features:  fs,
 			})

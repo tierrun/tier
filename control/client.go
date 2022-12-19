@@ -321,7 +321,6 @@ type stripePrice struct {
 	stripe.ID
 	LookupKey string `json:"lookup_key"`
 	Metadata  struct {
-		Plan      string           `json:"tier.plan"`
 		PlanTitle string           `json:"tier.plan_title"`
 		Feature   refs.FeaturePlan `json:"tier.feature"`
 		Limit     string           `json:"tier.limit"`

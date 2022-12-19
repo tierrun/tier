@@ -75,6 +75,7 @@ func createAccount(c *stripe.Client, logf func(string, ...any)) (string, error) 
 
 type Clock struct {
 	id      string
+	helper  func()
 	advance func(time.Time)
 
 	sync   func()
@@ -121,7 +122,8 @@ func NewClock(t *testing.T, c *stripe.Client, name string, start time.Time) *Clo
 
 	var cl *Clock
 	cl = &Clock{
-		id: v.ID,
+		id:     v.ID,
+		helper: t.Helper,
 		advance: func(now time.Time) {
 			var f stripe.Form
 			f.Set("frozen_time", now)
@@ -148,6 +150,7 @@ func (c *Clock) ID() string           { return c.id }
 func (c *Clock) DashboardURL() string { return c.dashURL }
 
 func (c *Clock) Advance(t time.Time) {
+	c.helper()
 	c.advance(t)
 	bo := backoff.NewBackoff("stroke: clock: advance backoff", c.logf, 5*time.Second)
 	for {
