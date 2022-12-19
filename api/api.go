@@ -29,6 +29,11 @@ var errorLookup = map[error]error{
 		Code:    "feature_not_found",
 		Message: "feature not found",
 	},
+	control.ErrUnexpectedMissingOrg: &trweb.HTTPError{
+		Status:  500,
+		Code:    "TERR1050",
+		Message: "Stripe reported a customer was created and then reported it did not exist. This might mean you purged your Test Mode and need to reset TIER_PREFIX_KEY=<randomString>.",
+	},
 	control.ErrFeatureNotMetered: &trweb.HTTPError{ // TODO(bmizerany): this may be relaxed if we decide to log and accept
 		Status:  400,
 		Code:    "invalid_request",

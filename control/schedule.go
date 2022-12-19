@@ -26,6 +26,12 @@ var (
 	ErrOrgNotFound     = errors.New("org not found")
 	ErrInvalidMetadata = errors.New("invalid metadata")
 	ErrInvalidPhase    = errors.New("invalid phase")
+
+	// ErrInvalidFeature is returned when a customer that should have been
+	// created is not found after "creating" it. This can happen in Test
+	// Mode if the test data was cleared but the idempotency key is still
+	// cached at Stripe.
+	ErrUnexpectedMissingOrg = errors.New("unexpected missing org")
 )
 
 type ValidationError struct {
@@ -239,8 +245,13 @@ func (c *Client) updateSchedule(ctx context.Context, id, name string, phases []P
 func (c *Client) Schedule(ctx context.Context, org string, info *OrgInfo, phases []Phase) (err error) {
 	err = c.schedule(ctx, org, info, phases)
 	var e *stripe.Error
-	if errors.As(err, &e) && strings.Contains(e.Message, "maximum number of items") {
-		return ErrTooManyItems
+	if errors.As(err, &e) {
+		if e.Code == "resource_missing" && e.Param == "customer" {
+			return ErrUnexpectedMissingOrg
+		}
+		if strings.Contains(e.Message, "maximum number of items") {
+			return ErrTooManyItems
+		}
 	}
 	return err
 }

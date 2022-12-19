@@ -491,6 +491,65 @@ func TestSubscribe(t *testing.T) {
 	tt.GrepBothNot(".+", "unexpected output")
 }
 
+const responsePricesValidPlan = `
+	{
+	  "object": "list",
+	  "url": "/v1/prices",
+	  "has_more": false,
+	  "data": [
+	    {
+	      "id": "price_1MG5iBCdYGloJaDMbVbTZlN1",
+	      "object": "price",
+	      "active": true,
+	      "billing_scheme": "per_unit",
+	      "created": 1671303979,
+	      "currency": "usd",
+	      "custom_unit_amount": null,
+	      "livemode": false,
+	      "lookup_key": null,
+	      "metadata": {
+		"tier.plan": "plan:foo@0",
+		"tier.feature": "feature:bar@plan:foo@0"
+	      },
+	      "nickname": null,
+	      "product": "tier__feature-phone-number-plan-basic-7",
+	      "recurring": {
+		"aggregate_usage": null,
+		"interval": "month",
+		"interval_count": 1,
+		"usage_type": "licensed"
+	      },
+	      "tax_behavior": "unspecified",
+	      "tiers_mode": null,
+	      "transform_quantity": null,
+	      "type": "recurring",
+	      "unit_amount": 2000,
+	      "unit_amount_decimal": "2000"
+	    }
+	  ]
+	}
+`
+
+func TestSubscribeUnexpectedMissingCustomer(t *testing.T) {
+	tt := testtier(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/subscription_schedules" {
+			w.WriteHeader(400)
+			io.WriteString(w, `{
+				"error": {
+					"code": "resource_missing",
+					"param": "customer"
+				}
+			}`)
+		} else if r.URL.Path == "/v1/prices" {
+			io.WriteString(w, responsePricesValidPlan)
+		} else {
+			io.WriteString(w, `{}`)
+		}
+	})
+	tt.RunFail("subscribe", "org:test", "plan:foo@0")
+	tt.GrepStderr("TERR1050", "expected customer not found")
+}
+
 func chdir(t *testing.T, dir string) {
 	dir0, err := os.Getwd()
 	if err != nil {
