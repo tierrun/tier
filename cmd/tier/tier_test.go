@@ -532,7 +532,8 @@ const responsePricesValidPlan = `
 
 func TestSubscribeUnexpectedMissingCustomer(t *testing.T) {
 	tt := testtier(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/subscription_schedules" {
+		t.Logf("request: %s %s", r.Method, r.URL.Path)
+		if wants(r, "POST", "/v1/subscription_schedules") {
 			w.WriteHeader(400)
 			io.WriteString(w, `{
 				"error": {
@@ -563,4 +564,8 @@ func chdir(t *testing.T, dir string) {
 			panic(err)
 		}
 	})
+}
+
+func wants(r *http.Request, method, path string) bool {
+	return r.Method == method && r.URL.Path == path
 }

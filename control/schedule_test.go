@@ -170,6 +170,14 @@ func (s *scheduleTester) advanceToNextPeriod() {
 	s.clock.Advance(eop)
 }
 
+func (s *scheduleTester) cancel(org string) {
+	s.t.Helper()
+	s.t.Logf("cancelling %s", org)
+	if err := s.cc.ScheduleNow(context.Background(), org, []Phase{{}}); err != nil {
+		s.t.Fatal(err)
+	}
+}
+
 func (s *scheduleTester) schedule(org string, trialDays int, fs ...refs.FeaturePlan) {
 	s.t.Helper()
 	s.t.Logf("subscribing %s to %v with trialDays=%d", org, fs, trialDays)
@@ -188,7 +196,7 @@ func (s *scheduleTester) schedule(org string, trialDays int, fs ...refs.FeatureP
 			Features:  fs,
 		}}
 	}
-	if err := s.cc.ScheduleNow(context.Background(), org, nil, ps); err != nil {
+	if err := s.cc.ScheduleNow(context.Background(), org, ps); err != nil {
 		s.t.Fatalf("error subscribing: %v", err)
 	}
 }
@@ -348,25 +356,73 @@ func TestSchedule_TrialSwapWithPaid(t *testing.T) {
 	}
 }
 
-func TestScheduleUpdateOrgOnSchedule(t *testing.T) {
-	info := &OrgInfo{Email: "test@foo.com"}
-	c := newTestClient(t)
-	ctx := context.Background()
-	c.Push(ctx, []Feature{{
-		FeaturePlan: mpf("feature:x@plan:test@0"),
-		Interval:    "@daily",
+func TestScheduleCancel(t *testing.T) {
+	featureX := mpf("feature:x@plan:test@0")
+	featureBase := mpf("feature:base@plan:test@0")
+
+	s := newScheduleTester(t)
+	s.push([]Feature{{
+		FeaturePlan: featureX,
+		Interval:    "@monthly",
 		Currency:    "usd",
-	}}, pushLogger(t))
-	err := c.Schedule(ctx, "org:example", info, []Phase{{
-		Features: []refs.FeaturePlan{mpf("feature:x@plan:test@0")},
+		Mode:        "graduated",
+		Aggregate:   "sum",
+		Tiers:       []Tier{{Upto: Inf, Base: 1000}},
+	}, {
+		FeaturePlan: featureBase,
+		Interval:    "@monthly",
+		Currency:    "usd",
+		Base:        31 * 1000,
 	}})
-	if err != nil {
-		t.Fatalf("got %v, want nil", err)
-	}
-	err = c.ScheduleNow(ctx, "org:example", info, nil) // org update only
-	if err != nil {
-		t.Fatal(err)
-	}
+
+	s.schedule("org:paid", 0, featureX, featureBase)
+	s.report("org:paid", "feature:x", 99)
+	s.advance(10)
+	s.cancel("org:paid")
+	s.advanceToNextPeriod()
+
+	// check usage is billed
+	s.checkInvoices("org:paid", []Invoice{{
+		Lines: []InvoiceLineItem{{
+			Feature:   featureBase,
+			Quantity:  1,
+			Amount:    -21000,
+			Proration: true,
+		},
+			lineItem(featureX, 99, 0),   // usage on feature:x
+			lineItem(featureX, 0, 1000), // flag fee on feature:x
+		},
+		SubtotalPreTax: -20000,
+		Subtotal:       -20000,
+		TotalPreTax:    -20000,
+		Total:          -20000,
+	}, {
+		Lines: []InvoiceLineItem{
+			lineItem(featureBase, 1, 31000),
+			lineItem(featureX, 0, 0),
+		},
+		SubtotalPreTax: 31000,
+		Subtotal:       31000,
+		TotalPreTax:    31000,
+		Total:          31000,
+	}})
+}
+
+func TestScheduleCancelNoLimits(t *testing.T) {
+	featureX := mpf("feature:x@plan:test@0")
+	s := newScheduleTester(t)
+	s.push([]Feature{{
+		FeaturePlan: featureX,
+		Interval:    "@monthly",
+		Currency:    "usd",
+		Mode:        "graduated",
+		Aggregate:   "sum",
+		Tiers:       []Tier{{Upto: Inf, Base: 1000}},
+	}})
+	s.schedule("org:paid", 0, featureX)
+	s.checkLimits("org:paid", []Usage{{Feature: featureX, Limit: Inf}})
+	s.cancel("org:paid")
+	s.checkLimits("org:paid", nil)
 }
 
 func TestScheduleMinMaxItems(t *testing.T) {
@@ -384,9 +440,10 @@ func TestScheduleMinMaxItems(t *testing.T) {
 
 	c.Push(ctx, fs, pushLogger(t))
 
+	// effectively cancel an org that does not exist
 	err := c.SubscribeTo(ctx, "org:example", nil)
-	if !errors.Is(err, ErrInvalidPhase) {
-		t.Fatalf("got %v, want %v", err, ErrTooManyItems)
+	if !errors.Is(err, ErrOrgNotFound) {
+		t.Fatalf("got %v, want %v", err, ErrOrgNotFound)
 	}
 
 	fps := FeaturePlans(fs)

@@ -146,7 +146,6 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 	if err := trweb.DecodeStrict(r, &sr); err != nil {
 		return err
 	}
-
 	var phases []control.Phase
 	if len(sr.Phases) > 0 {
 		m, err := h.c.Pull(r.Context(), 0)
@@ -166,9 +165,13 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	}
-
-	info := (*control.OrgInfo)(sr.Info)
-	return h.c.ScheduleNow(r.Context(), sr.Org, info, phases)
+	if sr.Info != nil {
+		info := (*control.OrgInfo)(sr.Info)
+		if err := h.c.PutCustomer(r.Context(), sr.Org, info); err != nil {
+			return err
+		}
+	}
+	return h.c.ScheduleNow(r.Context(), sr.Org, phases)
 }
 
 func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
