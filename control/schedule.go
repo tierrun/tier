@@ -143,12 +143,12 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 	return s, nil
 }
 
-func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub string, info *OrgInfo, phases []Phase) (err error) {
+func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub string, phases []Phase) (err error) {
 	defer errorfmt.Handlef("stripe: createSubscription: %q: %w", org, &err)
 
 	// Update customer regardless of whether we have phases to update or
 	// not.
-	cid, err := c.putCustomer(ctx, org, info)
+	cid, err := c.putCustomer(ctx, org, nil)
 	if err != nil {
 		return err
 	}
@@ -236,8 +236,8 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 	return nil
 }
 
-func (c *Client) Schedule(ctx context.Context, org string, info *OrgInfo, phases []Phase) (err error) {
-	err = c.schedule(ctx, org, info, phases)
+func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) (err error) {
+	err = c.schedule(ctx, org, phases)
 	var e *stripe.Error
 	if errors.As(err, &e) {
 		if e.Code == "resource_missing" && e.Param == "customer" {
@@ -250,7 +250,7 @@ func (c *Client) Schedule(ctx context.Context, org string, info *OrgInfo, phases
 	return err
 }
 
-func (c *Client) schedule(ctx context.Context, org string, info *OrgInfo, phases []Phase) (err error) {
+func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err error) {
 	defer errorfmt.Handlef("tier: schedule: %q: %w", org, &err)
 
 	for i, p := range phases {
@@ -262,23 +262,17 @@ func (c *Client) schedule(ctx context.Context, org string, info *OrgInfo, phases
 		}
 	}
 
-	if info != nil {
-		if _, err := c.putCustomer(ctx, org, info); err != nil {
-			return err
-		}
-	}
-
 	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
 	if errors.Is(err, ErrOrgNotFound) {
 		// We only need to pay the API penalty of creating a customer
 		// if we know in fact it does not exist.
-		if _, err := c.putCustomer(ctx, org, info); err != nil {
+		if _, err := c.putCustomer(ctx, org, nil); err != nil {
 			return err
 		}
-		return c.createSchedule(ctx, org, subscriptionNameTODO, "", info, phases)
+		return c.createSchedule(ctx, org, subscriptionNameTODO, "", phases)
 	}
 	if errors.Is(err, stripe.ErrNotFound) {
-		return c.createSchedule(ctx, org, subscriptionNameTODO, "", info, phases)
+		return c.createSchedule(ctx, org, subscriptionNameTODO, "", phases)
 	}
 	if err != nil {
 		return err
@@ -286,10 +280,10 @@ func (c *Client) schedule(ctx context.Context, org string, info *OrgInfo, phases
 	if s.ScheduleID != "" {
 		err = c.updateSchedule(ctx, s.ScheduleID, subscriptionNameTODO, phases)
 		if isReleased(err) {
-			return c.createSchedule(ctx, org, subscriptionNameTODO, s.ID, info, phases)
+			return c.createSchedule(ctx, org, subscriptionNameTODO, s.ID, phases)
 		}
 	} else {
-		return c.createSchedule(ctx, org, subscriptionNameTODO, s.ID, info, phases)
+		return c.createSchedule(ctx, org, subscriptionNameTODO, s.ID, phases)
 	}
 	return err
 }
@@ -306,41 +300,60 @@ func isReleased(err error) bool {
 	return false
 }
 
+func (c *Client) scheduleCancel(ctx context.Context, org string) (err error) {
+	defer errorfmt.Handlef("tier: ScheduleCancel: %q: %w", org, &err)
+	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
+	if err != nil {
+		return err
+	}
+	var f stripe.Form
+	f.Set("prorate", true)
+	f.Set("invoice_now", true)
+	return c.Stripe.Do(ctx, "DELETE", "/v1/subscriptions/"+s.ID, f, nil)
+}
+
 // ScheduleNow is like Schedule but immediately starts the first phase as the
 // current phase and cuts off any phases that have not yet been transitioned
 // to.
 //
 // The first phase must have a zero Effective time to indicate that it should
 // start now.
-func (c *Client) ScheduleNow(ctx context.Context, org string, info *OrgInfo, phases []Phase) error {
+func (c *Client) ScheduleNow(ctx context.Context, org string, phases []Phase) (err error) {
+	defer errorfmt.Handlef("tier: ScheduleNow: %q: %w", org, &err)
+	c.Logf("phases: %v", phases)
 	if len(phases) > 0 {
 		if !phases[0].Effective.IsZero() {
 			return errors.New("first phase must be effective now")
 		}
-		cps, err := c.LookupPhases(ctx, org)
-		if err != nil && !errors.Is(err, ErrOrgNotFound) {
-			return err
-		}
-		for _, p := range cps {
-			if p.Current {
-				p0 := phases[0]
-				p.Features = p0.Features
-				p.Trial = p0.Trial
-				phases[0] = p
-				break
+		if len(phases) == 1 && len(phases[0].Features) == 0 {
+			return c.scheduleCancel(ctx, org)
+		} else {
+			cps, err := c.LookupPhases(ctx, org)
+			if err != nil && !errors.Is(err, ErrOrgNotFound) {
+				return err
+			}
+			for _, p := range cps {
+				if p.Current {
+					p0 := phases[0]
+					p.Features = p0.Features
+					p.Trial = p0.Trial
+					phases[0] = p
+					break
+				}
 			}
 		}
 	}
-	return c.Schedule(ctx, org, info, phases)
+	return c.Schedule(ctx, org, phases)
 }
 
 // SubscribeTo subscribes org to the provided features effective immediately,
 // taking over any in-progress schedule. The customer is billed immediately
 // with prorations if any.
 func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeaturePlan) error {
-	return c.ScheduleNow(ctx, org, nil, []Phase{{
+	return c.ScheduleNow(ctx, org, []Phase{{
 		Features: fs,
 	}})
+
 }
 
 func (c *Client) lookupFeatures(ctx context.Context, keys []refs.FeaturePlan) ([]Feature, error) {
@@ -407,7 +420,7 @@ func (c *Client) LookupStatus(ctx context.Context, org string) (string, error) {
 }
 
 func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err error) {
-	defer errorfmt.Handlef("LookupPhase: %w", &err)
+	defer errorfmt.Handlef("LookupPhases: %w", &err)
 
 	cid, err := c.WhoIs(ctx, org)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -88,6 +89,12 @@ func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) 
 	}
 
 	lines, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/invoices/upcoming/lines", f)
+	var se *stripe.Error
+	if errors.As(err, &se) {
+		if se.Code == "invoice_upcoming_none" {
+			return nil, nil
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
