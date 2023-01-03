@@ -137,6 +137,9 @@ Flags:
 		set the org's trial period to the provided number of days. If
 		negative, the tial period will last indefinitely, and no other
 		phase will come after it.
+	--cancel
+		cancel the org's subscription. It is an error to provide a plan
+		or featurePlan with this flag.
 
 Global Flags:
 

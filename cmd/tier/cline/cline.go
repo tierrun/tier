@@ -116,7 +116,7 @@ func (d *Data) RunFail(args ...string) {
 func (d *Data) Run(args ...string) {
 	d.t.Helper()
 	if err := d.doRun(args...); err != nil {
-		d.t.Fatal(err)
+		d.t.Fatalf("unexpected failure: %v", err)
 	}
 }
 

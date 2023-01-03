@@ -301,7 +301,7 @@ func isReleased(err error) bool {
 }
 
 func (c *Client) scheduleCancel(ctx context.Context, org string) (err error) {
-	defer errorfmt.Handlef("tier: ScheduleCancel: %q: %w", org, &err)
+	defer errorfmt.Handlef("tier: scheduleCancel: %q: %w", org, &err)
 	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
 	if err != nil {
 		return err
