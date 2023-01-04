@@ -189,6 +189,8 @@ type Client struct {
 	// KeyPrefix is prepended to all idempotentcy keys. Use a new key prefix
 	// after deleting test data. It is not recommended for use with live mode.
 	KeyPrefix string
+
+	Version string // default is 2022-11-15
 }
 
 func FromEnv() (*Client, error) {
@@ -206,6 +208,13 @@ func IsLiveKey(key string) bool {
 
 func (c *Client) Live() bool {
 	return IsLiveKey(c.APIKey)
+}
+
+func (c *Client) version() string {
+	if c.Version != "" {
+		return c.Version
+	}
+	return "2022-11-15"
 }
 
 func (c *Client) client() *http.Client {
@@ -234,6 +243,7 @@ func (c *Client) Do(ctx context.Context, method, path string, f Form, out any) e
 	}
 	req.SetBasicAuth(c.APIKey, "")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Stripe-Version", c.version())
 	if f.idempotencyKey != "" {
 		key := f.idempotencyKey
 		if c.KeyPrefix != "" {
