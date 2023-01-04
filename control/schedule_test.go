@@ -210,9 +210,7 @@ func (s *scheduleTester) report(org, name string, n int) {
 	}
 }
 
-// ignores start/end times, and usage
-//
-//lint:ignore U1000 saving for a rainy day
+// ignores start/end times, and feature
 func (s *scheduleTester) checkLimits(org string, want []Usage) {
 	s.t.Helper()
 	got, err := s.cc.LookupLimits(context.Background(), org)
@@ -423,6 +421,23 @@ func TestScheduleCancelNoLimits(t *testing.T) {
 	s.checkLimits("org:paid", []Usage{{Feature: featureX, Limit: Inf}})
 	s.cancel("org:paid")
 	s.checkLimits("org:paid", nil)
+}
+
+func TestScheduleReleaseReschedule(t *testing.T) {
+	featureX := mpf("feature:x@plan:test@0")
+	s := newScheduleTester(t)
+	s.push([]Feature{{
+		FeaturePlan: featureX,
+		Interval:    "@monthly",
+		Currency:    "usd",
+		Mode:        "graduated",
+		Aggregate:   "sum",
+		Tiers:       []Tier{{Upto: Inf, Base: 1000}},
+	}})
+	s.schedule("org:paid", 0, featureX)
+	s.advance(60)
+	s.schedule("org:paid", 0, featureX)
+	s.checkLimits("org:paid", []Usage{{Feature: featureX, Limit: Inf}})
 }
 
 func TestScheduleMinMaxItems(t *testing.T) {

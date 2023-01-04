@@ -78,6 +78,8 @@ type subscription struct {
 	ScheduleID string
 	Status     string
 	Name       string
+	Effective  time.Time
+	End        time.Time
 	Features   []Feature
 }
 
@@ -94,8 +96,10 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 
 	type T struct {
 		stripe.ID
-		Status string
-		Items  struct {
+		Status    string
+		StartDate int64 `json:"start_date"`
+		EndDate   int64 `json:"end_date"`
+		Items     struct {
 			Data []struct {
 				ID    string
 				Price stripePrice
@@ -138,6 +142,8 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 		ID:         v.ProviderID(),
 		ScheduleID: v.Schedule.ID,
 		Status:     v.Status,
+		Effective:  time.Unix(v.StartDate, 0),
+		End:        time.Unix(v.EndDate, 0),
 		Features:   fs,
 	}
 	return s, nil
@@ -252,6 +258,8 @@ func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) (err 
 
 func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err error) {
 	defer errorfmt.Handlef("tier: schedule: %q: %w", org, &err)
+
+	c.Logf("schedule: phases: %v", phases)
 
 	for i, p := range phases {
 		if len(p.Features) > 20 {
@@ -444,14 +452,14 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		}
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g, groupCtx := errgroup.WithContext(ctx)
 
 	var ss []T
 	g.Go(func() error {
 		var f stripe.Form
 		f.Add("expand[]", "data.phases.items.price")
 		f.Set("customer", cid)
-		got, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/subscription_schedules", f)
+		got, err := stripe.Slurp[T](groupCtx, c.Stripe, "GET", "/v1/subscription_schedules", f)
 		if len(got) > 0 { // preserve nil
 			ss = got
 		}
@@ -461,7 +469,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	var m []refs.FeaturePlan
 	featureByProviderID := make(map[string]refs.FeaturePlan)
 	g.Go(func() (err error) {
-		fs, err := c.Pull(ctx, 0)
+		fs, err := c.Pull(groupCtx, 0)
 		if err != nil {
 			return err
 		}
@@ -488,23 +496,11 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		if skip {
 			continue
 		}
+
 		for _, p := range s.Phases {
 			fs := make([]refs.FeaturePlan, 0, len(p.Items))
 			for _, pi := range p.Items {
 				fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
-			}
-
-			var plans []refs.Plan
-			for _, f := range fs {
-				if slices.Contains(plans, f.Plan()) {
-					continue
-				}
-				inModel := numFeaturesInPlan(m, f.Plan())
-				inPhase := numFeaturesInPlan(fs, f.Plan())
-				if inModel == inPhase {
-					plans = append(plans, f.Plan())
-				}
-
 			}
 
 			ps = append(ps, Phase{
@@ -512,8 +508,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 				Effective: time.Unix(p.Start, 0),
 				Features:  fs,
 				Current:   p.Start == s.Current.Start,
-
-				Plans: plans,
+				Plans:     computePlans(fs, m),
 			})
 		}
 	}
@@ -522,7 +517,40 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		return a.Effective.Before(b.Effective)
 	})
 
+	if len(ps) == 0 {
+		s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
+		if err != nil {
+			return nil, err
+		}
+
+		fs := FeaturePlans(s.Features)
+		ps = []Phase{{
+			Org:       org,
+			Effective: s.Effective,
+			Features:  fs,
+			Current:   true,
+			Trial:     false, // TODO(bmizerany):
+			Plans:     computePlans(fs, m),
+		}}
+	}
+
 	return ps, nil
+}
+
+func computePlans(fs, m []refs.FeaturePlan) []refs.Plan {
+	var plans []refs.Plan
+	for _, f := range fs {
+		if slices.Contains(plans, f.Plan()) {
+			continue
+		}
+		inModel := numFeaturesInPlan(m, f.Plan())
+		inPhase := numFeaturesInPlan(fs, f.Plan())
+		if inModel == inPhase {
+			plans = append(plans, f.Plan())
+		}
+
+	}
+	return plans
 }
 
 type Period struct {
