@@ -483,10 +483,12 @@ func TestSubscribe(t *testing.T) {
 	tt.GrepBothNot("invalid_email", "expected invalid email code")
 
 	tt = testtier(t, okHandler(t))
+	tt.Unsetenv("TIER_DEBUG")
 	tt.Run("subscribe", "--email", "foo@test.com", "org:test")
 	tt.GrepBothNot(".+", "unexpected output")
 
 	tt.Run("subscribe", "org:test")
+	tt.Unsetenv("TIER_DEBUG")
 	tt.GrepBothNot(".+", "unexpected output")
 }
 
