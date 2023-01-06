@@ -472,7 +472,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		return nil, err
 	}
 
-	ps, err = c.lookupPhases(ctx, s.ScheduleID, org)
+	ps, err = c.lookupPhases(ctx, org, s.ScheduleID)
 	if err != nil && !errors.Is(err, stripe.ErrNotFound) {
 		return nil, err
 	}
@@ -504,8 +504,7 @@ func (c *Client) lookupPhases(ctx context.Context, org, scheduleID string) ([]Ph
 	if scheduleID == "" {
 		return nil, nil
 	}
-	type T struct {
-		stripe.ID
+	var s struct {
 		Current struct {
 			Start int64 `json:"start_date"`
 			End   int64 `json:"end_date"`
@@ -520,29 +519,29 @@ func (c *Client) lookupPhases(ctx context.Context, org, scheduleID string) ([]Ph
 			}
 		}
 	}
-	ss, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/subscription_schedules/"+scheduleID, stripe.Form{})
+	var f stripe.Form
+	f.Add("expand[]", "phases.items.price")
+	err := c.Stripe.Do(ctx, "GET", "/v1/subscription_schedules/"+scheduleID, f, &s)
 	if err != nil {
 		return nil, err
 	}
 
 	var ps []Phase
-	for _, s := range ss {
-		for _, p := range s.Phases {
-			if p.Metadata.Name != subscriptionNameTODO {
-				continue
-			}
-			var fs []refs.FeaturePlan
-			for _, i := range p.Items {
-				f := stripePriceToFeature(i.Price)
-				fs = append(fs, f.FeaturePlan)
-			}
-			ps = append(ps, Phase{
-				Org:       org,
-				Effective: time.Unix(p.Start, 0),
-				Features:  fs,
-				Current:   p.Start == s.Current.Start,
-			})
+	for _, p := range s.Phases {
+		if p.Metadata.Name != subscriptionNameTODO {
+			continue
 		}
+		var fs []refs.FeaturePlan
+		for _, i := range p.Items {
+			f := stripePriceToFeature(i.Price)
+			fs = append(fs, f.FeaturePlan)
+		}
+		ps = append(ps, Phase{
+			Org:       org,
+			Effective: time.Unix(p.Start, 0),
+			Features:  fs,
+			Current:   p.Start == s.Current.Start,
+		})
 	}
 	return ps, nil
 }
