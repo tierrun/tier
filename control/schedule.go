@@ -135,7 +135,7 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 		return s.Metadata.Name == name
 	})
 	if errors.Is(err, stripe.ErrNotFound) {
-		return subscription{}, errors.Join(ErrSubscriptionNotFound, err)
+		return subscription{}, ErrSubscriptionNotFound
 	}
 	if err != nil {
 		return subscription{}, err
