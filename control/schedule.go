@@ -281,7 +281,8 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 	}
 
 	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
-	if errors.Is(err, ErrOrgNotFound) {
+	isNotFound := errors.Is(err, ErrSubscriptionNotFound) || errors.Is(err, ErrOrgNotFound)
+	if isNotFound {
 		// We only need to pay the API penalty of creating a customer
 		// if we know in fact it does not exist.
 		if _, err := c.putCustomer(ctx, org, nil); err != nil {
@@ -347,7 +348,8 @@ func (c *Client) ScheduleNow(ctx context.Context, org string, phases []Phase) (e
 			return c.scheduleCancel(ctx, org)
 		} else {
 			cps, err := c.LookupPhases(ctx, org)
-			if err != nil && !errors.Is(err, ErrOrgNotFound) {
+			isNotFound := errors.Is(err, ErrOrgNotFound) || errors.Is(err, ErrSubscriptionNotFound)
+			if err != nil && !isNotFound {
 				return err
 			}
 			for _, p := range cps {
@@ -448,9 +450,6 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	})
 
 	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
-	if err != nil {
-		return nil, err
-	}
 	if errors.Is(err, ErrSubscriptionNotFound) {
 		return nil, nil
 	}
