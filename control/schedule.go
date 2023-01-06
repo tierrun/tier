@@ -455,7 +455,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 			return M{}, err
 		}
 		m.m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
-			m.featureByProviderID[f.ProviderID] = f.FeaturePlan
+			makSet(&m.featureByProviderID, f.ProviderID, f.FeaturePlan)
 			return f.FeaturePlan
 		})
 		return m, nil
@@ -478,6 +478,9 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	}
 
 	if len(ps) == 0 {
+		// No phases found for this subscription. This can happen if
+		// the shcedule is released between the time we got the
+		// ScheduleID and looked up the phases
 		ps = []Phase{{
 			Org:       org,
 			Effective: s.Effective,
