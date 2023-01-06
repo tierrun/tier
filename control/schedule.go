@@ -11,7 +11,6 @@ import (
 	"kr.dev/errorfmt"
 	"tier.run/refs"
 	"tier.run/stripe"
-	"tier.run/values"
 )
 
 // TODO(bmizerany): we don't support names in the MVP but the hook is
@@ -443,22 +442,8 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	type M struct {
-		m                   []refs.FeaturePlan
-		featureByProviderID map[string]refs.FeaturePlan
-	}
-
-	fu := newFuture(func() (M, error) {
-		var m M
-		fs, err := c.Pull(ctx, 0)
-		if err != nil {
-			return M{}, err
-		}
-		m.m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
-			makSet(&m.featureByProviderID, f.ProviderID, f.FeaturePlan)
-			return f.FeaturePlan
-		})
-		return m, nil
+	fu := newFuture(func() ([]Feature, error) {
+		return c.Pull(ctx, 0)
 	})
 
 	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
@@ -472,7 +457,12 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		return nil, err
 	}
 
-	ps, err = c.lookupPhases(ctx, org, s.ScheduleID)
+	m, err := fu.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	ps, err = c.lookupPhases(ctx, org, m, s.ScheduleID)
 	if err != nil && !errors.Is(err, stripe.ErrNotFound) {
 		return nil, err
 	}
@@ -480,7 +470,11 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	if len(ps) == 0 {
 		// No phases found for this subscription. This can happen if
 		// the shcedule is released between the time we got the
-		// ScheduleID and looked up the phases
+		// ScheduleID and looked up the phases, or the ScheduleID is
+		// empty.
+		//
+		// Use the current subscription to create and return single
+		// phase.
 		ps = []Phase{{
 			Org:       org,
 			Effective: s.Effective,
@@ -490,17 +484,14 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		}}
 	}
 
-	m, err := fu.Get()
-	if err != nil {
-		return nil, err
-	}
+	mfps := FeaturePlans(m)
 	for i, p := range ps {
-		ps[i].Plans = computePlans(p.Features, m.m)
+		ps[i].Plans = computePlans(p.Features, mfps)
 	}
 	return ps, nil
 }
 
-func (c *Client) lookupPhases(ctx context.Context, org, scheduleID string) ([]Phase, error) {
+func (c *Client) lookupPhases(ctx context.Context, org string, m []Feature, scheduleID string) ([]Phase, error) {
 	if scheduleID == "" {
 		return nil, nil
 	}
@@ -515,31 +506,37 @@ func (c *Client) lookupPhases(ctx context.Context, org, scheduleID string) ([]Ph
 			}
 			Start int64 `json:"start_date"`
 			Items []struct {
-				Price stripePrice
+				Price string
 			}
 		}
 	}
 	var f stripe.Form
-	f.Add("expand[]", "phases.items.price")
 	err := c.Stripe.Do(ctx, "GET", "/v1/subscription_schedules/"+scheduleID, f, &s)
 	if err != nil {
 		return nil, err
 	}
+
+	lookup := make(map[string]refs.FeaturePlan)
+	for _, f := range m {
+		lookup[f.ProviderID] = f.FeaturePlan
+	}
+	c.Logf("lookupPhases: lookup: %v", lookup)
 
 	var ps []Phase
 	for _, p := range s.Phases {
 		if p.Metadata.Name != subscriptionNameTODO {
 			continue
 		}
-		var fs []refs.FeaturePlan
+		var fps []refs.FeaturePlan
 		for _, i := range p.Items {
-			f := stripePriceToFeature(i.Price)
-			fs = append(fs, f.FeaturePlan)
+			fp := lookup[i.Price]
+			c.Logf("lookup[%q] = %v", i.Price, fp)
+			fps = append(fps, fp)
 		}
 		ps = append(ps, Phase{
 			Org:       org,
 			Effective: time.Unix(p.Start, 0),
-			Features:  fs,
+			Features:  fps,
 			Current:   p.Start == s.Current.Start,
 		})
 	}
@@ -857,27 +854,27 @@ func numFeaturesInPlan(fs []refs.FeaturePlan, plan refs.Plan) (n int) {
 }
 
 type future[T any] struct {
+	// owned by the future; use Get to access
 	v   T
 	err error
-	c   chan struct{}
+
+	c chan struct{}
 }
 
-func newFuture[T any](f func() (T, error)) future[T] {
-	fu := future[T]{c: make(chan struct{})}
+func newFuture[T any](f func() (T, error)) *future[T] {
+	fu := &future[T]{c: make(chan struct{})}
 	go fu.run(f)
 	return fu
 }
 
-func (r future[T]) run(f func() (T, error)) {
+func (r *future[T]) run(f func() (T, error)) {
 	defer close(r.c)
 	r.v, r.err = f()
 }
 
-func (f future[T]) Get() (T, error) {
-	select {
-	case <-f.c:
-		return f.v, f.err
-	}
+func (f *future[T]) Get() (T, error) {
+	<-f.c
+	return f.v, f.err
 }
 
 func makSet[K comparable, V any, T ~map[K]V](m *T, k K, v V) {
