@@ -82,6 +82,14 @@ type subscription struct {
 	Features   []Feature
 }
 
+func (s *subscription) Active() bool            { return s.Status == "active" }
+func (s *subscription) PastDue() bool           { return s.Status == "past_due" }
+func (s *subscription) Unpaid() bool            { return s.Status == "unpaid" }
+func (s *subscription) Canceled() bool          { return s.Status == "canceled" }
+func (s *subscription) Incomplete() bool        { return s.Status == "incomeplete" }
+func (s *subscription) IncompleteExpired() bool { return s.Status == "incomeplete_expired" }
+func (s *subscription) Trialing() bool          { return s.Status == "trialing" }
+
 func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub subscription, err error) {
 	defer errorfmt.Handlef("stripe: lookupSubscription: %s: %s: %w", org, name, &err)
 	cid, err := c.WhoIs(ctx, org)
@@ -464,7 +472,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 		return nil, err
 	}
 
-	ps, err = c.lookupPhases(ctx, s.ScheduleID)
+	ps, err = c.lookupPhases(ctx, s.ScheduleID, org)
 	if err != nil && !errors.Is(err, stripe.ErrNotFound) {
 		return nil, err
 	}
@@ -475,7 +483,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 			Effective: s.Effective,
 			Features:  FeaturePlans(s.Features),
 			Current:   true,
-			Trial:     s.Trial,
+			Trial:     s.Trialing(),
 		}}
 	}
 
@@ -485,6 +493,53 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	}
 	for i, p := range ps {
 		ps[i].Plans = computePlans(p.Features, m.m)
+	}
+	return ps, nil
+}
+
+func (c *Client) lookupPhases(ctx context.Context, org, scheduleID string) ([]Phase, error) {
+	if scheduleID == "" {
+		return nil, nil
+	}
+	type T struct {
+		stripe.ID
+		Current struct {
+			Start int64 `json:"start_date"`
+			End   int64 `json:"end_date"`
+		} `json:"current_phase"`
+		Phases []struct {
+			Metadata struct {
+				Name string `json:"tier.subscription"`
+			}
+			Start int64 `json:"start_date"`
+			Items []struct {
+				Price stripePrice
+			}
+		}
+	}
+	ss, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/subscription_schedules/"+scheduleID, stripe.Form{})
+	if err != nil {
+		return nil, err
+	}
+
+	var ps []Phase
+	for _, s := range ss {
+		for _, p := range s.Phases {
+			if p.Metadata.Name != subscriptionNameTODO {
+				continue
+			}
+			var fs []refs.FeaturePlan
+			for _, i := range p.Items {
+				f := stripePriceToFeature(i.Price)
+				fs = append(fs, f.FeaturePlan)
+			}
+			ps = append(ps, Phase{
+				Org:       org,
+				Effective: time.Unix(p.Start, 0),
+				Features:  fs,
+				Current:   p.Start == s.Current.Start,
+			})
+		}
 	}
 	return ps, nil
 }
