@@ -521,7 +521,6 @@ func (c *Client) lookupPhases(ctx context.Context, org string, m []Feature, sche
 	for _, f := range m {
 		lookup[f.ProviderID] = f.FeaturePlan
 	}
-	c.Logf("lookupPhases: lookup: %v", lookup)
 
 	var ps []Phase
 	for _, p := range s.Phases {
@@ -531,7 +530,6 @@ func (c *Client) lookupPhases(ctx context.Context, org string, m []Feature, sche
 		var fps []refs.FeaturePlan
 		for _, i := range p.Items {
 			fp := lookup[i.Price]
-			c.Logf("lookup[%q] = %v", i.Price, fp)
 			fps = append(fps, fp)
 		}
 		ps = append(ps, Phase{
