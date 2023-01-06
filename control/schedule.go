@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"golang.org/x/exp/slices"
-	"golang.org/x/sync/errgroup"
 	"kr.dev/errorfmt"
 	"tier.run/refs"
 	"tier.run/stripe"
@@ -22,9 +21,10 @@ const subscriptionNameTODO = "default"
 
 // Errors
 var (
-	ErrOrgNotFound     = errors.New("org not found")
-	ErrInvalidMetadata = errors.New("invalid metadata")
-	ErrInvalidPhase    = errors.New("invalid phase")
+	ErrOrgNotFound          = errors.New("org not found")
+	ErrSubscriptionNotFound = errors.New("subscription not found")
+	ErrInvalidMetadata      = errors.New("invalid metadata")
+	ErrInvalidPhase         = errors.New("invalid phase")
 
 	// ErrInvalidFeature is returned when a customer that should have been
 	// created is not found after "creating" it. This can happen in Test
@@ -77,7 +77,6 @@ type subscription struct {
 	ID         string
 	ScheduleID string
 	Status     string
-	Name       string
 	Effective  time.Time
 	End        time.Time
 	Features   []Feature
@@ -127,6 +126,9 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 	v, err := stripe.List[T](ctx, c.Stripe, "GET", "/v1/subscriptions", f).Find(func(s T) bool {
 		return s.Metadata.Name == name
 	})
+	if errors.Is(err, stripe.ErrNotFound) {
+		return subscription{}, errors.Join(ErrSubscriptionNotFound, err)
+	}
 	if err != nil {
 		return subscription{}, err
 	}
@@ -430,110 +432,60 @@ func (c *Client) LookupStatus(ctx context.Context, org string) (string, error) {
 func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err error) {
 	defer errorfmt.Handlef("LookupPhases: %w", &err)
 
-	cid, err := c.WhoIs(ctx, org)
-	if err != nil {
-		return nil, notFoundAsNil(err)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type M struct {
+		m                   []refs.FeaturePlan
+		featureByProviderID map[string]refs.FeaturePlan
 	}
 
-	type T struct {
-		stripe.ID
-		Current struct {
-			Start int64 `json:"start_date"`
-			End   int64 `json:"end_date"`
-		} `json:"current_phase"`
-		Phases []struct {
-			Metadata struct {
-				Name string `json:"tier.subscription"`
-			}
-			Start int64 `json:"start_date"`
-			Items []struct {
-				Price stripePrice
-			}
-		}
-	}
-
-	g, groupCtx := errgroup.WithContext(ctx)
-
-	var ss []T
-	g.Go(func() error {
-		var f stripe.Form
-		f.Add("expand[]", "data.phases.items.price")
-		f.Set("customer", cid)
-		got, err := stripe.Slurp[T](groupCtx, c.Stripe, "GET", "/v1/subscription_schedules", f)
-		if len(got) > 0 { // preserve nil
-			ss = got
-		}
-		return notFoundAsNil(err)
-	})
-
-	var m []refs.FeaturePlan
-	featureByProviderID := make(map[string]refs.FeaturePlan)
-	g.Go(func() (err error) {
-		fs, err := c.Pull(groupCtx, 0)
+	fu := newFuture(func() (M, error) {
+		var m M
+		fs, err := c.Pull(ctx, 0)
 		if err != nil {
-			return err
+			return M{}, err
 		}
-		m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
-			featureByProviderID[f.ProviderID] = f.FeaturePlan
+		m.m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
+			m.featureByProviderID[f.ProviderID] = f.FeaturePlan
 			return f.FeaturePlan
 		})
-		return err
+		return m, nil
 	})
 
-	if err := g.Wait(); err != nil {
+	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
+	if err != nil {
+		return nil, err
+	}
+	if errors.Is(err, ErrSubscriptionNotFound) {
+		return nil, nil
+	}
+	if err != nil {
 		return nil, err
 	}
 
-	for _, s := range ss {
-		const name = "default" // TODO(bmizerany): support multiple subscriptions by name
-		var skip bool
-		for _, p := range s.Phases {
-			if p.Metadata.Name != name {
-				skip = true
-				break
-			}
-		}
-		if skip {
-			continue
-		}
-
-		for _, p := range s.Phases {
-			fs := make([]refs.FeaturePlan, 0, len(p.Items))
-			for _, pi := range p.Items {
-				fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
-			}
-
-			ps = append(ps, Phase{
-				Org:       org,
-				Effective: time.Unix(p.Start, 0),
-				Features:  fs,
-				Current:   p.Start == s.Current.Start,
-				Plans:     computePlans(fs, m),
-			})
-		}
+	ps, err = c.lookupPhases(ctx, s.ScheduleID)
+	if err != nil && !errors.Is(err, stripe.ErrNotFound) {
+		return nil, err
 	}
 
-	slices.SortFunc(ps, func(a, b Phase) bool {
-		return a.Effective.Before(b.Effective)
-	})
-
 	if len(ps) == 0 {
-		s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
-		if err != nil {
-			return nil, err
-		}
-
-		fs := FeaturePlans(s.Features)
 		ps = []Phase{{
 			Org:       org,
 			Effective: s.Effective,
-			Features:  fs,
+			Features:  FeaturePlans(s.Features),
 			Current:   true,
-			Trial:     false, // TODO(bmizerany):
-			Plans:     computePlans(fs, m),
+			Trial:     s.Trial,
 		}}
 	}
 
+	m, err := fu.Get()
+	if err != nil {
+		return nil, err
+	}
+	for i, p := range ps {
+		ps[i].Plans = computePlans(p.Features, m.m)
+	}
 	return ps, nil
 }
 
@@ -845,4 +797,35 @@ func numFeaturesInPlan(fs []refs.FeaturePlan, plan refs.Plan) (n int) {
 		}
 	}
 	return n
+}
+
+type future[T any] struct {
+	v   T
+	err error
+	c   chan struct{}
+}
+
+func newFuture[T any](f func() (T, error)) future[T] {
+	fu := future[T]{c: make(chan struct{})}
+	go fu.run(f)
+	return fu
+}
+
+func (r future[T]) run(f func() (T, error)) {
+	defer close(r.c)
+	r.v, r.err = f()
+}
+
+func (f future[T]) Get() (T, error) {
+	select {
+	case <-f.c:
+		return f.v, f.err
+	}
+}
+
+func makSet[K comparable, V any, T ~map[K]V](m *T, k K, v V) {
+	if *m == nil {
+		*m = make(map[K]V)
+	}
+	(*m)[k] = v
 }
