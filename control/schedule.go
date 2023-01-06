@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/exp/slices"
 	"kr.dev/errorfmt"
+	"tier.run/future"
 	"tier.run/refs"
 	"tier.run/stripe"
 )
@@ -442,7 +443,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	fu := newFuture(func() ([]Feature, error) {
+	fu := future.Go(func() ([]Feature, error) {
 		return c.Pull(ctx, 0)
 	})
 
@@ -851,35 +852,4 @@ func numFeaturesInPlan(fs []refs.FeaturePlan, plan refs.Plan) (n int) {
 		}
 	}
 	return n
-}
-
-type future[T any] struct {
-	// owned by the future; use Get to access
-	v   T
-	err error
-
-	c chan struct{}
-}
-
-func newFuture[T any](f func() (T, error)) *future[T] {
-	fu := &future[T]{c: make(chan struct{})}
-	go fu.run(f)
-	return fu
-}
-
-func (r *future[T]) run(f func() (T, error)) {
-	defer close(r.c)
-	r.v, r.err = f()
-}
-
-func (f *future[T]) Get() (T, error) {
-	<-f.c
-	return f.v, f.err
-}
-
-func makSet[K comparable, V any, T ~map[K]V](m *T, k K, v V) {
-	if *m == nil {
-		*m = make(map[K]V)
-	}
-	(*m)[k] = v
 }
