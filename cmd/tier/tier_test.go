@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/cmd/tier/cline"
 	"tier.run/profile"
@@ -489,6 +490,37 @@ func TestSubscribe(t *testing.T) {
 
 	tt.Run("subscribe", "org:test")
 	tt.GrepBothNot(".+", "unexpected output")
+
+	tt = testtier(t, okHandler(t))
+	tt.RunFail("subscribe", "--cancel", "org:test", "plan:free@2")
+	tt.GrepStderr("Usage:", ".*without arguments.*Usage:")
+
+	var got atomicSlice[string]
+	tt = testtier(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("got request: %s %s", r.Method, r.URL.Path)
+		switch {
+		case wants(r, "GET", "/v1/subscriptions"):
+			io.WriteString(w, `{
+				"data": [
+					{
+						"id": "sub_123",
+						"metadata": {
+							"tier.subscription": "default"
+						}
+					}
+				]
+			}`)
+		case wants(r, "DELETE", "/v1/subscriptions/sub_123"):
+			got.Append(r.URL.Path)
+		default:
+			io.WriteString(w, `{}`)
+		}
+	})
+
+	tt.Run("subscribe", "--cancel", "org:test")
+
+	want := []string{"/v1/subscriptions/sub_123"}
+	diff.Test(t, t.Errorf, got.Load(), want)
 }
 
 const responsePricesValidPlan = `
@@ -566,6 +598,27 @@ func chdir(t *testing.T, dir string) {
 	})
 }
 
-func wants(r *http.Request, method, path string) bool {
-	return r.Method == method && r.URL.Path == path
+func wants(r *http.Request, method, pattern string) bool {
+	pattern = "^" + pattern + "$"
+	rx := regexp.MustCompile(pattern)
+	return r.Method == method && rx.MatchString(r.URL.Path)
+}
+
+type atomicSlice[T any] struct {
+	mu sync.Mutex
+	v  []T
+}
+
+func (s *atomicSlice[T]) Append(v T) {
+	s.mu.Lock()
+	s.v = append(s.v, v)
+	s.mu.Unlock()
+}
+
+// Load returns a shallow clone of the slice.
+func (s *atomicSlice[T]) Load() []T {
+	s.mu.Lock()
+	v := slices.Clone(s.v)
+	s.mu.Unlock()
+	return v
 }
