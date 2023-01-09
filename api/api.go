@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -17,39 +18,62 @@ import (
 	"tier.run/values"
 )
 
+func init() {
+	// check that all error codes are unique
+	seen := map[string]bool{}
+	for _, e := range errorLookup {
+		if seen[e.Code] {
+			panic("duplicate error message")
+		}
+		if seen[e.Code] {
+			panic(fmt.Sprintf("duplicate error code %q", e.Code))
+		}
+		seen[e.Code] = true
+	}
+}
+
 // HTTP Errors
-var errorLookup = map[error]error{
-	control.ErrOrgNotFound: &trweb.HTTPError{
+//
+// TERR1000: invalid requests
+// TERR1010: org or features problem
+// TERR2000: internal errors
+var errorLookup = map[error]*trweb.HTTPError{
+	control.ErrOrgNotFound: {
 		Status:  400,
 		Code:    "org_not_found",
 		Message: "org not found",
 	},
-	control.ErrFeatureNotFound: &trweb.HTTPError{
+	control.ErrFeatureNotFound: {
 		Status:  400,
 		Code:    "feature_not_found",
 		Message: "feature not found",
 	},
-	control.ErrUnexpectedMissingOrg: &trweb.HTTPError{
+	control.ErrNoFeatures: {
+		Status:  400,
+		Code:    "TERR1020",
+		Message: "feature or plan not found",
+	},
+	control.ErrUnexpectedMissingOrg: {
 		Status:  500,
 		Code:    "TERR1050",
 		Message: "Stripe reported a customer was created and then reported it did not exist. This might mean you purged your Test Mode and need to reset TIER_PREFIX_KEY=<randomString>.",
 	},
-	control.ErrFeatureNotMetered: &trweb.HTTPError{ // TODO(bmizerany): this may be relaxed if we decide to log and accept
+	control.ErrFeatureNotMetered: { // TODO(bmizerany): this may be relaxed if we decide to log and accept
 		Status:  400,
 		Code:    "invalid_request",
 		Message: "feature not reportable",
 	},
-	control.ErrInvalidEmail: &trweb.HTTPError{
+	control.ErrInvalidEmail: {
 		Status:  400,
 		Code:    "invalid_email",
 		Message: "invalid email",
 	},
-	control.ErrInvalidMetadata: &trweb.HTTPError{
+	control.ErrInvalidMetadata: {
 		Status:  400,
 		Code:    "invalid_metadata",
 		Message: "metadata keys must not use reserved prefix ('tier.')",
 	},
-	stripe.ErrInvalidAPIKey: &trweb.HTTPError{
+	stripe.ErrInvalidAPIKey: {
 		Status:  401,
 		Code:    "invalid_api_key",
 		Message: "invalid api key",

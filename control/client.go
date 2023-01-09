@@ -19,6 +19,7 @@ import (
 var (
 	ErrFeatureExists     = errors.New("feature already exists")
 	ErrFeatureNotFound   = errors.New("feature not found")
+	ErrNoFeatures        = errors.New("no features")
 	ErrFeatureNotMetered = errors.New("feature is not metered")
 	ErrPlanExists        = errors.New("plan already exists")
 	ErrInvalidEmail      = errors.New("invalid email")
@@ -413,7 +414,7 @@ func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
 				}
 			}
 			if len(out) == n {
-				return nil, fmt.Errorf("no features found for plan %q", p)
+				return nil, fmt.Errorf("%w found for plan %q", ErrNoFeatures, p)
 			}
 		} else {
 			out = append(out, fp)

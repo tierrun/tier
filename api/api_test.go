@@ -191,6 +191,12 @@ func TestAPISubscribe(t *testing.T) {
 		Code:    "feature_not_found",
 		Message: "feature not found",
 	})
+
+	sub("org:test", []string{"plan:nope@0"}, &apitypes.Error{
+		Status:  400,
+		Code:    "TERR1020",
+		Message: "feature or plan not found",
+	})
 }
 
 func TestPhaseBadOrg(t *testing.T) {
