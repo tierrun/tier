@@ -80,8 +80,6 @@ nfpms:
     formats:
     - deb
     - rpm
-    replacements:
-      darwin: macOS
 # scoop:
 #   bucket:
 #     owner: tier
@@ -100,21 +98,16 @@ brews:
     folder: Formula
     test: |
          system "#{bin}/tier version --homebrew"
-    # install: |
-    #   bin.install "tier"
-    #   bash_completion.install "completions/tier.bash" => "tier"
-    #   zsh_completion.install "completions/tier.zsh" => "_tier"
-    #   fish_completion.install "completions/tier.fish"
 archives:
-  - replacements:
-      darwin: macOS
+  -
     format_overrides:
       - goos: windows
         format: zip
     files:
       - README.md
       - LICENSE
-      # - completions/*
+    rlcp: true
+
 snapshot:
   name_template: "{{ .Tag }}-next"
 changelog:
