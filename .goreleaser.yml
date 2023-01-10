@@ -65,6 +65,12 @@ dockers:
     - "--label=org.opencontainers.image.version={{.Version}}"
     - "--label=org.opencontainers.image.source={{.GitURL}}"
     dockerfile: Dockerfile.goreleaser
+
+docker_manifests:
+  - name_template: 'tierrun/{{ .ProjectName }}:{{ .Tag }}'
+    image_templates:
+      - 'tierrun/{{ .ProjectName }}:{{ .Tag }}-amd64'
+      - 'tierrun/{{ .ProjectName }}:{{ .Tag }}-arm64'
 nfpms:
   - maintainer: Tier
     description: The Tier CLI
