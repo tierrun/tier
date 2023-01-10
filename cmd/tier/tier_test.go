@@ -206,7 +206,14 @@ func TestSwitchPreallocateTask(t *testing.T) {
 }
 
 func TestPushStdin(t *testing.T) {
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pricing.json" {
+			// be remote pricing.json
+			io.WriteString(w, `{}`)
+			return
+		}
+
+		// Be Stripe
 		io.WriteString(w, `{"id": "price_123"}`)
 	}))
 
@@ -226,6 +233,8 @@ func TestPushStdin(t *testing.T) {
 		{"{", "-", "unexpected EOF", false},
 
 		{"{}", "-", "", true},
+
+		{"", s.URL + "/pricing.json", "^$", true},
 	}
 
 	for _, c := range cases {

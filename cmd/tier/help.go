@@ -59,10 +59,13 @@ Print the version of the Tier CLI.
 
 	"push": `Usage:
 
-	tier [--live] push <filename | - >
+	tier [--live] push <filename | url | - >
 
-Tier push pushes the pricing JSON in the provided filename to Stripe. If the
-filename is ("-") then stdin is read.
+"tier push" pushes pricing JSON to Stripe. The data may come from a file, url,
+or stdin. If a URL is specified, push will use the response body from a GET
+request as pricing JSON, if the status code is of the 2XX variety and the body
+is valid pricing JSON. If the filename is ("-") then the pricing JSON is read
+from stdin.
 
 To learn more about how this works, please visit: https://tier.run/docs/cli/push
 
