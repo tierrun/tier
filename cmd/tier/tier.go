@@ -166,9 +166,26 @@ func runTier(cmd string, args []string) (err error) {
 	case "init":
 		panic("TODO")
 	case "push":
+		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+		create := fs.Bool("c", false, "create a new isolated account and push to it")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+
+		if *create {
+			if err := switchAccounts(ctx, "-c"); err != nil {
+				return err
+			}
+			fmt.Println()
+			fmt.Println("Pushing to new isolated account...")
+
+			// reset the control client to use the new account
+			controlClient = nil
+		}
+
 		pj := ""
-		if len(args) > 0 {
-			pj = args[0]
+		if fs.NArg() > 0 {
+			pj = fs.Arg(0)
 		}
 
 		f, err := fileOrStdin(pj)
@@ -400,74 +417,7 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		return serve(*addr)
 	case "switch":
-		fs := flag.NewFlagSet("switch", flag.ExitOnError)
-		create := fs.Bool("c", false, "create a new isolated environment")
-		if err := fs.Parse(args); err != nil {
-			return err
-		}
-
-		var a stripe.Account
-		if *create {
-			if cc().Live() {
-				return fmt.Errorf("switch -c not allowed in live mode")
-			}
-			if fs.NArg() != 0 {
-				return fmt.Errorf("switch does not accept arguments")
-			}
-			ca, _ := getState()
-			if ca.ID != "" {
-				//lint:ignore ST1005 we're using errors for text in main, ignore.
-				return errors.New(`tier.state file present
-
-To switch to an ioslated account, run from a different directory, or remove
-the tier.state file.`)
-			}
-			var err error
-			a, err = createAccount(ctx)
-			if errors.Is(err, stripe.ErrConnectUnavailable) {
-				fmt.Fprintf(stderr, "tier: stripe connect not enabled\n")
-				return errUsage
-			}
-			if err != nil {
-				return err
-			}
-		} else {
-			if fs.NArg() < 1 {
-				return errUsage
-			}
-			aid := fs.Arg(0)
-			u, _ := url.Parse(aid)
-			if u != nil {
-				parts := strings.Split(u.Path, "/")
-				for _, p := range parts {
-					if strings.HasPrefix(p, "acct_") {
-						aid = p
-						break
-					}
-				}
-			}
-			if !strings.HasPrefix(aid, "acct_") {
-				return fmt.Errorf("invalid account id or URL: %s", aid)
-			}
-			a.ID = aid
-		}
-		if err := saveState(a); err != nil {
-			return err
-		}
-		fmt.Fprintf(stdout, strings.TrimSpace(`
-Running in isolation mode.
-
-To switch back to normal mode, you can either:
-
-    A) delete the tier.state file in this directory, or
-    B) run tier from another directory
-
-The account dashboard is located at:
-
-    https://dashboard.stripe.com/%s/test
-`), a.ID)
-		fmt.Fprintln(stdout)
-		return nil
+		return switchAccounts(ctx, args...)
 	case "clean":
 		fs := flag.NewFlagSet("clean", flag.ExitOnError)
 		accountAge := fs.Duration("switchaccounts", -1, "garbage collect switch accounts older than a duration; default is -1")
@@ -589,4 +539,75 @@ func loadProfile() *profile.Profile {
 		}
 	}
 	return p
+}
+
+func switchAccounts(ctx context.Context, args ...string) error {
+	fs := flag.NewFlagSet("switch", flag.ExitOnError)
+	create := fs.Bool("c", false, "create a new isolated environment")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	var a stripe.Account
+	if *create {
+		if cc().Live() {
+			return fmt.Errorf("switch -c not allowed in live mode")
+		}
+		if fs.NArg() != 0 {
+			return fmt.Errorf("switch -c does not accept arguments")
+		}
+		ca, _ := getState()
+		if ca.ID != "" {
+			//lint:ignore ST1005 we're using errors for text in main, ignore.
+			return errors.New(`tier.state file present
+
+To switch to an ioslated account, run from a different directory, or remove
+the tier.state file.`)
+		}
+		var err error
+		a, err = createAccount(ctx)
+		if errors.Is(err, stripe.ErrConnectUnavailable) {
+			fmt.Fprintf(stderr, "tier: stripe connect not enabled\n")
+			return errUsage
+		}
+		if err != nil {
+			return err
+		}
+	} else {
+		if fs.NArg() < 1 {
+			return errUsage
+		}
+		aid := fs.Arg(0)
+		u, _ := url.Parse(aid)
+		if u != nil {
+			parts := strings.Split(u.Path, "/")
+			for _, p := range parts {
+				if strings.HasPrefix(p, "acct_") {
+					aid = p
+					break
+				}
+			}
+		}
+		if !strings.HasPrefix(aid, "acct_") {
+			return fmt.Errorf("invalid account id or URL: %s", aid)
+		}
+		a.ID = aid
+	}
+	if err := saveState(a); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, strings.TrimSpace(`
+Running in isolation mode.
+
+To switch back to normal mode, you can either:
+
+    A) delete the tier.state file in this directory, or
+    B) run tier from another directory
+
+The account dashboard is located at:
+
+    https://dashboard.stripe.com/%s/test
+`), a.ID)
+	fmt.Fprintln(stdout)
+	return nil
 }
