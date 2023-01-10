@@ -490,6 +490,17 @@ func fileOrStdin(fname string) (io.ReadCloser, error) {
 	if fname == "-" {
 		return io.NopCloser(stdin), nil
 	}
+	u, err := url.Parse(fname)
+	if err == nil && (u.Scheme == "http" || u.Scheme == "https") {
+		res, err := http.Get(fname)
+		if err != nil {
+			return nil, err
+		}
+		if res.StatusCode/100 != 2 {
+			return nil, fmt.Errorf("http error fetching pricing.json: %s", res.Status)
+		}
+		return res.Body, nil
+	}
 	return os.Open(fname)
 }
 
