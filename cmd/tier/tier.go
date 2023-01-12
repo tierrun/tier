@@ -188,7 +188,7 @@ func runTier(cmd string, args []string) (err error) {
 			pj = fs.Arg(0)
 		}
 
-		f, err := fileOrStdin(pj)
+		f, err := fileOrStdin(ctx, pj)
 		if err != nil {
 			return err
 		}
@@ -433,7 +433,7 @@ func runTier(cmd string, args []string) (err error) {
 	}
 }
 
-func fileOrStdin(fname string) (io.ReadCloser, error) {
+func fileOrStdin(ctx context.Context, fname string) (io.ReadCloser, error) {
 	if fname == "" {
 		return nil, errUsage
 	}
@@ -442,7 +442,12 @@ func fileOrStdin(fname string) (io.ReadCloser, error) {
 	}
 	u, err := url.Parse(fname)
 	if err == nil && (u.Scheme == "http" || u.Scheme == "https") {
-		res, err := http.Get(fname)
+		r, err := http.NewRequestWithContext(ctx, "GET", fname, nil)
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set("Accept", "application/json")
+		res, err := http.DefaultClient.Do(r)
 		if err != nil {
 			return nil, err
 		}
