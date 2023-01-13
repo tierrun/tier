@@ -49,7 +49,7 @@ type ReportRequest struct {
 	Org     string
 	Feature refs.Name
 	N       int
-	At      time.Time
+	At      time.Time // default is time.Now()
 	Clobber bool
 }
 
