@@ -198,9 +198,29 @@ func (c *Client) Report(ctx context.Context, org, feature string, n int) error {
 	return err
 }
 
+type ReportParams struct {
+	At      time.Time // default is time.Now()
+	Clobber bool      // default is false
+}
+
 // ReportUsage reports usage based on the provided ReportRequest fields.
-func (c *Client) ReportUsage(ctx context.Context, r apitypes.ReportRequest) error {
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/report"), r)
+func (c *Client) ReportUsage(ctx context.Context, org, feature string, n int, rp *ReportParams) error {
+	var p ReportParams
+	if rp != nil {
+		p = *rp
+	}
+	fn, err := refs.ParseName(feature)
+	if err != nil {
+		return err
+	}
+	r := apitypes.ReportRequest{
+		Org:     org,
+		Feature: fn,
+		N:       n,
+		At:      p.At,
+		Clobber: p.Clobber,
+	}
+	_, err = fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/report"), r)
 	return err
 }
 

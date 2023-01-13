@@ -100,11 +100,9 @@ func TestAPISubscribe(t *testing.T) {
 		t.Helper()
 		defer maybeFailNow(t)
 		fn := mpn(feature)
-		err := tc.ReportUsage(ctx, apitypes.ReportRequest{
-			Org:     org,
-			Feature: fn,
+		err := tc.ReportUsage(ctx, org, fn.String(), n, &tier.ReportParams{
 			At:      time.Now().Add(1 * time.Minute),
-			N:       n,
+			Clobber: false,
 		})
 		diff.Test(t, t.Errorf, err, wantErr)
 	}
@@ -403,11 +401,7 @@ func TestTierReport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tc.ReportUsage(ctx, apitypes.ReportRequest{
-		Org:     "org:test",
-		Feature: mpn("feature:t"),
-		N:       10,
-
+	if err := tc.ReportUsage(ctx, "org:test", "feature:t", 10, &tier.ReportParams{
 		// Report the usage at a time in the near future to avoid
 		// complaints from Stripe about being too early (e.g. the same
 		// start time as the current phase) or too late (e.g. > 5mins
