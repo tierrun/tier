@@ -70,25 +70,9 @@ nfpms:
     description: The Tier CLI
     homepage: https://github.com/tierrun/tier
     license: BSD-3-Clause
-    # contents:
-    #   - src: ./completions/tier.bash
-    #     dst: /etc/bash_completion.d/tier
-    #   - src: ./completions/tier.fish
-    #     dst: /usr/share/fish/completions/tier.fish
-    #   - src: ./completions/tier.zsh
-    #     dst: /usr/local/share/zsh/site-functions/_tier
     formats:
     - deb
     - rpm
-    replacements:
-      darwin: macOS
-# scoop:
-#   bucket:
-#     owner: tier
-#     name: scoop-bucket
-#   homepage: "https://tier.run/docs"
-#   description: "The Tier CLI"
-#   license: BSD-3-Clause
 brews:
   - homepage: "https://tier.run/"
     description: "The Tier CLI"
@@ -106,8 +90,8 @@ brews:
     #   zsh_completion.install "completions/tier.zsh" => "_tier"
     #   fish_completion.install "completions/tier.fish"
 archives:
-  - replacements:
-      darwin: macOS
+  - 
+    rlcp: true
     format_overrides:
       - goos: windows
         format: zip
