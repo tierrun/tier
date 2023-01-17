@@ -31,4 +31,4 @@ export VERSION_SHORT="$SHORT"
 export VERSION_LONG="$LONG"
 export VERSION_GIT_HASH="$GIT_HASH"
 
-goreleaser release --rm-dist --skip-publish "$@"
+goreleaser release --rm-dist "$@"
