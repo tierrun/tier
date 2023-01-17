@@ -4,7 +4,6 @@ go 1.19
 
 require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
-	github.com/google/go-cmp v0.5.8
 	github.com/kr/pretty v0.3.0
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
@@ -19,7 +18,6 @@ require (
 
 require (
 	github.com/BurntSushi/toml v0.4.1 // indirect
-	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220218215828-6cf2b201936e // indirect
 )
