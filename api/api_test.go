@@ -204,9 +204,9 @@ func TestPhaseBadOrg(t *testing.T) {
 	tc, _ := newTestClient(t)
 	_, err := tc.LookupPhase(ctx, "org:nope")
 	diff.Test(t, t.Errorf, err, &apitypes.Error{
-		Status:  404,
-		Code:    "not_found",
-		Message: "Not Found",
+		Status:  400,
+		Code:    "org_not_found",
+		Message: "org not found",
 	})
 	_, err = tc.LookupPhase(ctx, "")
 	diff.Test(t, t.Errorf, err, &apitypes.Error{
