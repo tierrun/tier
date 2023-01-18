@@ -423,6 +423,12 @@ func TestScheduleCancel(t *testing.T) {
 	}})
 }
 
+func TestScheduleCancelNothing(t *testing.T) {
+	s := newScheduleTester(t)
+	s.cancel("org:paid")
+	// nothing failed, success
+}
+
 func TestScheduleCancelNoLimits(t *testing.T) {
 	featureX := mpf("feature:x@plan:test@0")
 	s := newScheduleTester(t)

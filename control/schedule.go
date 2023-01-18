@@ -381,8 +381,14 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 		return err
 	}
 
+	cancelNow := len(phases) == 1 && len(phases[0].Features) == 0
+
 	s, err := c.lookupSubscription(ctx, org, defaultScheduleName)
 	if errors.Is(err, errSubscriptionNotFound) {
+		if cancelNow {
+			// No subscription to cancel.
+			return nil
+		}
 		// create a new subscription for org via a schedule, this will
 		// also create the org if it does not already exist.
 		//
@@ -394,7 +400,6 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 		return err
 	}
 
-	cancelNow := len(phases) == 1 && len(phases[0].Features) == 0
 	if cancelNow {
 		return c.cancelSchedule(ctx, s.ScheduleID)
 	}
