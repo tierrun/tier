@@ -46,10 +46,10 @@ func WithAccount(t *testing.T, c *stripe.Client) *stripe.Client {
 }
 
 func createAccount(c *stripe.Client, logf func(string, ...any)) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	bo := backoff.NewBackoff("stroke: create account backoff", logf, 5*time.Second)
+	bo := backoff.NewBackoff("stroke: create account backoff", logf, 10*time.Second)
 	for {
 		select {
 		case <-ctx.Done():
