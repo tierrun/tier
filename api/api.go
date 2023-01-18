@@ -190,12 +190,12 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if sr.Info != nil {
-		info := (*control.OrgInfo)(sr.Info)
+		info := infoToOrgInfo(sr.Info)
 		if err := h.c.PutCustomer(r.Context(), sr.Org, info); err != nil {
 			return err
 		}
 	}
-	return h.c.ScheduleNow(r.Context(), sr.Org, phases)
+	return h.c.Schedule(r.Context(), sr.Org, phases)
 }
 
 func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
@@ -225,7 +225,15 @@ func (h *Handler) serveWhoIs(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		res.OrgInfo = (*apitypes.OrgInfo)(info)
+		res.OrgInfo = &apitypes.OrgInfo{
+			Email:           info.Email,
+			Name:            info.Name,
+			Description:     info.Description,
+			Phone:           info.Phone,
+			Metadata:        info.Metadata,
+			PaymentMethod:   info.PaymentMethod,
+			InvoiceSettings: apitypes.InvoiceSettings(info.InvoiceSettings),
+		}
 	}
 
 	return httpJSON(w, res)
@@ -349,4 +357,16 @@ func (w *byteCountResponseWriter) Write(p []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(p)
 	w.n += n
 	return n, err
+}
+
+func infoToOrgInfo(info *apitypes.OrgInfo) *control.OrgInfo {
+	return &control.OrgInfo{
+		Email:           info.Email,
+		Name:            info.Name,
+		Description:     info.Description,
+		Phone:           info.Phone,
+		Metadata:        info.Metadata,
+		PaymentMethod:   info.PaymentMethod,
+		InvoiceSettings: control.InvoiceSettings(info.InvoiceSettings),
+	}
 }
