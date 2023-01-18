@@ -378,7 +378,12 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 		return err
 	}
 
-	cancelNow := len(phases) == 1 && len(phases[0].Features) == 0
+	scheduleNow := phases[0].Effective.IsZero()
+	cancelNow := scheduleNow && len(phases[0].Features) == 0
+
+	if cancelNow && len(phases) > 1 {
+		return errors.New("tier: a cancel phase must be the final phase")
+	}
 
 	s, err := c.lookupSubscription(ctx, org, defaultScheduleName)
 	if errors.Is(err, errSubscriptionNotFound) {
@@ -413,7 +418,12 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 		}
 
 		if cp.Valid() {
-			phases = append([]Phase{cp}, phases...)
+			if scheduleNow {
+				// attach phase to current
+				phases[0].Effective = cp.Effective
+			} else {
+				phases = append([]Phase{cp}, phases...)
+			}
 		}
 
 		err = c.updateSchedule(ctx, s.ScheduleID, defaultScheduleName, phases)
