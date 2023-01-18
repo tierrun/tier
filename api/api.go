@@ -195,6 +195,11 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+
+	if len(phases) == 0 {
+		return nil
+	}
+
 	return h.c.Schedule(r.Context(), sr.Org, phases)
 }
 

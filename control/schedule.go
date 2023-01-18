@@ -355,6 +355,9 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) error {
+	if len(phases) == 0 {
+		return errors.New("tier: schedule: at least one phase required")
+	}
 	err := c.schedule(ctx, org, phases)
 	var e *stripe.Error
 	if errors.As(err, &e) {
@@ -520,6 +523,9 @@ func (c *Client) LookupStatus(ctx context.Context, org string) (string, error) {
 
 func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err error) {
 	s, err := c.lookupSubscription(ctx, org, defaultScheduleName)
+	if errors.Is(err, errSubscriptionNotFound) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
