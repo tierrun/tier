@@ -463,8 +463,9 @@ func TestScheduleMinMaxItems(t *testing.T) {
 
 	// effectively cancel an org that does not exist
 	err := c.SubscribeTo(ctx, "org:example", nil)
-	if !errors.Is(err, ErrOrgNotFound) {
-		t.Fatalf("got %v, want %v", err, ErrOrgNotFound)
+	if err != nil {
+		// canceling an org that does not exist is not an error, it's a nop
+		t.Fatal(err)
 	}
 
 	fps := FeaturePlans(fs)

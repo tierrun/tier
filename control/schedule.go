@@ -374,12 +374,6 @@ func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) error
 func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err error) {
 	defer errorfmt.Handlef("tier: schedule: %q: %w", org, &err)
 
-	for i, p := range phases {
-		if len(p.Features) > 20 {
-			return fmt.Errorf("stripe: phase %d contains too many features", i)
-		}
-	}
-
 	if err := c.PutCustomer(ctx, org, nil); err != nil {
 		return err
 	}
