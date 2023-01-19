@@ -209,6 +209,14 @@ func ByName(a, b FeaturePlan) bool {
 	return a.name < b.name
 }
 
+func FeaturePlanNames(fps []FeaturePlan) []string {
+	s := make([]string, len(fps))
+	for i := range fps {
+		s[i] = fps[i].String()
+	}
+	return s
+}
+
 func (fp *FeaturePlan) UnmarshalJSON(b []byte) error {
 	return unmarshal(fp, ParseFeaturePlan, b)
 }

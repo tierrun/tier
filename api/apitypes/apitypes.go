@@ -32,7 +32,7 @@ type PhaseResponse struct {
 }
 
 type InvoiceSettings struct {
-	DefaultPaymentMethod string
+	DefaultPaymentMethod string `json:"default_payment_method"`
 }
 
 type OrgInfo struct {
@@ -42,14 +42,25 @@ type OrgInfo struct {
 	Phone       string            `json:"phone"`
 	Metadata    map[string]string `json:"metadata"`
 
-	PaymentMethod   string
-	InvoiceSettings InvoiceSettings
+	PaymentMethod   string          `json:"payment_method"`
+	InvoiceSettings InvoiceSettings `json:"invoice_settings"`
+}
+
+type CheckoutParams struct {
+	SuccessURL string `json:"success_url"`
+	CancelURL  string `json:"cancel_url"`
 }
 
 type ScheduleRequest struct {
 	Org    string
 	Info   *OrgInfo
 	Phases []Phase
+
+	Checkout *CheckoutParams
+}
+
+type ScheduleResponse struct {
+	CheckoutURL string `json:"checkout_url,omitempty"`
 }
 
 type ReportRequest struct {

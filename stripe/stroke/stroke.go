@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,8 +37,8 @@ func randomString() string {
 	return hex.EncodeToString(b[:])
 }
 
-func WithAccount(t *testing.T, c *stripe.Client) *stripe.Client {
-	accountID, err := createAccount(c, t.Logf)
+func WithAccount(t testing.TB, c *stripe.Client) *stripe.Client {
+	accountID, err := createAccount(c, t)
 	if err != nil {
 		t.Fatalf("error creating account: %v", err)
 	}
@@ -45,11 +46,11 @@ func WithAccount(t *testing.T, c *stripe.Client) *stripe.Client {
 	return c.CloneAs(accountID)
 }
 
-func createAccount(c *stripe.Client, logf func(string, ...any)) (string, error) {
+func createAccount(c *stripe.Client, t testing.TB) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	bo := backoff.NewBackoff("stroke: create account backoff", logf, 10*time.Second)
+	bo := backoff.NewBackoff("stroke: create account backoff", t.Logf, 10*time.Second)
 	for {
 		select {
 		case <-ctx.Done():
@@ -62,9 +63,11 @@ func createAccount(c *stripe.Client, logf func(string, ...any)) (string, error) 
 		}
 		var f stripe.Form
 		f.Set("type", "standard")
+		name := strings.Join([]string{"tier", t.Name(), randomString()}, ".")
+		f.Set("business_profile", "name", name)
 		err := c.Do(ctx, "POST", "/v1/accounts", f, &v)
 		if err != nil {
-			logf("error creating account: %v; backing off", err)
+			t.Logf("error creating account: %v; backing off", err)
 			bo.BackOff(ctx, err)
 			continue
 		}

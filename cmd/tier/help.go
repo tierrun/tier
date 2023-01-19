@@ -143,6 +143,13 @@ Flags:
 	--cancel
 		cancel the org's subscription. It is an error to provide a plan
 		or featurePlan with this flag.
+	--checkout=<success_url>
+		subscribe the org to plans and features using Stripe Checkout.
+		The success url is required, and may be used with the
+		--cancel_url flag.
+	--cancel_url=<cancel_url>
+		specify a cancel_url for Stripe Checkout. This flag is ignored
+		if --checkout is not set.
 
 Global Flags:
 

@@ -274,6 +274,8 @@ func runTier(cmd string, args []string) (err error) {
 		email := fs.String("email", "", "sets the customer email address")
 		trial := fs.Int("trial", 0, "sets the trial period in days")
 		cancel := fs.Bool("cancel", false, "cancels the subscription")
+		successURL := fs.String("checkout", "", "subscribe via Stripe checkout")
+		cancelURL := fs.String("cancel_url", "", "sets the cancel URL for use with -checkout")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -321,7 +323,22 @@ func runTier(cmd string, args []string) (err error) {
 		}
 
 		vlogf("subscribing %s to %v", org, refs)
-		return tc().Schedule(ctx, org, p)
+
+		useCheckout := *successURL != ""
+		if useCheckout {
+			p.Checkout = &apitypes.CheckoutParams{
+				SuccessURL: *successURL,
+				CancelURL:  *cancelURL,
+			}
+		}
+		sr, err := tc().Schedule(ctx, org, p)
+		if err != nil {
+			return err
+		}
+		if useCheckout {
+			fmt.Fprintln(stdout, sr.CheckoutURL)
+		}
+		return err
 	case "phases":
 		if len(args) < 1 {
 			return errUsage

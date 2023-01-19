@@ -240,20 +240,21 @@ func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...
 
 type Phase = apitypes.Phase
 type OrgInfo = apitypes.OrgInfo
+type CheckoutParams = apitypes.CheckoutParams
 
 type ScheduleParams struct {
-	Info   *OrgInfo
-	Phases []Phase
+	Info     *OrgInfo
+	Phases   []Phase
+	Checkout *CheckoutParams
 }
 
-func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) error {
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/subscribe"), &apitypes.ScheduleRequest{
-		Org:    org,
-		Info:   (*apitypes.OrgInfo)(p.Info),
-		Phases: copyPhases(p.Phases),
+func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) (*apitypes.ScheduleResponse, error) {
+	return fetch.OK[*apitypes.ScheduleResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/subscribe"), &apitypes.ScheduleRequest{
+		Org:      org,
+		Info:     (*apitypes.OrgInfo)(p.Info),
+		Phases:   copyPhases(p.Phases),
+		Checkout: p.Checkout,
 	})
-
-	return err
 }
 
 func copyPhases(phases []Phase) []apitypes.Phase {

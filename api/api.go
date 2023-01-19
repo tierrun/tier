@@ -196,6 +196,17 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if sr.Checkout != nil {
+		cp := (*control.CheckoutParams)(sr.Checkout)
+		link, err := h.c.Checkout(r.Context(), sr.Org, phases, cp)
+		if err != nil {
+			return err
+		}
+		return httpJSON(w, &apitypes.ScheduleResponse{
+			CheckoutURL: link,
+		})
+	}
+
 	if len(phases) == 0 {
 		return nil
 	}
