@@ -100,13 +100,6 @@ func TestSchedule(t *testing.T) {
 	check("org:example", []Phase{
 		{
 			Org:       "org:example",
-			Current:   false,
-			Effective: t0, // unchanged by advanced clock
-			Features:  planFree,
-			Plans:     plans("plan:free@0"),
-		},
-		{
-			Org:       "org:example",
 			Current:   true,
 			Effective: t1, // unchanged by advanced clock
 			Features:  planPro,
@@ -117,13 +110,6 @@ func TestSchedule(t *testing.T) {
 	// downgrade and check no new phases
 	sub("org:example", planFree)
 	check("org:example", []Phase{
-		{
-			Org:       "org:example",
-			Current:   false,
-			Effective: t0, // unchanged by advanced clock
-			Features:  planFree,
-			Plans:     plans("plan:free@0"),
-		},
 		{
 			Org:       "org:example",
 			Current:   true,
