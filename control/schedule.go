@@ -15,22 +15,22 @@ import (
 	"tier.run/values"
 )
 
-// TODO(bmizerany): we don't support names in the MVP but the hook is
-// here as a reminder of the thought that has gone into it so far and
-// that we want to support it on subscribe.
-const subscriptionNameTODO = "default"
+const defaultScheduleName = "default"
 
 // Errors
 var (
 	ErrOrgNotFound     = errors.New("org not found")
 	ErrInvalidMetadata = errors.New("invalid metadata")
 	ErrInvalidPhase    = errors.New("invalid phase")
+	ErrInvalidCancel   = errors.New("invalid cancel")
 
 	// ErrInvalidFeature is returned when a customer that should have been
 	// created is not found after "creating" it. This can happen in Test
 	// Mode if the test data was cleared but the idempotency key is still
 	// cached at Stripe.
 	ErrUnexpectedMissingOrg = errors.New("unexpected missing org")
+
+	errSubscriptionNotFound = errors.New("subscription not found")
 )
 
 type ValidationError struct {
@@ -39,12 +39,19 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string { return e.Message }
 
+type InvoiceSettings struct {
+	DefaultPaymentMethod string
+}
+
 type OrgInfo struct {
 	Email       string
 	Name        string
 	Description string
 	Phone       string
 	Metadata    map[string]string
+
+	PaymentMethod   string
+	InvoiceSettings InvoiceSettings
 }
 
 type Phase struct {
@@ -61,6 +68,12 @@ type Phase struct {
 	// without the other features in the plan, this phase is considered
 	// "fragmented".
 	Plans []refs.Plan
+}
+
+// Valid reports if the Phase is one that would be retured from the Stripe API.
+// Currently, this is determined if the phase has any features.
+func (p *Phase) Valid() bool {
+	return len(p.Features) > 0
 }
 
 func (p *Phase) Fragments() []refs.FeaturePlan {
@@ -124,6 +137,9 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 		return s.Metadata.Name == name
 	})
 	if err != nil {
+		if errors.Is(err, stripe.ErrNotFound) {
+			return subscription{}, errSubscriptionNotFound
+		}
 		return subscription{}, err
 	}
 
@@ -144,20 +160,9 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 }
 
 func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub string, phases []Phase) (err error) {
-	defer errorfmt.Handlef("stripe: createSubscription: %q: %w", org, &err)
+	defer errorfmt.Handlef("stripe: createSchedule: %q: %w", org, &err)
 
-	// Update customer regardless of whether we have phases to update or
-	// not.
-	cid, err := c.putCustomer(ctx, org, nil)
-	if err != nil {
-		return err
-	}
-
-	if len(phases) == 0 {
-		return nil
-	}
-
-	do := func(f stripe.Form) (string, error) {
+	create := func(f stripe.Form) (string, error) {
 		var v struct {
 			ID string
 		}
@@ -171,21 +176,112 @@ func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub s
 		defer errorfmt.Handlef("fromSub: %w", &err)
 		var f stripe.Form
 		f.Set("from_subscription", fromSub)
-		sid, err := do(f)
+		sid, err := create(f)
 		if err != nil {
 			return err
 		}
+		// We can only update phases after the schedule is created from
+		// the subscription.
 		return c.updateSchedule(ctx, sid, name, phases)
 	} else {
 		defer errorfmt.Handlef("newSub: %w", &err)
+		cid, err := c.WhoIs(ctx, org)
+		if err != nil {
+			return err
+		}
 		var f stripe.Form
 		f.Set("customer", cid)
 		if err := addPhases(ctx, c, &f, false, name, phases); err != nil {
 			return err
 		}
-		_, err := do(f)
+		_, err = create(f)
 		return err
 	}
+}
+
+func (c *Client) lookupPhases(ctx context.Context, org, schedID, name string) (current Phase, all []Phase, err error) {
+	defer errorfmt.Handlef("lookupPhases: %w", &err)
+
+	type T struct {
+		stripe.ID
+		Current struct {
+			Start int64 `json:"start_date"`
+			End   int64 `json:"end_date"`
+		} `json:"current_phase"`
+		Phases []struct {
+			Metadata struct {
+				Name string `json:"tier.subscription"`
+			}
+			Start int64 `json:"start_date"`
+			Items []struct {
+				Price stripePrice
+			}
+		}
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	var s T
+	g.Go(func() error {
+		var f stripe.Form
+		f.Add("expand[]", "phases.items.price")
+		return c.Stripe.Do(ctx, "GET", "/v1/subscription_schedules/"+schedID, f, &s)
+	})
+
+	var m []refs.FeaturePlan
+	featureByProviderID := make(map[string]refs.FeaturePlan)
+	g.Go(func() (err error) {
+		fs, err := c.Pull(ctx, 0)
+		if err != nil {
+			return err
+		}
+		m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
+			featureByProviderID[f.ProviderID] = f.FeaturePlan
+			return f.FeaturePlan
+		})
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return Phase{}, nil, err
+	}
+
+	for _, p := range s.Phases {
+		fs := make([]refs.FeaturePlan, 0, len(p.Items))
+		for _, pi := range p.Items {
+			fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
+		}
+
+		var plans []refs.Plan
+		for _, f := range fs {
+			if slices.Contains(plans, f.Plan()) {
+				continue
+			}
+			inModel := numFeaturesInPlan(m, f.Plan())
+			inPhase := numFeaturesInPlan(fs, f.Plan())
+			if inModel == inPhase {
+				plans = append(plans, f.Plan())
+			}
+
+		}
+
+		p := Phase{
+			Org:       org,
+			Effective: time.Unix(p.Start, 0),
+			Features:  fs,
+			Current:   p.Start == s.Current.Start,
+
+			Plans: plans,
+		}
+		all = append(all, p)
+		if p.Current {
+			current = p
+		}
+	}
+	slices.SortFunc(all, func(a, b Phase) bool {
+		return a.Effective.Before(b.Effective)
+	})
+	return current, all, nil
 }
 
 func (c *Client) updateSchedule(ctx context.Context, schedID, name string, phases []Phase) (err error) {
@@ -200,10 +296,32 @@ func (c *Client) updateSchedule(ctx context.Context, schedID, name string, phase
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+schedID, f, nil)
 }
 
+func (c *Client) cancelSchedule(ctx context.Context, schedID string) (err error) {
+	defer errorfmt.Handlef("stripe: cancelSchedule: %q: %w", schedID, &err)
+	if schedID == "" {
+		return errors.New("subscription id required")
+	}
+	var f stripe.Form
+	// Explicit set to the same as Stripe's defaults to avoid any
+	// surprises.
+	f.Set("invoice_now", true)
+	f.Set("prorate", true)
+	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+schedID+"/cancel", f, nil)
+}
+
 func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name string, phases []Phase) error {
 	for i, p := range phases {
 		if len(p.Features) == 0 {
-			return fmt.Errorf("phase %d must contain at least one feature", i)
+			if i != len(phases)-1 {
+				return errors.New("stripe: cancel phase must be the final phase")
+			}
+			if i == 0 {
+				f.Set("phases", i, "end_date", nowOrSpecific(p.Effective))
+			} else {
+				f.Set("phases", i-1, "end_date", nowOrSpecific(p.Effective))
+			}
+			f.Set("end_behavior", "cancel")
+			return nil
 		}
 
 		fs, err := c.lookupFeatures(ctx, p.Features)
@@ -236,8 +354,11 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 	return nil
 }
 
-func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) (err error) {
-	err = c.schedule(ctx, org, phases)
+func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) error {
+	if len(phases) == 0 {
+		return errors.New("tier: schedule: at least one phase required")
+	}
+	err := c.schedule(ctx, org, phases)
 	var e *stripe.Error
 	if errors.As(err, &e) {
 		if e.Code == "resource_missing" && e.Param == "customer" {
@@ -253,37 +374,68 @@ func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) (err 
 func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err error) {
 	defer errorfmt.Handlef("tier: schedule: %q: %w", org, &err)
 
-	for i, p := range phases {
-		if len(p.Features) > 20 {
-			return ErrTooManyItems
-		}
-		if len(p.Features) == 0 {
-			return fmt.Errorf("%w: phase %d must contain a minimum of one item", ErrInvalidPhase, i)
-		}
+	if err := c.PutCustomer(ctx, org, nil); err != nil {
+		return err
 	}
 
-	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
-	if errors.Is(err, ErrOrgNotFound) {
-		// We only need to pay the API penalty of creating a customer
-		// if we know in fact it does not exist.
-		if _, err := c.putCustomer(ctx, org, nil); err != nil {
-			return err
-		}
-		return c.createSchedule(ctx, org, subscriptionNameTODO, "", phases)
+	scheduleNow := phases[0].Effective.IsZero()
+	cancelNow := scheduleNow && len(phases[0].Features) == 0
+
+	if cancelNow && len(phases) > 1 {
+		return errors.New("tier: a cancel phase must be the final phase")
 	}
-	if errors.Is(err, stripe.ErrNotFound) {
-		return c.createSchedule(ctx, org, subscriptionNameTODO, "", phases)
+
+	s, err := c.lookupSubscription(ctx, org, defaultScheduleName)
+	if errors.Is(err, errSubscriptionNotFound) {
+		if cancelNow {
+			// No subscription to cancel.
+			return nil
+		}
+		// create a new subscription for org via a schedule, this will
+		// also create the org if it does not already exist.
+		//
+		// If this is a "cancel immediately" request, it returns
+		// ErrInvalidCancel because there is no subscription to cancel.
+		return c.createSchedule(ctx, org, defaultScheduleName, "", phases)
 	}
 	if err != nil {
 		return err
 	}
-	if s.ScheduleID != "" {
-		err = c.updateSchedule(ctx, s.ScheduleID, subscriptionNameTODO, phases)
-		if isReleased(err) {
-			return c.createSchedule(ctx, org, subscriptionNameTODO, s.ID, phases)
-		}
+
+	if cancelNow {
+		return c.cancelSchedule(ctx, s.ScheduleID)
+	}
+
+	// TODO(bmizerany): check status?
+
+	if s.ScheduleID == "" {
+		// We have a subscription, but it is has no active schedule, so start a new one.
+		return c.createSchedule(ctx, org, defaultScheduleName, s.ID, phases)
 	} else {
-		return c.createSchedule(ctx, org, subscriptionNameTODO, s.ID, phases)
+		cp, _, err := c.lookupPhases(ctx, org, s.ScheduleID, defaultScheduleName)
+		if err != nil {
+			return err
+		}
+
+		if cp.Valid() {
+			if scheduleNow {
+				// attach phase to current
+				phases[0].Effective = cp.Effective
+			} else {
+				phases = append([]Phase{cp}, phases...)
+			}
+		}
+
+		err = c.updateSchedule(ctx, s.ScheduleID, defaultScheduleName, phases)
+		if isReleased(err) {
+			// Lost a race with the clock and the schedule was
+			// released just after seeing it, but before our
+			// update.
+			return c.createSchedule(ctx, org, defaultScheduleName, s.ID, phases)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	return err
 }
@@ -300,57 +452,11 @@ func isReleased(err error) bool {
 	return false
 }
 
-func (c *Client) scheduleCancel(ctx context.Context, org string) (err error) {
-	defer errorfmt.Handlef("tier: scheduleCancel: %q: %w", org, &err)
-	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
-	if err != nil {
-		return err
-	}
-	var f stripe.Form
-	f.Set("prorate", true)
-	f.Set("invoice_now", true)
-	return c.Stripe.Do(ctx, "DELETE", "/v1/subscriptions/"+s.ID, f, nil)
-}
-
-// ScheduleNow is like Schedule but immediately starts the first phase as the
-// current phase and cuts off any phases that have not yet been transitioned
-// to.
-//
-// The first phase must have a zero Effective time to indicate that it should
-// start now.
-func (c *Client) ScheduleNow(ctx context.Context, org string, phases []Phase) (err error) {
-	defer errorfmt.Handlef("tier: ScheduleNow: %q: %w", org, &err)
-	c.Logf("phases: %v", phases)
-	if len(phases) > 0 {
-		if !phases[0].Effective.IsZero() {
-			return errors.New("first phase must be effective now")
-		}
-		if len(phases) == 1 && len(phases[0].Features) == 0 {
-			return c.scheduleCancel(ctx, org)
-		} else {
-			cps, err := c.LookupPhases(ctx, org)
-			if err != nil && !errors.Is(err, ErrOrgNotFound) {
-				return err
-			}
-			for _, p := range cps {
-				if p.Current {
-					p0 := phases[0]
-					p.Features = p0.Features
-					p.Trial = p0.Trial
-					phases[0] = p
-					break
-				}
-			}
-		}
-	}
-	return c.Schedule(ctx, org, phases)
-}
-
 // SubscribeTo subscribes org to the provided features effective immediately,
 // taking over any in-progress schedule. The customer is billed immediately
 // with prorations if any.
 func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeaturePlan) error {
-	return c.ScheduleNow(ctx, org, []Phase{{
+	return c.Schedule(ctx, org, []Phase{{
 		Features: fs,
 	}})
 
@@ -412,7 +518,7 @@ func notFoundAsNil(err error) error {
 }
 
 func (c *Client) LookupStatus(ctx context.Context, org string) (string, error) {
-	s, err := c.lookupSubscription(ctx, org, subscriptionNameTODO)
+	s, err := c.lookupSubscription(ctx, org, defaultScheduleName)
 	if err != nil {
 		return "", err
 	}
@@ -420,109 +526,15 @@ func (c *Client) LookupStatus(ctx context.Context, org string) (string, error) {
 }
 
 func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err error) {
-	defer errorfmt.Handlef("LookupPhases: %w", &err)
-
-	cid, err := c.WhoIs(ctx, org)
+	s, err := c.lookupSubscription(ctx, org, defaultScheduleName)
+	if errors.Is(err, errSubscriptionNotFound) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil, notFoundAsNil(err)
-	}
-
-	type T struct {
-		stripe.ID
-		Current struct {
-			Start int64 `json:"start_date"`
-			End   int64 `json:"end_date"`
-		} `json:"current_phase"`
-		Phases []struct {
-			Metadata struct {
-				Name string `json:"tier.subscription"`
-			}
-			Start int64 `json:"start_date"`
-			Items []struct {
-				Price stripePrice
-			}
-		}
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	var ss []T
-	g.Go(func() error {
-		var f stripe.Form
-		f.Add("expand[]", "data.phases.items.price")
-		f.Set("customer", cid)
-		got, err := stripe.Slurp[T](ctx, c.Stripe, "GET", "/v1/subscription_schedules", f)
-		if len(got) > 0 { // preserve nil
-			ss = got
-		}
-		return notFoundAsNil(err)
-	})
-
-	var m []refs.FeaturePlan
-	featureByProviderID := make(map[string]refs.FeaturePlan)
-	g.Go(func() (err error) {
-		fs, err := c.Pull(ctx, 0)
-		if err != nil {
-			return err
-		}
-		m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
-			featureByProviderID[f.ProviderID] = f.FeaturePlan
-			return f.FeaturePlan
-		})
-		return err
-	})
-
-	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-
-	for _, s := range ss {
-		const name = "default" // TODO(bmizerany): support multiple subscriptions by name
-		var skip bool
-		for _, p := range s.Phases {
-			if p.Metadata.Name != name {
-				skip = true
-				break
-			}
-		}
-		if skip {
-			continue
-		}
-		for _, p := range s.Phases {
-			fs := make([]refs.FeaturePlan, 0, len(p.Items))
-			for _, pi := range p.Items {
-				fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
-			}
-
-			var plans []refs.Plan
-			for _, f := range fs {
-				if slices.Contains(plans, f.Plan()) {
-					continue
-				}
-				inModel := numFeaturesInPlan(m, f.Plan())
-				inPhase := numFeaturesInPlan(fs, f.Plan())
-				if inModel == inPhase {
-					plans = append(plans, f.Plan())
-				}
-
-			}
-
-			ps = append(ps, Phase{
-				Org:       org,
-				Effective: time.Unix(p.Start, 0),
-				Features:  fs,
-				Current:   p.Start == s.Current.Start,
-
-				Plans: plans,
-			})
-		}
-	}
-
-	slices.SortFunc(ps, func(a, b Phase) bool {
-		return a.Effective.Before(b.Effective)
-	})
-
-	return ps, nil
+	_, all, err := c.lookupPhases(ctx, org, s.ScheduleID, defaultScheduleName)
+	return all, err
 }
 
 type Period struct {
@@ -782,6 +794,8 @@ func setOrgInfo(f *stripe.Form, info *OrgInfo) error {
 	stripe.MaybeSet(f, "name", info.Name)
 	stripe.MaybeSet(f, "phone", info.Phone)
 	stripe.MaybeSet(f, "description", info.Description)
+	stripe.MaybeSet(f, "payment_method", info.PaymentMethod)
+	stripe.MaybeSet(f, "invoice_settings[default_payment_method]", info.PaymentMethod)
 	for k, v := range info.Metadata {
 		if strings.HasPrefix(k, "tier.") {
 			return fmt.Errorf("%w: %q", ErrInvalidMetadata, k)

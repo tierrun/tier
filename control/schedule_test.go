@@ -100,13 +100,6 @@ func TestSchedule(t *testing.T) {
 	check("org:example", []Phase{
 		{
 			Org:       "org:example",
-			Current:   false,
-			Effective: t0, // unchanged by advanced clock
-			Features:  planFree,
-			Plans:     plans("plan:free@0"),
-		},
-		{
-			Org:       "org:example",
 			Current:   true,
 			Effective: t1, // unchanged by advanced clock
 			Features:  planPro,
@@ -117,13 +110,6 @@ func TestSchedule(t *testing.T) {
 	// downgrade and check no new phases
 	sub("org:example", planFree)
 	check("org:example", []Phase{
-		{
-			Org:       "org:example",
-			Current:   false,
-			Effective: t0, // unchanged by advanced clock
-			Features:  planFree,
-			Plans:     plans("plan:free@0"),
-		},
 		{
 			Org:       "org:example",
 			Current:   true,
@@ -159,22 +145,35 @@ func (s *scheduleTester) advance(days int) {
 	s.clock.Advance(s.clock.Now().AddDate(0, 0, days))
 }
 
-//lint:ignore U1000 saving for a rainy day
 func (s *scheduleTester) advanceToNextPeriod() {
 	// TODO(bmizerany): make Phase aware so that it jumps based on the
 	// start of the next phase if the current phase ends sooner than than 1
 	// interval of the current phase.
 	now := s.clock.Now()
 	eop := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
-	s.t.Logf("advancing to end of period %s", eop)
+	s.t.Logf("advancing to next period %s", eop)
 	s.clock.Advance(eop)
 }
 
 func (s *scheduleTester) cancel(org string) {
 	s.t.Helper()
 	s.t.Logf("cancelling %s", org)
-	if err := s.cc.ScheduleNow(context.Background(), org, []Phase{{}}); err != nil {
+	s.schedule(org, 0) // no features
+}
+
+func (s *scheduleTester) setPaymentMethod(org string, pm string) {
+	s.t.Helper()
+	s.t.Logf("setting payment method for %s to %s", org, pm)
+	if err := s.cc.PutCustomer(context.Background(), org, &OrgInfo{
+		PaymentMethod: pm,
+		InvoiceSettings: InvoiceSettings{
+			DefaultPaymentMethod: pm,
+		},
+	}); err != nil {
 		s.t.Fatal(err)
+	}
+	if s.t.Failed() {
+		s.t.FailNow()
 	}
 }
 
@@ -196,7 +195,7 @@ func (s *scheduleTester) schedule(org string, trialDays int, fs ...refs.FeatureP
 			Features:  fs,
 		}}
 	}
-	if err := s.cc.ScheduleNow(context.Background(), org, ps); err != nil {
+	if err := s.cc.Schedule(context.Background(), org, ps); err != nil {
 		s.t.Fatalf("error subscribing: %v", err)
 	}
 }
@@ -232,6 +231,7 @@ func (s *scheduleTester) checkInvoices(org string, want []Invoice) {
 	if err != nil {
 		s.t.Fatal(err)
 	}
+	s.t.Logf("got invoices %# v", pretty.Formatter(got))
 	ignorePeriod := diff.KeepFields[Period]()
 	s.diff(got, want, ignorePeriod)
 }
@@ -375,6 +375,7 @@ func TestScheduleCancel(t *testing.T) {
 		Base:        31 * 1000,
 	}})
 
+	s.setPaymentMethod("org:paid", "pm_card_us")
 	s.schedule("org:paid", 0, featureX, featureBase)
 	s.report("org:paid", "feature:x", 99)
 	s.advance(10)
@@ -406,6 +407,12 @@ func TestScheduleCancel(t *testing.T) {
 		TotalPreTax:    31000,
 		Total:          31000,
 	}})
+}
+
+func TestScheduleCancelNothing(t *testing.T) {
+	s := newScheduleTester(t)
+	s.cancel("org:paid")
+	// nothing failed, success
 }
 
 func TestScheduleCancelNoLimits(t *testing.T) {
@@ -442,8 +449,9 @@ func TestScheduleMinMaxItems(t *testing.T) {
 
 	// effectively cancel an org that does not exist
 	err := c.SubscribeTo(ctx, "org:example", nil)
-	if !errors.Is(err, ErrOrgNotFound) {
-		t.Fatalf("got %v, want %v", err, ErrOrgNotFound)
+	if err != nil {
+		// canceling an org that does not exist is not an error, it's a nop
+		t.Fatal(err)
 	}
 
 	fps := FeaturePlans(fs)

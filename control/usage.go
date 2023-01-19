@@ -30,7 +30,7 @@ type Usage struct {
 }
 
 func (c *Client) ReportUsage(ctx context.Context, org string, feature refs.Name, use Report) error {
-	itemID, isMetered, err := c.lookupSubscriptionItemID(ctx, org, subscriptionNameTODO, feature)
+	itemID, isMetered, err := c.lookupSubscriptionItemID(ctx, org, defaultScheduleName, feature)
 	if err != nil {
 		return err
 	}

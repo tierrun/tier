@@ -31,12 +31,19 @@ type PhaseResponse struct {
 	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
 }
 
+type InvoiceSettings struct {
+	DefaultPaymentMethod string
+}
+
 type OrgInfo struct {
 	Email       string            `json:"email"`
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
 	Phone       string            `json:"phone"`
 	Metadata    map[string]string `json:"metadata"`
+
+	PaymentMethod   string
+	InvoiceSettings InvoiceSettings
 }
 
 type ScheduleRequest struct {
