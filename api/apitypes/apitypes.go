@@ -19,9 +19,9 @@ func (e *Error) Error() string {
 }
 
 type Phase struct {
-	Trial     bool
-	Effective time.Time
-	Features  []string
+	Trial     bool      `json:"trial,omitempty"`
+	Effective time.Time `json:"effective,omitempty"`
+	Features  []string  `json:"features,omitempty"`
 }
 
 type PhaseResponse struct {
@@ -47,17 +47,17 @@ type OrgInfo struct {
 }
 
 type CheckoutRequest struct {
-	Org        string
-	TrialDays  int
-	Features   []string
-	SuccessURL string
-	CancelURL  string
+	Org        string   `json:"org"`
+	TrialDays  int      `json:"trial_days"`
+	Features   []string `json:"features"`
+	SuccessURL string   `json:"success_url"`
+	CancelURL  string   `json:"cancel_url"`
 }
 
 type ScheduleRequest struct {
-	Org    string
-	Info   *OrgInfo
-	Phases []Phase
+	Org    string   `json:"org"`
+	Info   *OrgInfo `json:"info"`
+	Phases []Phase  `json:"phases"`
 }
 
 // ScheduleResponse is the expected response from a schedule request. It is
@@ -65,15 +65,15 @@ type ScheduleRequest struct {
 type ScheduleResponse struct{}
 
 type CheckoutResponse struct {
-	URL string
+	URL string `json:"url"`
 }
 
 type ReportRequest struct {
-	Org     string
-	Feature refs.Name
-	N       int
-	At      time.Time // default is time.Now()
-	Clobber bool
+	Org     string    `json:"org"`
+	Feature refs.Name `json:"feature"`
+	N       int       `json:"n"`
+	At      time.Time `json:"at"`
+	Clobber bool      `json:"clobber"`
 }
 
 type WhoIsResponse struct {
