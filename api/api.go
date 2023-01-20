@@ -13,6 +13,7 @@ import (
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/control"
+	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/trweb"
 	"tier.run/values"
@@ -124,12 +125,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
 		return
 	}
-	var e *control.ValidationError
-	if errors.As(err, &e) {
+	var ve *control.ValidationError
+	if errors.As(err, &ve) {
 		trweb.WriteError(w, &trweb.HTTPError{
 			Status:  400,
 			Code:    "invalid_request",
-			Message: e.Message,
+			Message: ve.Message,
+		})
+		return
+	}
+	var pe *refs.ParseError
+	if errors.As(err, &pe) {
+		trweb.WriteError(w, &trweb.HTTPError{
+			Status:  400,
+			Code:    "invalid_request",
+			Message: pe.Message,
 		})
 		return
 	}
