@@ -13,7 +13,6 @@ import (
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/control"
-	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/trweb"
 	"tier.run/values"
@@ -173,13 +172,14 @@ func (h *Handler) serveCheckout(w http.ResponseWriter, r *http.Request) error {
 	if err := trweb.DecodeStrict(r, &cr); err != nil {
 		return err
 	}
-	fs, err := refs.ParseFeaturePlans(cr.Features...)
+	m, err := h.c.Pull(r.Context(), 0)
 	if err != nil {
 		return err
 	}
-
-	h.Logf("checkout: %# v", pretty.Formatter(cr))
-
+	fs, err := control.ExpandPlans(m, cr.Features...)
+	if err != nil {
+		return err
+	}
 	link, err := h.c.Checkout(r.Context(), cr.Org, cr.SuccessURL, &control.CheckoutParams{
 		TrialDays: cr.TrialDays,
 		Features:  fs,

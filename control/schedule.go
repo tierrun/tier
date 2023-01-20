@@ -356,7 +356,7 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 
 type CheckoutParams struct {
 	TrialDays int
-	Features  []refs.FeaturePlan
+	Features  []Feature
 	CancelURL string
 }
 
@@ -395,24 +395,7 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 			f.Set("subscription_data", "trial_period_days", p.TrialDays)
 		}
 
-		m, err := c.Pull(ctx, 0)
-		if err != nil {
-			return "", err
-		}
-
-		names := refs.FeaturePlanNames(p.Features)
-		fps, err := Expand(m, names...)
-		if err != nil {
-			return "", err
-		}
-
-		// TODO(bmizerany): we can just use m here and avoid the costly
-		// lookupFeatures
-		fs, err := c.lookupFeatures(ctx, fps)
-		if err != nil {
-			return "", err
-		}
-		for i, fe := range fs {
+		for i, fe := range p.Features {
 			f.Set("line_items", i, "price", fe.ProviderID)
 			if len(fe.Tiers) == 0 {
 				f.Set("line_items", i, "quantity", 1)
@@ -428,10 +411,8 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) error {
-	if len(phases) == 0 {
-		return errors.New("tier: schedule: at least one phase required")
-	}
 	err := c.schedule(ctx, org, phases)
+	c.Logf("stripe: schedule: %v", err)
 	var e *stripe.Error
 	if errors.As(err, &e) {
 		if e.Code == "resource_missing" && e.Param == "customer" {
@@ -449,6 +430,10 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 
 	if err := c.PutCustomer(ctx, org, nil); err != nil {
 		return err
+	}
+
+	if len(phases) == 0 {
+		return errors.New("tier: schedule: at least one phase required")
 	}
 
 	scheduleNow := phases[0].Effective.IsZero()

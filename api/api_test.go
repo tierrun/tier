@@ -220,8 +220,8 @@ func TestAPISubscribe(t *testing.T) {
 
 	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, &apitypes.Error{
 		Status:  400,
-		Code:    "feature_not_found",
-		Message: "feature not found",
+		Code:    "TERR1020",
+		Message: "feature or plan not found",
 	})
 
 	sub("org:test", []string{"plan:nope@0"}, &apitypes.Error{

@@ -390,16 +390,23 @@ func (c *Client) Pull(ctx context.Context, limit int) ([]Feature, error) {
 	return fs, nil
 }
 
-// Expand parses each ref in refs and adds it to the result. If the ref is a
+func Expand(m []Feature, names ...string) ([]refs.FeaturePlan, error) {
+	fs, err := ExpandPlans(m, names...)
+	if err != nil {
+		return nil, err
+	}
+	return FeaturePlans(fs), nil
+}
+
+// ExpandPlans parses each ref in refs and adds it to the result. If the ref is a
 // plan ref, Expand will append all features in fs for that plan to the result.
 // returns an error if any ref is invalid or not availabe in the
 //
 // The parameter fs is assumed to have no two features with the same FeaturePlan.
 //
 // It returns an error if any.
-func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
-	var out []refs.FeaturePlan
-
+func ExpandPlans(fs []Feature, names ...string) ([]Feature, error) {
+	var out []Feature
 	for _, name := range names {
 		fp, err := refs.ParseFeaturePlan(name)
 		if err != nil {
@@ -410,17 +417,26 @@ func Expand(fs []Feature, names ...string) ([]refs.FeaturePlan, error) {
 			n := len(out)
 			for _, f := range fs {
 				if f.InPlan(p) {
-					out = append(out, f.FeaturePlan)
+					out = append(out, f)
 				}
 			}
 			if len(out) == n {
 				return nil, fmt.Errorf("%w found for plan %q", ErrNoFeatures, p)
 			}
 		} else {
-			out = append(out, fp)
+			var found bool
+			for _, f := range fs {
+				if f.FeaturePlan == fp {
+					found = true
+					out = append(out, f)
+					break
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("%w found named %q", ErrNoFeatures, fp)
+			}
 		}
 	}
-
 	return out, nil
 }
 
