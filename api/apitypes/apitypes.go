@@ -46,21 +46,26 @@ type OrgInfo struct {
 	InvoiceSettings InvoiceSettings `json:"invoice_settings"`
 }
 
-type CheckoutParams struct {
-	SuccessURL string `json:"success_url"`
-	CancelURL  string `json:"cancel_url"`
+type CheckoutRequest struct {
+	Org        string
+	TrialDays  int
+	Features   []string
+	SuccessURL string
+	CancelURL  string
 }
 
 type ScheduleRequest struct {
 	Org    string
 	Info   *OrgInfo
 	Phases []Phase
-
-	Checkout *CheckoutParams
 }
 
-type ScheduleResponse struct {
-	CheckoutURL string `json:"checkout_url,omitempty"`
+// ScheduleResponse is the expected response from a schedule request. It is
+// currently empty, reserved for furture use.
+type ScheduleResponse struct{}
+
+type CheckoutResponse struct {
+	URL string
 }
 
 type ReportRequest struct {

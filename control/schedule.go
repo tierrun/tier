@@ -355,11 +355,12 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 }
 
 type CheckoutParams struct {
-	SuccessURL string
-	CancelURL  string
+	TrialDays int
+	Features  []refs.FeaturePlan
+	CancelURL string
 }
 
-func (c *Client) Checkout(ctx context.Context, org string, phases []Phase, p *CheckoutParams) (link string, err error) {
+func (c *Client) Checkout(ctx context.Context, org string, successURL string, p *CheckoutParams) (link string, err error) {
 	defer errorfmt.Handlef("checkout: %w", &err)
 
 	cid, err := c.putCustomer(ctx, org, nil)
@@ -377,12 +378,11 @@ func (c *Client) Checkout(ctx context.Context, org string, phases []Phase, p *Ch
 
 	var f stripe.Form
 	f.Set("customer", cid)
-	f.Set("success_url", p.SuccessURL)
+	f.Set("success_url", successURL)
 	if p.CancelURL != "" {
 		f.Set("cancel_url", p.CancelURL)
 	}
-
-	if len(phases) == 0 {
+	if len(p.Features) == 0 {
 		f.Set("mode", "setup")
 		// TODO: support other payment methods:
 		// https://stripe.com/docs/api/checkout/sessions/create#create_checkout_session-payment_method_types
@@ -391,11 +391,8 @@ func (c *Client) Checkout(ctx context.Context, org string, phases []Phase, p *Ch
 	} else {
 		f.Set("mode", "subscription")
 		f.Set("subscription_data", "metadata", "tier.subscription", "default")
-
-		// checkout does not support schedules, so we need to compute trial
-		// days based at least two phases if a trial period is desired.
-		if trialDays := computeTrialDays(phases); trialDays > 0 {
-			f.Set("subscription_data", "trial_period_days", trialDays)
+		if p.TrialDays > 0 {
+			f.Set("subscription_data", "trial_period_days", p.TrialDays)
 		}
 
 		m, err := c.Pull(ctx, 0)
@@ -403,7 +400,7 @@ func (c *Client) Checkout(ctx context.Context, org string, phases []Phase, p *Ch
 			return "", err
 		}
 
-		names := refs.FeaturePlanNames(phases[0].Features)
+		names := refs.FeaturePlanNames(p.Features)
 		fps, err := Expand(m, names...)
 		if err != nil {
 			return "", err
@@ -427,20 +424,6 @@ func (c *Client) Checkout(ctx context.Context, org string, phases []Phase, p *Ch
 			return "", err
 		}
 		return v.URL, nil
-	}
-}
-
-func computeTrialDays(ps []Phase) int {
-	switch {
-	case len(ps) == 0:
-		return 0
-	case len(ps) == 1 && ps[0].Trial:
-		return 35 * 365 // a long time into the future
-	case len(ps) == 1 && !ps[0].Trial:
-		return 0
-	default:
-		d := ps[1].Effective.Sub(ps[0].Effective)
-		return int(d.Hours() / 24)
 	}
 }
 

@@ -52,33 +52,25 @@ func TestAPICheckout(t *testing.T) {
 	}}
 	cc.Push(ctx, m, pushLogger(t))
 
-	cp := &apitypes.CheckoutParams{SuccessURL: "https://example.com/success"}
-
 	t.Run("card setup", func(t *testing.T) {
-		r, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
-			Checkout: cp,
-			// No phases == card setup.
-		})
+		r, err := tc.Checkout(ctx, "org:test", "https://example.com/success", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("checkout: %s", r.CheckoutURL)
-		if r.CheckoutURL == "" {
+		t.Logf("checkout: %s", r.URL)
+		if r.URL == "" {
 			t.Error("unexpected empty checkout url")
 		}
 	})
 	t.Run("subscription", func(t *testing.T) {
-		r, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
-			Checkout: cp,
-			Phases: []tier.Phase{{
-				Features: []string{"feature:x@plan:test@0"},
-			}},
+		r, err := tc.Checkout(ctx, "org:test", "https://example.com/success", &tier.CheckoutParams{
+			Features: []string{"feature:x@plan:test@0"},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("checkout: %s", r.CheckoutURL)
-		if r.CheckoutURL == "" {
+		t.Logf("checkout: %s", r.URL)
+		if r.URL == "" {
 			t.Error("unexpected empty checkout url")
 		}
 	})
