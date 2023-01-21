@@ -354,11 +354,65 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 	return nil
 }
 
-func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) error {
-	if len(phases) == 0 {
-		return errors.New("tier: schedule: at least one phase required")
+type CheckoutParams struct {
+	TrialDays int
+	Features  []Feature
+	CancelURL string
+}
+
+func (c *Client) Checkout(ctx context.Context, org string, successURL string, p *CheckoutParams) (link string, err error) {
+	defer errorfmt.Handlef("checkout: %w", &err)
+
+	cid, err := c.putCustomer(ctx, org, nil)
+	if err != nil {
+		return "", err
 	}
+
+	checkout := func(f stripe.Form) (string, error) {
+		var v struct{ URL string }
+		if err := c.Stripe.Do(ctx, "POST", "/v1/checkout/sessions", f, &v); err != nil {
+			return "", err
+		}
+		return v.URL, nil
+	}
+
+	var f stripe.Form
+	f.Set("customer", cid)
+	f.Set("success_url", successURL)
+	if p.CancelURL != "" {
+		f.Set("cancel_url", p.CancelURL)
+	}
+	if len(p.Features) == 0 {
+		f.Set("mode", "setup")
+		// TODO: support other payment methods:
+		// https://stripe.com/docs/api/checkout/sessions/create#create_checkout_session-payment_method_types
+		f.Set("payment_method_types[]", "card")
+		return checkout(f)
+	} else {
+		f.Set("mode", "subscription")
+		f.Set("subscription_data", "metadata", "tier.subscription", "default")
+		if p.TrialDays > 0 {
+			f.Set("subscription_data", "trial_period_days", p.TrialDays)
+		}
+
+		for i, fe := range p.Features {
+			f.Set("line_items", i, "price", fe.ProviderID)
+			if len(fe.Tiers) == 0 {
+				f.Set("line_items", i, "quantity", 1)
+			}
+		}
+
+		var v struct{ URL string }
+		if err := c.Stripe.Do(ctx, "POST", "/v1/checkout/sessions", f, &v); err != nil {
+			return "", err
+		}
+		return v.URL, nil
+	}
+}
+
+func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) error {
 	err := c.schedule(ctx, org, phases)
+	c.Logf("stripe: schedule: %v", err)
 	var e *stripe.Error
 	if errors.As(err, &e) {
 		if e.Code == "resource_missing" && e.Param == "customer" {
@@ -376,6 +430,10 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 
 	if err := c.PutCustomer(ctx, org, nil); err != nil {
 		return err
+	}
+
+	if len(phases) == 0 {
+		return errors.New("tier: schedule: at least one phase required")
 	}
 
 	scheduleNow := phases[0].Effective.IsZero()

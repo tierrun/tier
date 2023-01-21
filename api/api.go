@@ -13,6 +13,7 @@ import (
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/control"
+	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/trweb"
 	"tier.run/values"
@@ -124,12 +125,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
 		return
 	}
-	var e *control.ValidationError
-	if errors.As(err, &e) {
+	var ve *control.ValidationError
+	if errors.As(err, &ve) {
 		trweb.WriteError(w, &trweb.HTTPError{
 			Status:  400,
 			Code:    "invalid_request",
-			Message: e.Message,
+			Message: ve.Message,
+		})
+		return
+	}
+	var pe *refs.ParseError
+	if errors.As(err, &pe) {
+		trweb.WriteError(w, &trweb.HTTPError{
+			Status:  400,
+			Code:    "invalid_request",
+			Message: pe.Message,
 		})
 		return
 	}
@@ -154,6 +164,8 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 		return h.serveReport(w, r)
 	case "/v1/subscribe":
 		return h.serveSubscribe(w, r)
+	case "/v1/checkout":
+		return h.serveCheckout(w, r)
 	case "/v1/phase":
 		return h.servePhase(w, r)
 	case "/v1/pull":
@@ -165,11 +177,45 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 	}
 }
 
+func (h *Handler) serveCheckout(w http.ResponseWriter, r *http.Request) error {
+	var cr apitypes.CheckoutRequest
+	if err := trweb.DecodeStrict(r, &cr); err != nil {
+		return err
+	}
+	m, err := h.c.Pull(r.Context(), 0)
+	if err != nil {
+		return err
+	}
+	fs, err := control.ExpandPlans(m, cr.Features...)
+	if err != nil {
+		return err
+	}
+	link, err := h.c.Checkout(r.Context(), cr.Org, cr.SuccessURL, &control.CheckoutParams{
+		TrialDays: cr.TrialDays,
+		Features:  fs,
+		CancelURL: cr.CancelURL,
+	})
+	if err != nil {
+		return err
+	}
+	return httpJSON(w, &apitypes.CheckoutResponse{URL: link})
+}
+
 func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 	var sr apitypes.ScheduleRequest
 	if err := trweb.DecodeStrict(r, &sr); err != nil {
 		return err
 	}
+	if sr.Info != nil {
+		info := infoToOrgInfo(sr.Info)
+		if err := h.c.PutCustomer(r.Context(), sr.Org, info); err != nil {
+			return err
+		}
+	}
+	if len(sr.Phases) == 0 {
+		return nil
+	}
+
 	var phases []control.Phase
 	if len(sr.Phases) > 0 {
 		m, err := h.c.Pull(r.Context(), 0)
@@ -189,17 +235,6 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	}
-	if sr.Info != nil {
-		info := infoToOrgInfo(sr.Info)
-		if err := h.c.PutCustomer(r.Context(), sr.Org, info); err != nil {
-			return err
-		}
-	}
-
-	if len(phases) == 0 {
-		return nil
-	}
-
 	return h.c.Schedule(r.Context(), sr.Org, phases)
 }
 

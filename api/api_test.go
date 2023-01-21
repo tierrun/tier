@@ -42,6 +42,40 @@ func newTestClient(t *testing.T) (*tier.Client, *control.Client) {
 	return tc, cc
 }
 
+func TestAPICheckout(t *testing.T) {
+	ctx := context.Background()
+	tc, cc := newTestClient(t)
+	m := []control.Feature{{
+		FeaturePlan: mpf("feature:x@plan:test@0"),
+		Interval:    "@monthly",
+		Currency:    "usd",
+	}}
+	cc.Push(ctx, m, pushLogger(t))
+
+	t.Run("card setup", func(t *testing.T) {
+		r, err := tc.Checkout(ctx, "org:test", "https://example.com/success", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("checkout: %s", r.URL)
+		if r.URL == "" {
+			t.Error("unexpected empty checkout url")
+		}
+	})
+	t.Run("subscription", func(t *testing.T) {
+		r, err := tc.Checkout(ctx, "org:test", "https://example.com/success", &tier.CheckoutParams{
+			Features: []string{"feature:x@plan:test@0"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("checkout: %s", r.URL)
+		if r.URL == "" {
+			t.Error("unexpected empty checkout url")
+		}
+	})
+}
+
 func TestAPISubscribe(t *testing.T) {
 	t.Parallel()
 
@@ -186,8 +220,8 @@ func TestAPISubscribe(t *testing.T) {
 
 	sub("org:test", []string{"plan:test@0", "feature:nope@0"}, &apitypes.Error{
 		Status:  400,
-		Code:    "feature_not_found",
-		Message: "feature not found",
+		Code:    "TERR1020",
+		Message: "feature or plan not found",
 	})
 
 	sub("org:test", []string{"plan:nope@0"}, &apitypes.Error{
@@ -446,8 +480,9 @@ func TestScheduleWithCustomerInfoNoPhases(t *testing.T) {
 		},
 	}
 
+	_, err := tc.Schedule(ctx, "org:test", p)
 	diff.Test(t, t.Fatalf,
-		tc.Schedule(ctx, "org:test", p),
+		err,
 		&apitypes.Error{
 			Status:  400,
 			Code:    "invalid_metadata",
@@ -466,7 +501,7 @@ func TestScheduleWithCustomerInfoNoPhases(t *testing.T) {
 	)
 	diff.Test(t, t.Fatalf, got, apitypes.WhoIsResponse{})
 
-	if err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
+	if _, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
 		Info: &tier.OrgInfo{
 			Email: "test2@example2.com",
 		},
@@ -497,5 +532,22 @@ func maybeFailNow(t *testing.T) {
 	t.Helper()
 	if t.Failed() {
 		t.FailNow()
+	}
+}
+
+func pushLogger(t *testing.T) func(f control.Feature, err error) {
+	t.Helper()
+	return pushLogWith(t, t.Fatalf)
+}
+
+func pushLogWith(t *testing.T, fatalf func(string, ...any)) func(f control.Feature, err error) {
+	t.Helper()
+	return func(f control.Feature, err error) {
+		t.Helper()
+		if err == nil {
+			t.Logf("pushed %q", f.FeaturePlan)
+		} else {
+			fatalf("error pushing %q: %v", f.FeaturePlan, err)
+		}
 	}
 }

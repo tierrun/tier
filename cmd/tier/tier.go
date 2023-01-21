@@ -274,6 +274,8 @@ func runTier(cmd string, args []string) (err error) {
 		email := fs.String("email", "", "sets the customer email address")
 		trial := fs.Int("trial", 0, "sets the trial period in days")
 		cancel := fs.Bool("cancel", false, "cancels the subscription")
+		successURL := fs.String("checkout", "", "subscribe via Stripe checkout")
+		cancelURL := fs.String("cancel_url", "", "sets the cancel URL for use with -checkout")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -281,11 +283,6 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 		org := fs.Arg(0)
-		p := &tier.ScheduleParams{
-			Info: &tier.OrgInfo{
-				Email: *email,
-			},
-		}
 
 		// the cancel must be used without arguments
 		if *cancel && fs.NArg() > 1 {
@@ -293,13 +290,31 @@ func runTier(cmd string, args []string) (err error) {
 			return errUsage
 		}
 
-		if *cancel {
-			p.Phases = []tier.Phase{{}}
-		}
-
 		var refs []string
 		if fs.NArg() > 1 {
 			refs = fs.Args()[1:]
+		}
+
+		vlogf("subscribing %s to %v", org, refs)
+
+		useCheckout := *successURL != ""
+		if useCheckout {
+			cr, err := tc().Checkout(ctx, org, *successURL, &tier.CheckoutParams{
+				TrialDays: *trial,
+				Features:  refs,
+				CancelURL: *cancelURL,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(stdout, cr.URL)
+			return nil
+		} else {
+			p := &tier.ScheduleParams{
+				Info: &tier.OrgInfo{
+					Email: *email,
+				},
+			}
 			switch {
 			case *trial > 0:
 				p.Phases = []tier.Phase{{
@@ -318,10 +333,12 @@ func runTier(cmd string, args []string) (err error) {
 			default:
 				p.Phases = []tier.Phase{{Features: refs}}
 			}
+			if *cancel {
+				p.Phases = []tier.Phase{{}}
+			}
+			_, err := tc().Schedule(ctx, org, p)
+			return err
 		}
-
-		vlogf("subscribing %s to %v", org, refs)
-		return tc().Schedule(ctx, org, p)
 	case "phases":
 		if len(args) < 1 {
 			return errUsage

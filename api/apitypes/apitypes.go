@@ -19,9 +19,9 @@ func (e *Error) Error() string {
 }
 
 type Phase struct {
-	Trial     bool
-	Effective time.Time
-	Features  []string
+	Trial     bool      `json:"trial,omitempty"`
+	Effective time.Time `json:"effective,omitempty"`
+	Features  []string  `json:"features,omitempty"`
 }
 
 type PhaseResponse struct {
@@ -32,7 +32,7 @@ type PhaseResponse struct {
 }
 
 type InvoiceSettings struct {
-	DefaultPaymentMethod string
+	DefaultPaymentMethod string `json:"default_payment_method"`
 }
 
 type OrgInfo struct {
@@ -42,22 +42,38 @@ type OrgInfo struct {
 	Phone       string            `json:"phone"`
 	Metadata    map[string]string `json:"metadata"`
 
-	PaymentMethod   string
-	InvoiceSettings InvoiceSettings
+	PaymentMethod   string          `json:"payment_method"`
+	InvoiceSettings InvoiceSettings `json:"invoice_settings"`
+}
+
+type CheckoutRequest struct {
+	Org        string   `json:"org"`
+	TrialDays  int      `json:"trial_days"`
+	Features   []string `json:"features"`
+	SuccessURL string   `json:"success_url"`
+	CancelURL  string   `json:"cancel_url"`
 }
 
 type ScheduleRequest struct {
-	Org    string
-	Info   *OrgInfo
-	Phases []Phase
+	Org    string   `json:"org"`
+	Info   *OrgInfo `json:"info"`
+	Phases []Phase  `json:"phases"`
+}
+
+// ScheduleResponse is the expected response from a schedule request. It is
+// currently empty, reserved for furture use.
+type ScheduleResponse struct{}
+
+type CheckoutResponse struct {
+	URL string `json:"url"`
 }
 
 type ReportRequest struct {
-	Org     string
-	Feature refs.Name
-	N       int
-	At      time.Time // default is time.Now()
-	Clobber bool
+	Org     string    `json:"org"`
+	Feature refs.Name `json:"feature"`
+	N       int       `json:"n"`
+	At      time.Time `json:"at"`
+	Clobber bool      `json:"clobber"`
 }
 
 type WhoIsResponse struct {

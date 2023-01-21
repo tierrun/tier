@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"os"
@@ -67,6 +69,7 @@ func preallocateAccount() error {
 
 func createSwitchAccount(ctx context.Context, sc *stripe.Client) (stripe.Account, error) {
 	return stripe.CreateAccount(ctx, sc, &stripe.AccountParams{
+		BusinessName: randomString("tier.switch."),
 		Meta: stripe.Meta{
 			"tier.account": "switch",
 		},
@@ -121,4 +124,14 @@ func cachePath(parts ...string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// randomString returns a random 16 byte hexencoded string with the given
+// prefix.
+func randomString(prefix string) string {
+	s := make([]byte, 16)
+	if _, err := rand.Read(s); err != nil {
+		panic(err)
+	}
+	return prefix + hex.EncodeToString(s)
 }

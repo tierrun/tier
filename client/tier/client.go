@@ -238,30 +238,43 @@ func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...
 	return err
 }
 
+// Checkout creates a new checkout link for the provided org and features, if
+// any; otherwise, if no features are specified, and payment setup link is
+// returned instead.
+func (c *Client) Checkout(ctx context.Context, org string, successURL string, p *CheckoutParams) (*apitypes.CheckoutResponse, error) {
+	if p == nil {
+		p = &CheckoutParams{}
+	}
+	r := &apitypes.CheckoutRequest{
+		Org:        org,
+		SuccessURL: successURL,
+		CancelURL:  p.CancelURL,
+		TrialDays:  p.TrialDays,
+		Features:   p.Features,
+	}
+	return fetch.OK[*apitypes.CheckoutResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/checkout"), r)
+}
+
 type Phase = apitypes.Phase
 type OrgInfo = apitypes.OrgInfo
+
+type CheckoutParams struct {
+	TrialDays int
+	Features  []string
+	CancelURL string
+}
 
 type ScheduleParams struct {
 	Info   *OrgInfo
 	Phases []Phase
 }
 
-func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) error {
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/subscribe"), &apitypes.ScheduleRequest{
+func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) (*apitypes.ScheduleResponse, error) {
+	return fetch.OK[*apitypes.ScheduleResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/subscribe"), &apitypes.ScheduleRequest{
 		Org:    org,
 		Info:   (*apitypes.OrgInfo)(p.Info),
-		Phases: copyPhases(p.Phases),
+		Phases: p.Phases,
 	})
-
-	return err
-}
-
-func copyPhases(phases []Phase) []apitypes.Phase {
-	c := make([]apitypes.Phase, len(phases))
-	for i, p := range phases {
-		c[i] = apitypes.Phase(p)
-	}
-	return c
 }
 
 func (c *Client) WhoAmI(ctx context.Context) (apitypes.WhoAmIResponse, error) {

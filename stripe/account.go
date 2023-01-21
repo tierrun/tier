@@ -17,8 +17,9 @@ type Account struct {
 }
 
 type AccountParams struct {
-	Type string // default is "standard"
-	Meta Meta   // optional metadata to associate with the account
+	Type         string // default is "standard"
+	Meta         Meta   // optional metadata to associate with the account
+	BusinessName string // required for switch accounts
 }
 
 var (
@@ -31,6 +32,7 @@ func CreateAccount(ctx context.Context, c *Client, p *AccountParams) (Account, e
 		p = &AccountParams{}
 	}
 	var f Form
+	f.Set("business_profile", "name", p.BusinessName)
 	if p.Type == "" {
 		f.Set("type", "standard")
 	} else {
