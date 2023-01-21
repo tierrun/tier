@@ -136,17 +136,19 @@ Flags:
 
 	--email
 		set the org's email address
-	--trial days
-		set the org's trial period to the provided number of days. If
-		negative, the tial period will last indefinitely, and no other
-		phase will come after it.
 	--cancel
 		cancel the org's subscription. It is an error to provide a plan
 		or featurePlan with this flag.
+
+Checkout only flags:
 	--checkout=<success_url>
 		subscribe the org to plans and features using Stripe Checkout.
 		The success url is required, and may be used with the
 		--cancel_url flag.
+	--trial days
+		set the org's trial period to the provided number of days. If
+		negative, the tial period will last indefinitely, and no other
+		phase will come after it.
 	--cancel_url=<cancel_url>
 		specify a cancel_url for Stripe Checkout. This flag is ignored
 		if --checkout is not set.
