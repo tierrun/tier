@@ -57,7 +57,7 @@ type OrgInfo struct {
 type Phase struct {
 	Org       string // set on read
 	Effective time.Time
-	Features  []refs.FeaturePlan
+	Features  []refs.FeaturePlan // TODO(bmizerany): make this a View (that can only come from Stripe)
 	Current   bool
 
 	Trial bool // Marks the phase as a trial phase. No fees will be incurred during a trial phase.
@@ -324,12 +324,9 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 			return nil
 		}
 
-		fs, err := c.lookupFeatures(ctx, p.Features)
+		fs, err := c.pullFeatures(ctx, p.Features)
 		if err != nil {
 			return err
-		}
-		if len(fs) != len(p.Features) {
-			return ErrFeatureNotFound
 		}
 
 		f.Set("phases", i, "metadata[tier.subscription]", name)
@@ -354,9 +351,30 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 	return nil
 }
 
+func (c *Client) pullFeatures(ctx context.Context, fps []refs.FeaturePlan) ([]Feature, error) {
+	m, err := c.Pull(ctx, 0)
+	if err != nil {
+		return nil, err
+	}
+	var fs []Feature
+	for _, f := range fps {
+		var found bool
+		for _, m := range m {
+			if m.FeaturePlan == f {
+				found = true
+				fs = append(fs, m)
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("%w: %s", ErrFeatureNotFound, f)
+		}
+	}
+	return fs, nil
+}
+
 type CheckoutParams struct {
 	TrialDays int
-	Features  []Feature
+	Features  []refs.FeaturePlan
 	CancelURL string
 }
 
@@ -395,7 +413,12 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 			f.Set("subscription_data", "trial_period_days", p.TrialDays)
 		}
 
-		for i, fe := range p.Features {
+		fs, err := c.pullFeatures(ctx, p.Features)
+		if err != nil {
+			return "", err
+		}
+
+		for i, fe := range fs {
 			f.Set("line_items", i, "price", fe.ProviderID)
 			if len(fe.Tiers) == 0 {
 				f.Set("line_items", i, "quantity", 1)
@@ -518,53 +541,6 @@ func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeatureP
 		Features: fs,
 	}})
 
-}
-
-func (c *Client) lookupFeatures(ctx context.Context, keys []refs.FeaturePlan) ([]Feature, error) {
-	if len(keys) == 0 {
-		return nil, errors.New("lookupFeatures: no features provided")
-	}
-
-	lookup := func(keys []refs.FeaturePlan) ([]Feature, error) {
-		// TODO(bmizerany): return error if len(keys) == 0. No keys means
-		// stripe returns all known prices.
-		var f stripe.Form
-		f.Add("expand[]", "data.tiers")
-		for _, k := range keys {
-			f.Add("lookup_keys[]", stripe.MakeID(k.String()))
-		}
-		pp, err := stripe.Slurp[stripePrice](ctx, c.Stripe, "GET", "/v1/prices", f)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(pp) != len(keys) {
-			// TODO(bmizerany): report which feature(s) was/are not found
-			return nil, ErrFeatureNotFound
-		}
-
-		fs := make([]Feature, len(pp))
-		for i, p := range pp {
-			fs[i] = stripePriceToFeature(p)
-		}
-		return fs, nil
-	}
-
-	var fs []Feature
-	// lookup 10 keys at a time
-	for len(keys) > 0 {
-		n := 10
-		if len(keys) < n {
-			n = len(keys)
-		}
-		lfs, err := lookup(keys[:n])
-		if err != nil {
-			return nil, err
-		}
-		fs = append(fs, lfs...)
-		keys = keys[n:]
-	}
-	return fs, nil
 }
 
 func notFoundAsNil(err error) error {

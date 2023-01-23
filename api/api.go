@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
@@ -186,7 +185,7 @@ func (h *Handler) serveCheckout(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	fs, err := control.ExpandPlans(m, cr.Features...)
+	fs, err := control.Expand(m, cr.Features...)
 	if err != nil {
 		return err
 	}
@@ -300,9 +299,6 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-
-	h.Logf("lookup phases: %# v", pretty.Formatter(ps))
-
 	for _, p := range ps {
 		if p.Current {
 			return httpJSON(w, apitypes.PhaseResponse{
@@ -313,7 +309,6 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	}
-
 	return trweb.NotFound
 }
 

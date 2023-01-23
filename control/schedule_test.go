@@ -232,8 +232,16 @@ func (s *scheduleTester) checkInvoices(org string, want []Invoice) {
 		s.t.Fatal(err)
 	}
 	s.t.Logf("got invoices %# v", pretty.Formatter(got))
-	ignorePeriod := diff.KeepFields[Period]()
-	s.diff(got, want, ignorePeriod)
+	opts := diff.OptionList(
+		diff.KeepFields[Period](),
+		diff.Transform(func(s []InvoiceLineItem) any {
+			slices.SortFunc(s, func(a, b InvoiceLineItem) bool {
+				return a.Feature.Less(b.Feature)
+			})
+			return s
+		}),
+	)
+	s.diff(got, want, opts)
 }
 
 func (s *scheduleTester) diff(got, want any, opts ...diff.Option) {
@@ -800,9 +808,9 @@ func TestSubscribeToUnknownFeatures(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
 	}
 
-	// make only plan:a valid
+	// make only feature:A known
 	tc.Push(ctx, []Feature{{
-		FeaturePlan: mpf("feature:A@plan:a@0"),
+		FeaturePlan: fs[0],
 		Interval:    "@monthly",
 		Currency:    "usd",
 		Tiers:       []Tier{{Upto: Inf}},

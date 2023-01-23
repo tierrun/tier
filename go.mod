@@ -6,10 +6,10 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/kr/pretty v0.3.0
 	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
-	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
+	golang.org/x/exp v0.0.0-20230118134722-a68e582fa157
+	golang.org/x/mod v0.6.0
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
-	golang.org/x/tools v0.1.12
+	golang.org/x/tools v0.2.0
 	honnef.co/go/tools v0.4.0-0.dev.0.20220517111757-f4a2f64ce238
 	kr.dev/diff v0.3.1-0.20221219052439-de28753499d5
 	kr.dev/errorfmt v0.1.1

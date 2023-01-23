@@ -168,8 +168,16 @@ func TestAPISubscribe(t *testing.T) {
 		if got.Effective.IsZero() {
 			t.Error("unexpected zero effective time")
 		}
-		ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective")
-		diff.Test(t, t.Errorf, got, want, ignore)
+		opts := diff.OptionList(
+			diff.ZeroFields[apitypes.PhaseResponse]("Effective"),
+			diff.Transform(func(s []control.InvoiceLineItem) any {
+				slices.SortFunc(s, func(a, b control.InvoiceLineItem) bool {
+					return a.Feature.Less(b.Feature)
+				})
+				return s
+			}),
+		)
+		diff.Test(t, t.Errorf, got, want, opts)
 	}
 
 	whoIs("org:test", &apitypes.Error{
