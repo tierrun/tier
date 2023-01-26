@@ -4,16 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/kr/pretty"
+	"github.com/tailscale/hujson"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 	"kr.dev/diff"
 	"kr.dev/errorfmt"
 	"tier.run/refs"
+	"tier.run/stripe"
 	"tier.run/stripe/stroke"
 )
 
@@ -689,6 +695,141 @@ func TestLookupPhases(t *testing.T) {
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
 }
 
+func TestLookupPhasesNoSchedule(t *testing.T) {
+	// TODO(bmizerany): This tests assumptions, but we need an integration
+	// test provin fields "like" trial actually fall off / go to zero when
+	// the trial is over. This needs a test clock with stripe.
+	newHandler := func(s string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case wants(r, "GET", "/v1/customers"):
+				writeHuJSON(w, `
+					{"data": [
+						{
+							"metadata": {"tier.org": "org:test"},
+							"id":       "cus_test",
+						},
+					]}
+				`)
+			case wants(r, "GET", "/v1/subscriptions"):
+				writeHuJSON(w, `
+					{"data": [
+						{
+							%s
+							"metadata": {
+								"tier.subscription": "default",
+							},
+							"items": {"data": [{"price": {
+								"metadata": {"tier.feature": "feature:x@0"},
+							}}]},
+						},
+					]}
+				`, s)
+			default:
+				panic(fmt.Errorf("unknown request: %s %s", r.Method, r.URL.Path))
+			}
+		})
+	}
+
+	fs := []refs.FeaturePlan{
+		mpf("feature:x@0"),
+	}
+
+	cases := []struct {
+		s    string
+		want []Phase
+	}{
+		{
+			s: `
+				"start_date": 123123123,
+			`,
+			want: []Phase{{
+				Org:       "org:test",
+				Effective: time.Unix(123123123, 0),
+				Current:   true,
+				Trial:     false,
+				Features:  fs,
+			}},
+		},
+		{
+			s: `
+				"start_date": 123123123,
+				"cancel_at": 223123123,
+			`,
+			want: []Phase{{
+				Org:       "org:test",
+				Effective: time.Unix(123123123, 0),
+				Current:   true,
+				Features:  fs,
+			}, {
+				Org:       "org:test",
+				Effective: time.Unix(223123123, 0),
+			}},
+		},
+		{
+			s: `
+				"start_date": 100000000,
+				"trial_end": 200000000,
+				"cancel_at": 300000000,
+			`,
+			want: []Phase{{
+				Org:       "org:test",
+				Effective: time.Unix(100000000, 0),
+				Current:   true,
+				Trial:     true,
+				Features:  fs,
+			}, {
+				Org:       "org:test",
+				Effective: time.Unix(200000000, 0),
+				Features:  fs,
+			}, {
+				Org:       "org:test",
+				Effective: time.Unix(300000000, 0),
+				Features:  nil, // cancel plan
+			}},
+		},
+		{
+			s: `
+				"start_date": 100000000,
+				"trial_end": 200000000,
+			`,
+			want: []Phase{{
+				Org:       "org:test",
+				Effective: time.Unix(100000000, 0),
+				Current:   true,
+				Trial:     true,
+				Features:  fs,
+			}, {
+				Org:       "org:test",
+				Effective: time.Unix(200000000, 0),
+				Features:  fs,
+			}},
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run("", func(t *testing.T) {
+			s := httptest.NewServer(newHandler(tt.s))
+			t.Cleanup(s.Close)
+
+			cc := &Client{
+				Logf: t.Logf,
+				Stripe: &stripe.Client{
+					BaseURL: s.URL,
+				},
+			}
+
+			ctx := context.Background()
+			got, err := cc.LookupPhases(ctx, "org:test")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			diff.Test(t, t.Errorf, got, tt.want)
+		})
+	}
+}
+
 func TestReportUsage(t *testing.T) {
 	fs := []Feature{
 		{
@@ -933,4 +1074,22 @@ func plans(ss ...string) []refs.Plan {
 		ps = append(ps, mpp(s))
 	}
 	return ps
+}
+
+func wants(r *http.Request, method, pattern string) bool {
+	pattern = "^" + pattern + "$"
+	rx := regexp.MustCompile(pattern)
+	return r.Method == method && rx.MatchString(r.URL.Path)
+}
+
+func writeHuJSON(w io.Writer, s string, args ...any) {
+	s = fmt.Sprintf(s, args...)
+	b, err := hujson.Standardize([]byte(s))
+	if err != nil {
+		panic(err)
+	}
+	_, err = w.Write(b)
+	if err != nil {
+		panic(err)
+	}
 }
