@@ -389,6 +389,15 @@ func runTier(cmd string, args []string) (err error) {
 		}
 		return nil
 	case "report":
+		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+		clobber := fs.Bool("clobber", false, "clobber existing value")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 {
+			return errUsage
+		}
+		args := fs.Args()
 		org, feature, sn := getArg(args, 0), getArg(args, 1), getArg(args, 2)
 		if org == "" || feature == "" || sn == "" {
 			return errUsage
@@ -397,7 +406,10 @@ func runTier(cmd string, args []string) (err error) {
 		if err != nil {
 			return err
 		}
-		return tc().Report(ctx, org, feature, n)
+		return tc().ReportUsage(ctx, org, feature, n, &tier.ReportParams{
+			At:      time.Now(),
+			Clobber: *clobber,
+		})
 	case "whoami":
 		who, err := tc().WhoAmI(ctx)
 		if err != nil {
