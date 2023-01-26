@@ -167,13 +167,19 @@ If the --live flag is provided, your accounts live mode will be used.
 `,
 	"report": `Usage:
 
-	tier [--live] report <org> <feature> <n>
+	tier [--live] report [flags] <org> <feature> <n>
 
 Tier report reports that n units of feature were used by org to Stripe.
 
 For a report of usage, see the ("tier limits") command.
 
 If the --live flag is provided, your accounts live mode will be used.
+
+Flags:
+
+    --clobber
+	Clobber any existing usage for the provided feature. If false, the
+	usage will be incremeneted by n.
 `,
 	"whois": `Usage:
 
