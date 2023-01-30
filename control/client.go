@@ -52,6 +52,9 @@ var (
 )
 
 func FeaturePlans(fs []Feature) []refs.FeaturePlan {
+	if fs == nil {
+		return nil // preserve nil
+	}
 	ns := make([]refs.FeaturePlan, len(fs))
 	for i, f := range fs {
 		ns[i] = f.FeaturePlan

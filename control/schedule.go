@@ -91,6 +91,9 @@ type subscription struct {
 	ScheduleID string
 	Status     string
 	Name       string
+	Effective  time.Time
+	TrialEnd   time.Time
+	EndDate    time.Time
 	Features   []Feature
 }
 
@@ -107,8 +110,11 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 
 	type T struct {
 		stripe.ID
-		Status string
-		Items  struct {
+		Status    string
+		StartDate int64 `json:"start_date"`
+		CancelAt  int64 `json:"cancel_at"`
+		TrialEnd  int64 `json:"trial_end"`
+		Items     struct {
 			Data []struct {
 				ID    string
 				Price stripePrice
@@ -153,8 +159,15 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 	s := subscription{
 		ID:         v.ProviderID(),
 		ScheduleID: v.Schedule.ID,
+		Effective:  time.Unix(v.StartDate, 0),
 		Status:     v.Status,
 		Features:   fs,
+	}
+	if v.TrialEnd > 0 {
+		s.TrialEnd = time.Unix(v.TrialEnd, 0)
+	}
+	if v.CancelAt > 0 {
+		s.EndDate = time.Unix(v.CancelAt, 0)
 	}
 	return s, nil
 }
@@ -199,8 +212,34 @@ func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub s
 	}
 }
 
-func (c *Client) lookupPhases(ctx context.Context, org, schedID, name string) (current Phase, all []Phase, err error) {
+func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, name string) (current Phase, all []Phase, err error) {
 	defer errorfmt.Handlef("lookupPhases: %w", &err)
+
+	if s.ScheduleID == "" {
+		ps := []Phase{{
+			Org:       org,
+			Effective: s.Effective,
+			Features:  FeaturePlans(s.Features),
+			Current:   true,
+			Trial:     !s.TrialEnd.IsZero(),
+		}}
+		if !s.TrialEnd.IsZero() {
+			ps = append(ps, Phase{
+				Org:       org,
+				Effective: s.TrialEnd,
+				Features:  FeaturePlans(s.Features),
+				Current:   false,
+				Trial:     false,
+			})
+		}
+		if !s.EndDate.IsZero() {
+			ps = append(ps, Phase{
+				Org:       org,
+				Effective: s.EndDate,
+			})
+		}
+		return ps[0], ps, nil
+	}
 
 	type T struct {
 		stripe.ID
@@ -221,11 +260,11 @@ func (c *Client) lookupPhases(ctx context.Context, org, schedID, name string) (c
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	var s T
+	var ss T
 	g.Go(func() error {
 		var f stripe.Form
 		f.Add("expand[]", "phases.items.price")
-		return c.Stripe.Do(ctx, "GET", "/v1/subscription_schedules/"+schedID, f, &s)
+		return c.Stripe.Do(ctx, "GET", "/v1/subscription_schedules/"+s.ScheduleID, f, &ss)
 	})
 
 	var m []refs.FeaturePlan
@@ -246,7 +285,7 @@ func (c *Client) lookupPhases(ctx context.Context, org, schedID, name string) (c
 		return Phase{}, nil, err
 	}
 
-	for _, p := range s.Phases {
+	for _, p := range ss.Phases {
 		fs := make([]refs.FeaturePlan, 0, len(p.Items))
 		for _, pi := range p.Items {
 			fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
@@ -269,7 +308,7 @@ func (c *Client) lookupPhases(ctx context.Context, org, schedID, name string) (c
 			Org:       org,
 			Effective: time.Unix(p.Start, 0),
 			Features:  fs,
-			Current:   p.Start == s.Current.Start,
+			Current:   p.Start == ss.Current.Start,
 
 			Plans: plans,
 		}
@@ -470,7 +509,7 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 		// We have a subscription, but it is has no active schedule, so start a new one.
 		return c.createSchedule(ctx, org, defaultScheduleName, s.ID, phases)
 	} else {
-		cp, _, err := c.lookupPhases(ctx, org, s.ScheduleID, defaultScheduleName)
+		cp, _, err := c.lookupPhases(ctx, org, s, defaultScheduleName)
 		if err != nil {
 			return err
 		}
@@ -591,7 +630,7 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	if err != nil {
 		return nil, err
 	}
-	_, all, err := c.lookupPhases(ctx, org, s.ScheduleID, defaultScheduleName)
+	_, all, err := c.lookupPhases(ctx, org, s, defaultScheduleName)
 	return all, err
 }
 

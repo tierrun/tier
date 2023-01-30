@@ -47,8 +47,6 @@ func (c *Client) ReportUsage(ctx context.Context, org string, feature refs.Name,
 		f.Set("action", "increment")
 	}
 
-	// TODO(bmizerany): take idempotency key from context or use random
-	// string. if in context then upstream client supplied their own.
 	f.SetIdempotencyKey(randomString())
 
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)

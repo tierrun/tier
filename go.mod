@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/kr/pretty v0.3.0
-	github.com/tailscale/hujson v0.0.0-20220630195928-54599719472f
+	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
