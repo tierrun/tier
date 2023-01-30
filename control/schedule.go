@@ -94,6 +94,7 @@ type subscription struct {
 	Effective  time.Time
 	TrialEnd   time.Time
 	EndDate    time.Time
+	CanceledAt time.Time
 	Features   []Feature
 }
 
@@ -110,11 +111,12 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 
 	type T struct {
 		stripe.ID
-		Status    string
-		StartDate int64 `json:"start_date"`
-		CancelAt  int64 `json:"cancel_at"`
-		TrialEnd  int64 `json:"trial_end"`
-		Items     struct {
+		Status     string
+		StartDate  int64 `json:"start_date"`
+		CancelAt   int64 `json:"cancel_at"`
+		CanceledAt int64 `json:"canceled_at"`
+		TrialEnd   int64 `json:"trial_end"`
+		Items      struct {
 			Data []struct {
 				ID    string
 				Price stripePrice
@@ -169,6 +171,9 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 	if v.CancelAt > 0 {
 		s.EndDate = time.Unix(v.CancelAt, 0)
 	}
+	if v.CanceledAt > 0 {
+		s.CanceledAt = time.Unix(v.CanceledAt, 0)
+	}
 	return s, nil
 }
 
@@ -216,28 +221,7 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 	defer errorfmt.Handlef("lookupPhases: %w", &err)
 
 	if s.ScheduleID == "" {
-		ps := []Phase{{
-			Org:       org,
-			Effective: s.Effective,
-			Features:  FeaturePlans(s.Features),
-			Current:   true,
-			Trial:     !s.TrialEnd.IsZero(),
-		}}
-		if !s.TrialEnd.IsZero() {
-			ps = append(ps, Phase{
-				Org:       org,
-				Effective: s.TrialEnd,
-				Features:  FeaturePlans(s.Features),
-				Current:   false,
-				Trial:     false,
-			})
-		}
-		if !s.EndDate.IsZero() {
-			ps = append(ps, Phase{
-				Org:       org,
-				Effective: s.EndDate,
-			})
-		}
+		ps := subscriptionToPhases(org, s)
 		return ps[0], ps, nil
 	}
 
@@ -321,6 +305,47 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 		return a.Effective.Before(b.Effective)
 	})
 	return current, all, nil
+}
+
+func subscriptionToPhases(org string, s subscription) []Phase {
+	ps := []Phase{{
+		Org:       org,
+		Effective: s.Effective,
+		Features:  FeaturePlans(s.Features),
+		Current:   true,
+	}}
+
+	if !s.TrialEnd.IsZero() {
+		// Break the trial into a separate phase.
+		ps = []Phase{{
+			Org:       org,
+			Effective: s.Effective,
+			Features:  FeaturePlans(s.Features),
+			Current:   s.Status == "trialing",
+			Trial:     true,
+		}, {
+			Org:       org,
+			Effective: s.TrialEnd,
+			Features:  FeaturePlans(s.Features),
+			Current:   s.Status != "trialing" && s.Status != "canceled",
+		}}
+	}
+
+	endDate := s.EndDate
+	if !s.CanceledAt.IsZero() {
+		endDate = s.CanceledAt
+	}
+
+	if !endDate.IsZero() {
+		ps = append(ps, Phase{
+			Org:       org,
+			Effective: endDate,
+			Features:  nil,
+			Current:   s.Status == "canceled",
+		})
+	}
+
+	return ps
 }
 
 func (c *Client) updateSchedule(ctx context.Context, schedID, name string, phases []Phase) (err error) {
