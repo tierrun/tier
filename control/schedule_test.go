@@ -768,28 +768,34 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 		},
 		{
 			s: `
+				"status": "active",
 				"start_date": 100000000,
 				"trial_end": 200000000,
-				"cancel_at": 300000000,
+				"cancel_at": 400000000,
 			`,
 			want: []Phase{{
 				Org:       "org:test",
 				Effective: time.Unix(100000000, 0),
-				Current:   true,
+				Current:   false,
 				Trial:     true,
 				Features:  fs,
 			}, {
 				Org:       "org:test",
 				Effective: time.Unix(200000000, 0),
 				Features:  fs,
+				Current:   true, // <---- current
+				Trial:     false,
 			}, {
 				Org:       "org:test",
-				Effective: time.Unix(300000000, 0),
+				Effective: time.Unix(400000000, 0),
 				Features:  nil, // cancel plan
+				Current:   false,
+				Trial:     false,
 			}},
 		},
 		{
 			s: `
+				"status": "trialing",
 				"start_date": 100000000,
 				"trial_end": 200000000,
 			`,
@@ -803,6 +809,31 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 				Org:       "org:test",
 				Effective: time.Unix(200000000, 0),
 				Features:  fs,
+			}},
+		},
+		{
+			s: `
+				// no cancel_at but having status "canceled" will add a cancel phase
+				"status": "canceled",
+				"start_date": 100000000,
+				"trial_end": 200000000,
+				"canceled_at": 400000000,
+			`,
+			want: []Phase{{
+				Org:       "org:test",
+				Effective: time.Unix(100000000, 0),
+				Current:   false,
+				Trial:     true,
+				Features:  fs,
+			}, {
+				Org:       "org:test",
+				Effective: time.Unix(200000000, 0),
+				Features:  fs,
+			}, {
+				Org:       "org:test",
+				Effective: time.Unix(400000000, 0),
+				Features:  nil,
+				Current:   true,
 			}},
 		},
 	}
