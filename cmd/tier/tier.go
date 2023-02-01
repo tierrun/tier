@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -188,7 +189,7 @@ func runTier(cmd string, args []string) (err error) {
 			pj = fs.Arg(0)
 		}
 
-		f, err := fileOrStdin(ctx, pj)
+		f, _, err := stdinRemoteOrFile(ctx, pj)
 		if err != nil {
 			return err
 		}
@@ -457,35 +458,84 @@ func runTier(cmd string, args []string) (err error) {
 			return cleanAccounts(*accountAge)
 		}
 		return errUsage
+	case "share":
+		if len(args) < 1 {
+			return errUsage
+		}
+
+		f, isURL, err := stdinRemoteOrFile(ctx, args[0])
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		req, err := http.NewRequestWithContext(ctx, "POST", "https://model.tier.run/upload", f)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		if isURL {
+			req.Header.Set("Tier-Origin", args[0])
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			var v struct {
+				Message string
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+				return err
+			}
+			return fmt.Errorf("error from server: %v", v.Message)
+		}
+		var v struct {
+			URL string `json:"url"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, v.URL)
+		return nil
 	default:
 		return errUsage
 	}
 }
 
-func fileOrStdin(ctx context.Context, fname string) (io.ReadCloser, error) {
+// fileRemoteOrStdin returns the contents of the file for fname. If fname is
+// ("-") then stdin is returned. If fname is a valid URL, a request with Accept
+// set to ("application/json") is sent, and the body of the request is
+// returned. If fname is not stdin, a valid URL, but a valid local filename,
+// the file is returned; otherwise and error is returned.
+func stdinRemoteOrFile(ctx context.Context, fname string) (r io.ReadCloser, isURL bool, err error) {
 	if fname == "" {
-		return nil, errUsage
+		return nil, false, errUsage
 	}
 	if fname == "-" {
-		return io.NopCloser(stdin), nil
+		return io.NopCloser(stdin), false, nil
 	}
 	u, err := url.Parse(fname)
 	if err == nil && (u.Scheme == "http" || u.Scheme == "https") {
 		r, err := http.NewRequestWithContext(ctx, "GET", fname, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		r.Header.Set("Accept", "application/json")
 		res, err := http.DefaultClient.Do(r)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if res.StatusCode/100 != 2 {
-			return nil, fmt.Errorf("http error fetching pricing.json: %s", res.Status)
+			return nil, false, fmt.Errorf("http error fetching pricing.json: %s", res.Status)
 		}
-		return res.Body, nil
+		return res.Body, true, nil
 	}
-	return os.Open(fname)
+	f, err := os.Open(fname)
+	return f, false, err
 }
 
 var debugLevel, _ = strconv.Atoi(os.Getenv("TIER_DEBUG"))

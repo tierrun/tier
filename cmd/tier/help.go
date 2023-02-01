@@ -278,6 +278,16 @@ Examples:
 	; tier clean -switchaccounts 0    # remove all switch accounts
 	; tier clean -switchaccounts -1   # nop
 `,
+	"share": `Usage:
+
+	tier share <filename | url | - >
+
+Share posts the provided pricing model to the Tier Model Builder and returns a
+URL for sharing, collaborating, and deploying pricing models. See
+https://model.tier.run for more information on the Model Builder.
+
+Share does not make any changes or requests to your Stripe account.
+`,
 }
 
 func help(dst io.Writer, cmd string) error {
