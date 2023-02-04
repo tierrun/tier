@@ -20,6 +20,9 @@ import (
 const Inf = 1<<63 - 1
 
 type Client struct {
+	// APIKey is the API key used, and set in the Authorization header.
+	APIKey string
+
 	BaseURL    string // the base URL of the tier sidecar; default is http://127.0.0.1:8080
 	HTTPClient *http.Client
 }
@@ -31,6 +34,8 @@ type Client struct {
 // It returns an error if the TIER_BASE_URL environment variable is set to an
 // invalid URL.
 func FromEnv() (*Client, error) {
+	key := os.Getenv("TIER_API_KEY")
+
 	baseURL := os.Getenv("TIER_BASE_URL")
 	if baseURL == "" {
 		baseURL = defaultBaseURL
@@ -39,7 +44,7 @@ func FromEnv() (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{BaseURL: baseURL}, nil
+	return &Client{BaseURL: baseURL, APIKey: key}, nil
 }
 
 const defaultBaseURL = "http://127.0.0.1:8080"
@@ -57,44 +62,44 @@ func (c *Client) client() *http.Client {
 
 // Push pushes the provided pricing model to Stripe.
 func (c *Client) Push(ctx context.Context, m apitypes.Model) (apitypes.PushResponse, error) {
-	return fetch.OK[apitypes.PushResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/push"), m)
+	return fetchOK[apitypes.PushResponse, *apitypes.Error](ctx, c, "POST", "/v1/push", m)
 }
 
 func (c *Client) PushJSON(ctx context.Context, m []byte) (apitypes.PushResponse, error) {
-	return fetch.OK[apitypes.PushResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/push"), json.RawMessage(m))
+	return fetchOK[apitypes.PushResponse, *apitypes.Error](ctx, c, "POST", "/v1/push", json.RawMessage(m))
 }
 
 // Pull fetches the complete pricing model from Stripe.
 func (c *Client) Pull(ctx context.Context) (apitypes.Model, error) {
-	return fetch.OK[apitypes.Model, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/pull"), nil)
+	return fetchOK[apitypes.Model, *apitypes.Error](ctx, c, "GET", "/v1/pull", nil)
 }
 
 // PullJSON fetches the complete pricing model from Stripe and returns the raw
 // JSON response.
 func (c *Client) PullJSON(ctx context.Context) ([]byte, error) {
-	return fetch.OK[[]byte, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/pull"), nil)
+	return fetchOK[[]byte, *apitypes.Error](ctx, c, "GET", "/v1/pull", nil)
 }
 
 // WhoIS reports the Stripe ID for the given organization.
 func (c *Client) WhoIs(ctx context.Context, org string) (apitypes.WhoIsResponse, error) {
-	return fetch.OK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/whois?org="+org), nil)
+	return fetchOK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c, "GET", "/v1/whois?org="+org, nil)
 }
 
 // LookupOrg reports all known information about the provided org. The
 // information is not cached by the server. If only the Stripe customer ID is
 // needed and speed is of concern, users should use WhoIs.
 func (c *Client) LookupOrg(ctx context.Context, org string) (apitypes.WhoIsResponse, error) {
-	return fetch.OK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/whois?include=info&org="+org), nil)
+	return fetchOK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c, "GET", "/v1/whois?include=info&org="+org, nil)
 }
 
 // LookupPhase reports information about the current phase the provided org is scheduled in.
 func (c *Client) LookupPhase(ctx context.Context, org string) (apitypes.PhaseResponse, error) {
-	return fetch.OK[apitypes.PhaseResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/phase?org="+org), nil)
+	return fetchOK[apitypes.PhaseResponse, *apitypes.Error](ctx, c, "GET", "/v1/phase?org="+org, nil)
 }
 
 // LookupLimits reports the current usage and limits for the provided org.
 func (c *Client) LookupLimits(ctx context.Context, org string) (apitypes.UsageResponse, error) {
-	return fetch.OK[apitypes.UsageResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/limits?org="+org), nil)
+	return fetchOK[apitypes.UsageResponse, *apitypes.Error](ctx, c, "GET", "/v1/limits?org="+org, nil)
 }
 
 // LookupLimit reports the current usage and limits for the provided org and
@@ -188,7 +193,7 @@ func (c *Client) Report(ctx context.Context, org, feature string, n int) error {
 	if err != nil {
 		return err
 	}
-	_, err = fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/report"), apitypes.ReportRequest{
+	_, err = fetchOK[struct{}, *apitypes.Error](ctx, c, "POST", "/v1/report", apitypes.ReportRequest{
 		Org:     org,
 		Feature: fn,
 		N:       n,
@@ -220,7 +225,7 @@ func (c *Client) ReportUsage(ctx context.Context, org, feature string, n int, rp
 		At:      p.At,
 		Clobber: p.Clobber,
 	}
-	_, err = fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/report"), r)
+	_, err = fetchOK[struct{}, *apitypes.Error](ctx, c, "POST", "/v1/report", r)
 	return err
 }
 
@@ -230,7 +235,7 @@ func (c *Client) ReportUsage(ctx context.Context, org, feature string, n int, rp
 // Any in-progress scheduled is overwritten and the customer is billed with
 // prorations immediately.
 func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...string) error {
-	_, err := fetch.OK[struct{}, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/subscribe"), apitypes.ScheduleRequest{
+	_, err := fetchOK[struct{}, *apitypes.Error](ctx, c, "POST", "/v1/subscribe", apitypes.ScheduleRequest{
 		Org:    org,
 		Phases: []apitypes.Phase{{Features: featuresAndPlans}},
 	})
@@ -252,7 +257,7 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 		TrialDays:  p.TrialDays,
 		Features:   p.Features,
 	}
-	return fetch.OK[*apitypes.CheckoutResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/checkout"), r)
+	return fetchOK[*apitypes.CheckoutResponse, *apitypes.Error](ctx, c, "POST", "/v1/checkout", r)
 }
 
 type Phase = apitypes.Phase
@@ -270,13 +275,19 @@ type ScheduleParams struct {
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) (*apitypes.ScheduleResponse, error) {
-	return fetch.OK[*apitypes.ScheduleResponse, *apitypes.Error](ctx, c.client(), "POST", c.baseURL("/v1/subscribe"), &apitypes.ScheduleRequest{
+	return fetchOK[*apitypes.ScheduleResponse, *apitypes.Error](ctx, c, "POST", "/v1/subscribe", &apitypes.ScheduleRequest{
 		Org:    org,
 		Info:   (*apitypes.OrgInfo)(p.Info),
 		Phases: p.Phases,
 	})
+
 }
 
 func (c *Client) WhoAmI(ctx context.Context) (apitypes.WhoAmIResponse, error) {
-	return fetch.OK[apitypes.WhoAmIResponse, *apitypes.Error](ctx, c.client(), "GET", c.baseURL("/v1/whoami"), nil)
+	return fetchOK[apitypes.WhoAmIResponse, *apitypes.Error](ctx, c, "GET", "/v1/whoami", nil)
+}
+
+func fetchOK[T any, E error](ctx context.Context, c *Client, method, path string, body any) (T, error) {
+	up := url.UserPassword(c.APIKey, "")
+	return fetch.OK[T, E](ctx, c.client(), method, c.baseURL(path), body, up)
 }
