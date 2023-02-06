@@ -68,11 +68,11 @@ func (p Plan) MarshalText() ([]byte, error) {
 }
 
 func ParsePlan(s string) (Plan, error) {
-	prefix, rest, hasPrefix := strings.Cut(s, ":")
-	if !hasPrefix || prefix != "plan" {
+	name, hasPrefix := strings.CutPrefix(s, "plan:")
+	if !hasPrefix {
 		return Plan{}, invalid("plan name must start with 'plan:'", s)
 	}
-	name, version, _ := strings.Cut(rest, "@")
+	name, version, _ := strings.Cut(name, "@")
 	if version == "" {
 		return Plan{}, invalid("plan must have version", s)
 	}
@@ -136,8 +136,8 @@ func (fp Name) MarshalText() ([]byte, error) {
 }
 
 func ParseName(s string) (Name, error) {
-	prefix, name, hasPrefix := strings.Cut(s, ":")
-	if !hasPrefix || prefix != "feature" {
+	name, hasPrefix := strings.CutPrefix(s, "feature:")
+	if !hasPrefix {
 		return Name{}, invalid("feature name must start with 'feature:'", s)
 	}
 	if isIllegalName(name) {
@@ -165,11 +165,11 @@ func ParseFeaturePlans(s ...string) ([]FeaturePlan, error) {
 }
 
 func ParseFeaturePlan(s string) (FeaturePlan, error) {
-	prefix, rest, hasPrefix := strings.Cut(s, ":")
-	if !hasPrefix || prefix != "feature" {
+	name, hasPrefix := strings.CutPrefix(s, "feature:")
+	if !hasPrefix {
 		return FeaturePlan{}, invalid("feature plan must start with 'feature:'", s)
 	}
-	name, version, hasVersion := strings.Cut(rest, "@")
+	name, version, hasVersion := strings.Cut(name, "@")
 	if isIllegalName(name) {
 		return FeaturePlan{}, invalid("feature plan name must match [a-zA-Z0-9:]+", s)
 	}
