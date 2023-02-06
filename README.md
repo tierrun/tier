@@ -31,7 +31,7 @@ Tier will handle setting up and managing Stripe in a way that is much more frien
 ## How to use Tier
 
 1. [Install Tier CLI](#install)
-2. [Create your first pricing.json]() and `tier push` to your dev or live environment
+2. [Create your first pricing.json](https://model.tier.run) and `tier push` to your dev or live environment
 3. [Get a Tier SDK and add it](https://www.tier.run/docs/sdk/) to enable Access Checks and Metering
 
 You can see and example here: [Tier Hello World!](https://blog.tier.run/tier-hello-world-demo)
