@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.tier.run/docs/pricing.schema.json",
+  "title": "Pricing Model",
+  "description": "A pricing.json model definition used by tier",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "plans": {
+      "description": "The collection of all defined plans",
+      "type": "object",
+      "propertyNames": { "pattern": "^plan:[a-zA-Z0-9:]+@[a-zA-Z0-9]+$" },
+      "patternProperties": { "": { "$ref": "#/$defs/plan" } }
+    }
+  },
+  "$defs": {
+    "plan": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "currency": { "type": "string" },
+        "interval": {
+          "enum": ["@daily", "@weekly", "@monthly", "@yearly"]
+        },
+        "features": {
+          "type": "object",
+          "propertyNames": { "pattern": "^feature:[a-zA-Z0-9:]+$" },
+          "patternProperties": { "": { "$ref": "#/$defs/feature" } }
+        }
+      },
+      "additionalProperties": false
+    },
+    "feature": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "aggregate": { "enum": ["sum", "max", "last", "perpetual"] },
+        "mode": { "enum": ["graduated", "volume"] },
+        "base": { "type": "number" },
+        "tiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tier" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "tier": {
+      "type": "object",
+      "properties": {
+        "upto": { "type": "number" },
+        "price": { "type": "number" },
+        "base": { "type": "number" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
