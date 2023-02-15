@@ -48,6 +48,7 @@ func (p Plan) Less(o Plan) bool {
 	return p.version < o.version
 }
 
+func (p Plan) Name() string    { return p.name }
 func (p Plan) Version() string { return p.version }
 
 func (p Plan) String() string   { return "plan:" + p.name + "@" + p.version }
