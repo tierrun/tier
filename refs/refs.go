@@ -255,10 +255,19 @@ func (fp FeaturePlan) IsZero() bool {
 func (fp FeaturePlan) String() string   { return fmt.Sprintf("feature:%s@%s", fp.name, fp.Version()) }
 func (fp FeaturePlan) GoString() string { return fmt.Sprintf("<%s>", fp) }
 
-func (fp FeaturePlan) Name() Name             { return Name{name: fp.name} }
-func (fp FeaturePlan) Plan() Plan             { return fp.plan }
-func (fp FeaturePlan) InPlan(p Plan) bool     { return fp.plan == p }
-func (a FeaturePlan) Less(b FeaturePlan) bool { return a.String() < b.String() }
+func (fp FeaturePlan) Name() Name         { return Name{name: fp.name} }
+func (fp FeaturePlan) Plan() Plan         { return fp.plan }
+func (fp FeaturePlan) InPlan(p Plan) bool { return fp.plan == p }
+
+func (a FeaturePlan) Less(b FeaturePlan) bool {
+	if a.name != b.name {
+		return a.name < b.name
+	}
+	if a.version != b.version {
+		return a.version < b.version
+	}
+	return a.plan.Less(b.plan)
+}
 
 // Version returns the version of the feature plan as it was parsed. This means
 // if the version is a plan, the plan identifier is returned.
