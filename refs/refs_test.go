@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"testing"
 
+	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 )
 
@@ -201,6 +202,25 @@ func TestAsMapKeyWithJSON(t *testing.T) {
 	}
 	want := map[FeaturePlan]int{
 		MustParseFeaturePlan("feature:foo@0"): 1,
+	}
+	diff.Test(t, t.Errorf, got, want)
+}
+
+func TestPlanLess(t *testing.T) {
+	got := []Plan{
+		MustParsePlan("plan:foo@0"),
+		MustParsePlan("plan:foo@1"),
+		MustParsePlan("plan:a@3"),
+		MustParsePlan("plan:foo@2"),
+		MustParsePlan("plan:a@19"),
+	}
+	slices.SortFunc(got, Plan.Less)
+	want := []Plan{
+		MustParsePlan("plan:a@19"),
+		MustParsePlan("plan:a@3"),
+		MustParsePlan("plan:foo@0"),
+		MustParsePlan("plan:foo@1"),
+		MustParsePlan("plan:foo@2"),
 	}
 	diff.Test(t, t.Errorf, got, want)
 }
