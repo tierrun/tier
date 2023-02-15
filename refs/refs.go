@@ -41,6 +41,15 @@ func MustParsePlan(s string) Plan {
 	return p
 }
 
+func (p Plan) Less(o Plan) bool {
+	if p.name != o.name {
+		return p.name < o.name
+	}
+	return p.version < o.version
+}
+
+func (p Plan) Version() string { return p.version }
+
 func (p Plan) String() string   { return "plan:" + p.name + "@" + p.version }
 func (p Plan) GoString() string { return fmt.Sprintf("<%s>", p) }
 
