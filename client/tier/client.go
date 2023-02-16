@@ -239,7 +239,6 @@ func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...
 		Org:    org,
 		Phases: []apitypes.Phase{{Features: featuresAndPlans}},
 	})
-
 	return err
 }
 

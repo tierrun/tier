@@ -408,7 +408,6 @@ func runTier(cmd string, args []string) (err error) {
 			return err
 		}
 		return tc().ReportUsage(ctx, org, feature, n, &tier.ReportParams{
-			At:      time.Now(),
 			Clobber: *clobber,
 		})
 	case "whoami":
