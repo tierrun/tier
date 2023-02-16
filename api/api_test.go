@@ -439,14 +439,19 @@ func TestTierReport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tc.ReportUsage(ctx, "org:test", "feature:t", 10, &tier.ReportParams{
-		// Force 'now' at Stripe.
-		At: time.Time{}, // for 'now' on the server
+	report := func(n int, at time.Time, wantErr error) {
+		if err := tc.ReportUsage(ctx, "org:test", "feature:t", n, &tier.ReportParams{
+			// Force 'now' at Stripe.
+			At: time.Time{},
 
-		Clobber: false,
-	}); err != nil {
-		t.Fatal(err)
+			Clobber: false,
+		}); !errors.Is(err, wantErr) {
+			t.Errorf("err = %v; want %v", err, wantErr)
+		}
 	}
+
+	report(10, time.Time{}, nil)
+	report(10, clock.Now().Add(1*time.Minute), nil)
 
 	limit, used, err := tc.LookupLimit(ctx, "org:test", "feature:t")
 	if err != nil {
@@ -456,7 +461,7 @@ func TestTierReport(t *testing.T) {
 	if limit != control.Inf {
 		t.Errorf("limit = %d, want %d", control.Inf, limit)
 	}
-	if used != 10 {
+	if used != 20 {
 		t.Errorf("used = %d, want 10", used)
 	}
 }
