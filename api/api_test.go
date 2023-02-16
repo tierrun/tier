@@ -407,7 +407,9 @@ func TestTierReport(t *testing.T) {
 
 	ctx := context.Background()
 	tc, cc := newTestClient(t)
-	clock := stroke.NewClock(t, cc.Stripe, t.Name(), time.Now())
+
+	farIntoTheFuture := time.Now().Add(24 * time.Hour)
+	clock := stroke.NewClock(t, cc.Stripe, t.Name(), farIntoTheFuture)
 	cc.Clock = clock.ID()
 
 	pr, err := tc.PushJSON(ctx, []byte(`
@@ -438,6 +440,9 @@ func TestTierReport(t *testing.T) {
 	}
 
 	if err := tc.ReportUsage(ctx, "org:test", "feature:t", 10, &tier.ReportParams{
+		// Force 'now' at Stripe.
+		At: time.Time{}, // for 'now' on the server
+
 		Clobber: false,
 	}); err != nil {
 		t.Fatal(err)
