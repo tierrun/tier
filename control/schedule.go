@@ -360,9 +360,9 @@ func (c *Client) updateSchedule(ctx context.Context, schedID, name string, phase
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+schedID, f, nil)
 }
 
-func (c *Client) cancelSchedule(ctx context.Context, schedID string) (err error) {
-	defer errorfmt.Handlef("stripe: cancelSchedule: %q: %w", schedID, &err)
-	if schedID == "" {
+func (c *Client) cancelSubscription(ctx context.Context, subID string) (err error) {
+	defer errorfmt.Handlef("stripe: cancelSchedule: %q: %w", subID, &err)
+	if subID == "" {
 		return errors.New("subscription id required")
 	}
 	var f stripe.Form
@@ -370,7 +370,7 @@ func (c *Client) cancelSchedule(ctx context.Context, schedID string) (err error)
 	// surprises.
 	f.Set("invoice_now", true)
 	f.Set("prorate", true)
-	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+schedID+"/cancel", f, nil)
+	return c.Stripe.Do(ctx, "DELETE", "/v1/subscriptions/"+subID, f, nil)
 }
 
 func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name string, phases []Phase) error {
@@ -525,7 +525,7 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 	}
 
 	if cancelNow {
-		return c.cancelSchedule(ctx, s.ScheduleID)
+		return c.cancelSubscription(ctx, s.ID)
 	}
 
 	// TODO(bmizerany): check status?

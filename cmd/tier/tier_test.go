@@ -522,7 +522,7 @@ func TestSubscribe(t *testing.T) {
 					}
 				]
 			}`)
-		case wants(r, "POST", "/v1/subscription_schedules/sub_sched_123/cancel"):
+		case wants(r, "DELETE", "/v1/subscriptions/sub_123"):
 			got.Append(r.URL.Path)
 		default:
 			io.WriteString(w, `{}`)
@@ -531,7 +531,7 @@ func TestSubscribe(t *testing.T) {
 
 	tt.Run("subscribe", "--cancel", "org:test")
 
-	want := []string{"/v1/subscription_schedules/sub_sched_123/cancel"}
+	want := []string{"/v1/subscriptions/sub_123"}
 	diff.Test(t, t.Errorf, got.Load(), want)
 }
 
