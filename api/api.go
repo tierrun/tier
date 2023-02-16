@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
@@ -16,7 +15,6 @@ import (
 	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/trweb"
-	"tier.run/values"
 )
 
 func init() {
@@ -246,7 +244,7 @@ func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {
 
 	return h.c.ReportUsage(r.Context(), rr.Org, rr.Feature, control.Report{
 		N:       rr.N,
-		At:      values.Coalesce(rr.At, time.Now()),
+		At:      rr.At,
 		Clobber: rr.Clobber,
 	})
 }

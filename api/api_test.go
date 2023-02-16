@@ -406,7 +406,9 @@ func TestTierReport(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tc, _ := newTestClient(t)
+	tc, cc := newTestClient(t)
+	clock := stroke.NewClock(t, cc.Stripe, t.Name(), time.Now())
+	cc.Clock = clock.ID()
 
 	pr, err := tc.PushJSON(ctx, []byte(`
 		{
@@ -436,15 +438,6 @@ func TestTierReport(t *testing.T) {
 	}
 
 	if err := tc.ReportUsage(ctx, "org:test", "feature:t", 10, &tier.ReportParams{
-		// Report the usage at a time in the near future to avoid
-		// complaints from Stripe about being too early (e.g. the same
-		// start time as the current phase) or too late (e.g. > 5mins
-		// into the future.
-		//
-		// If this test becomes flaky, we should use Test Clocks. For
-		// now, avoid the slowness of the Test Clock API.
-		At: time.Now().Add(1 * time.Minute),
-
 		Clobber: false,
 	}); err != nil {
 		t.Fatal(err)
