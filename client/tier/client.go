@@ -250,11 +250,12 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 		p = &CheckoutParams{}
 	}
 	r := &apitypes.CheckoutRequest{
-		Org:        org,
-		SuccessURL: successURL,
-		CancelURL:  p.CancelURL,
-		TrialDays:  p.TrialDays,
-		Features:   p.Features,
+		Org:                   org,
+		SuccessURL:            successURL,
+		CancelURL:             p.CancelURL,
+		TrialDays:             p.TrialDays,
+		Features:              p.Features,
+		RequireBillingAddress: p.RequireBillingAddress,
 	}
 	return fetchOK[*apitypes.CheckoutResponse, *apitypes.Error](ctx, c, "POST", "/v1/checkout", r)
 }
@@ -263,9 +264,10 @@ type Phase = apitypes.Phase
 type OrgInfo = apitypes.OrgInfo
 
 type CheckoutParams struct {
-	TrialDays int
-	Features  []string
-	CancelURL string
+	TrialDays             int
+	Features              []string
+	CancelURL             string
+	RequireBillingAddress bool
 }
 
 type ScheduleParams struct {
