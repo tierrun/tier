@@ -21,6 +21,23 @@ func MaybeSet[T comparable](v *T, a T) {
 	*v = Coalesce(*v, a)
 }
 
+// ReturnIf retuns a if cond is true; otherwise the zero value of T is
+// returned.
+func ReturnIf[T any](cond bool, a T) T {
+	if cond {
+		return a
+	}
+	var zero T
+	return zero
+}
+
+// SetIf sets v to a if cond is true
+func SetIf[T any](v *T, cond bool, a T) {
+	if cond {
+		*v = a
+	}
+}
+
 type Collection[K comparable, V any] map[K][]V
 
 func (c *Collection[K, V]) Add(key K, v V) {

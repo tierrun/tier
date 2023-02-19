@@ -419,9 +419,10 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 }
 
 type CheckoutParams struct {
-	TrialDays int
-	Features  []Feature
-	CancelURL string
+	TrialDays             int
+	Features              []Feature
+	CancelURL             string
+	RequireBillingAddress bool
 }
 
 func (c *Client) Checkout(ctx context.Context, org string, successURL string, p *CheckoutParams) (link string, err error) {
@@ -445,6 +446,9 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 	f.Set("success_url", successURL)
 	if p.CancelURL != "" {
 		f.Set("cancel_url", p.CancelURL)
+	}
+	if p.RequireBillingAddress {
+		f.Set("billing_address_collection", "required")
 	}
 	if len(p.Features) == 0 {
 		f.Set("mode", "setup")

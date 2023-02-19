@@ -47,11 +47,12 @@ type OrgInfo struct {
 }
 
 type CheckoutRequest struct {
-	Org        string   `json:"org"`
-	TrialDays  int      `json:"trial_days"`
-	Features   []string `json:"features"`
-	SuccessURL string   `json:"success_url"`
-	CancelURL  string   `json:"cancel_url"`
+	Org                   string   `json:"org"`
+	TrialDays             int      `json:"trial_days"`
+	Features              []string `json:"features"`
+	SuccessURL            string   `json:"success_url"`
+	CancelURL             string   `json:"cancel_url"`
+	RequireBillingAddress bool     `json:"require_billing_address"`
 }
 
 type ScheduleRequest struct {

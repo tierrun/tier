@@ -189,9 +189,10 @@ func (h *Handler) serveCheckout(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	link, err := h.c.Checkout(r.Context(), cr.Org, cr.SuccessURL, &control.CheckoutParams{
-		TrialDays: cr.TrialDays,
-		Features:  fs,
-		CancelURL: cr.CancelURL,
+		TrialDays:             cr.TrialDays,
+		Features:              fs,
+		CancelURL:             cr.CancelURL,
+		RequireBillingAddress: cr.RequireBillingAddress,
 	})
 	if err != nil {
 		return err

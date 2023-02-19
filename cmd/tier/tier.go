@@ -277,6 +277,7 @@ func runTier(cmd string, args []string) (err error) {
 		cancel := fs.Bool("cancel", false, "cancels the subscription")
 		successURL := fs.String("checkout", "", "subscribe via Stripe checkout")
 		cancelURL := fs.String("cancel_url", "", "sets the cancel URL for use with -checkout")
+		requireBillingAddress := fs.Bool("require_billing_address", false, "require billing address for use with --checkout")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -301,9 +302,10 @@ func runTier(cmd string, args []string) (err error) {
 		useCheckout := *successURL != ""
 		if useCheckout {
 			cr, err := tc().Checkout(ctx, org, *successURL, &tier.CheckoutParams{
-				TrialDays: *trial,
-				Features:  refs,
-				CancelURL: *cancelURL,
+				TrialDays:             *trial,
+				Features:              refs,
+				CancelURL:             *cancelURL,
+				RequireBillingAddress: *requireBillingAddress,
 			})
 			if err != nil {
 				return err

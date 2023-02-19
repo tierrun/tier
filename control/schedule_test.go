@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"regexp"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +24,7 @@ import (
 	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/stripe/stroke"
+	"tier.run/values"
 )
 
 var (
@@ -695,6 +699,95 @@ func TestLookupPhases(t *testing.T) {
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
 }
 
+func TestCheckoutRequiredAddress(t *testing.T) {
+	type G struct {
+		successURL string
+		cancelURL  string
+		bac        string // billing_address_collection
+		trialDays  string
+	}
+
+	var mu sync.Mutex
+	var got []G
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case wants(r, "GET", "/v1/customers"):
+			jsonEncode(t, w, msa{
+				"data": []msa{
+					{
+						"metadata": msa{
+							"tier.org": "org:demo",
+						},
+					},
+				},
+			})
+		case wants(r, "POST", "/v1/checkout/sessions"):
+			mu.Lock()
+			got = append(got, G{
+				successURL: r.FormValue("success_url"),
+				cancelURL:  r.FormValue("cancel_url"),
+				bac:        r.FormValue("billing_address_collection"),
+				trialDays:  r.FormValue("subscription_data[trial_period_days]"),
+			})
+			mu.Unlock()
+			jsonEncode(t, w, msa{
+				"URL": "http://co.com/123",
+			})
+		default:
+			t.Errorf("UNEXPECTED: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	s := httptest.NewServer(h)
+	t.Cleanup(s.Close)
+
+	cc := &Client{
+		Logf: t.Logf,
+		Stripe: &stripe.Client{
+			BaseURL: s.URL,
+		},
+	}
+
+	TF := []bool{true, false}
+	for _, withAddress := range TF {
+		for _, withFeatures := range TF {
+			for _, withCancel := range TF {
+				for _, withTrial := range TF {
+					got = nil
+
+					var (
+						bac       = values.ReturnIf(withAddress, "required")
+						cancelURL = values.ReturnIf(withCancel, "https://c.com")
+						features  = values.ReturnIf(withFeatures, []Feature{{}})
+						trialDays = values.ReturnIf(withTrial, 14)
+					)
+
+					link, err := cc.Checkout(context.Background(), "org:demo", "http://s.com", &CheckoutParams{
+						Features:              features,
+						RequireBillingAddress: withAddress,
+						CancelURL:             cancelURL,
+						TrialDays:             trialDays,
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					if want := "http://co.com/123"; link != want {
+						t.Errorf("link = %q; want %q", link, want)
+					}
+
+					diff.Test(t, t.Errorf, got, []G{{
+						successURL: "http://s.com",
+						cancelURL:  cancelURL,
+						bac:        bac,
+						trialDays:  values.ReturnIf(withTrial && withFeatures, strconv.Itoa(trialDays)),
+					}})
+				}
+			}
+		}
+	}
+}
+
 func TestLookupPhasesNoSchedule(t *testing.T) {
 	// TODO(bmizerany): This tests assumptions, but we need an integration
 	// test provin fields "like" trial actually fall off / go to zero when
@@ -1122,5 +1215,14 @@ func writeHuJSON(w io.Writer, s string, args ...any) {
 	_, err = w.Write(b)
 	if err != nil {
 		panic(err)
+	}
+}
+
+type msa map[string]any
+
+func jsonEncode(t *testing.T, w io.Writer, v any) {
+	t.Helper()
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Error(err)
 	}
 }
