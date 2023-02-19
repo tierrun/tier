@@ -229,6 +229,27 @@ func TestAPISubscribe(t *testing.T) {
 		Code:    "TERR1020",
 		Message: "feature or plan not found",
 	})
+
+	_, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
+		Phases: []apitypes.Phase{
+			{Trial: true, Features: []string{"plan:test@0"}},
+		},
+		PaymentMethodID: "pm_card_us",
+	})
+
+	// Quick lint check to make sure the PaymentMethod made it to Stripe.
+	// In production, payment methods can be set on a sub by sub basis;
+	// however in test mode, we may only use test payment methods, and in
+	// test mode, stripe does not accept test payment methods on a sub by
+	// sub basis, so there is no real way to test our support for this
+	// feature. Instead, here, we just check stripe complains about the
+	// payment method to show it saw what we wanted it to see in
+	// production.
+	diff.Test(t, t.Errorf, err, &apitypes.Error{
+		Status:  400,
+		Code:    "invalid_payment_method",
+		Message: "No such PaymentMethod: 'pm_card_us'",
+	})
 }
 
 func TestPhaseBadOrg(t *testing.T) {

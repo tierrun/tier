@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
@@ -120,6 +121,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	var ipe *stripe.Error
+	if errors.As(err, &ipe) && strings.Contains(ipe.Message, "No such PaymentMethod") {
+		trweb.WriteError(w, &trweb.HTTPError{
+			Status:  400,
+			Code:    "invalid_payment_method",
+			Message: ipe.Message,
+		})
+		return
+	}
+
 	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
 		return
 	}
@@ -234,7 +246,11 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	}
-	return h.c.Schedule(r.Context(), sr.Org, phases)
+
+	return h.c.Schedule(r.Context(), sr.Org, control.ScheduleParams{
+		PaymentMethod: sr.PaymentMethodID,
+		Phases:        phases,
+	})
 }
 
 func (h *Handler) serveReport(w http.ResponseWriter, r *http.Request) error {

@@ -168,7 +168,7 @@ func (s *scheduleTester) advanceToNextPeriod() {
 func (s *scheduleTester) cancel(org string) {
 	s.t.Helper()
 	s.t.Logf("cancelling %s", org)
-	s.schedule(org, 0) // no features
+	s.schedule(org, 0, "") // no features
 }
 
 func (s *scheduleTester) setPaymentMethod(org string, pm string) {
@@ -187,7 +187,7 @@ func (s *scheduleTester) setPaymentMethod(org string, pm string) {
 	}
 }
 
-func (s *scheduleTester) schedule(org string, trialDays int, fs ...refs.FeaturePlan) {
+func (s *scheduleTester) schedule(org string, trialDays int, payment string, fs ...refs.FeaturePlan) {
 	s.t.Helper()
 	s.t.Logf("subscribing %s to %v with trialDays=%d", org, fs, trialDays)
 
@@ -205,7 +205,11 @@ func (s *scheduleTester) schedule(org string, trialDays int, fs ...refs.FeatureP
 			Features:  fs,
 		}}
 	}
-	if err := s.cc.Schedule(context.Background(), org, ps); err != nil {
+	p := ScheduleParams{
+		PaymentMethod: payment,
+		Phases:        ps,
+	}
+	if err := s.cc.Schedule(context.Background(), org, p); err != nil {
 		s.t.Fatalf("error subscribing: %v", err)
 	}
 }
@@ -273,9 +277,9 @@ func TestScheduleFreeTrials(t *testing.T) {
 		Tiers:       []Tier{{Upto: Inf, Price: 1}},
 	}})
 
-	s.schedule("org:paid", 0, featureX)
-	s.schedule("org:trial", 14, featureX)
-	s.schedule("org:free", -1, featureX)
+	s.schedule("org:paid", 0, "", featureX)
+	s.schedule("org:trial", 14, "", featureX)
+	s.schedule("org:free", -1, "", featureX)
 
 	s.report("org:paid", "feature:x", 1)
 	s.report("org:trial", "feature:x", 1)
@@ -355,7 +359,7 @@ func TestSchedule_TrialSwapWithPaid(t *testing.T) {
 
 	for i, step := range steps {
 		t.Logf("step: %+v", step)
-		s.schedule("org:test", step.trialDays, featureX)
+		s.schedule("org:test", step.trialDays, "", featureX)
 		status, err := s.cc.LookupStatus(context.Background(), "org:test")
 		if err != nil {
 			t.Fatalf("[%d]: unexpected error: %v", i, err)
@@ -386,7 +390,7 @@ func TestScheduleCancel(t *testing.T) {
 	}})
 
 	s.setPaymentMethod("org:paid", "pm_card_us")
-	s.schedule("org:paid", 0, featureX, featureBase)
+	s.schedule("org:paid", 0, "", featureX, featureBase)
 	s.report("org:paid", "feature:x", 99)
 	s.advance(10)
 	s.cancel("org:paid")
@@ -436,7 +440,7 @@ func TestScheduleCancelNoLimits(t *testing.T) {
 		Aggregate:   "sum",
 		Tiers:       []Tier{{Upto: Inf, Base: 1000}},
 	}})
-	s.schedule("org:paid", 0, featureX)
+	s.schedule("org:paid", 0, "", featureX)
 	s.checkLimits("org:paid", []Usage{{Feature: featureX, Limit: Inf}})
 	s.cancel("org:paid")
 	s.checkLimits("org:paid", nil)
@@ -487,6 +491,135 @@ func TestScheduleMinMaxItems(t *testing.T) {
 		Plans:    nil, // fragments only
 	}}
 	diff.Test(t, t.Errorf, got, want, diff.ZeroFields[Phase]("Effective"))
+}
+
+func TestSchedulePaymentMethod(t *testing.T) {
+	// Here we mock because test payment methods are not supported for use
+	// with subscriptions default_settings. Yay.
+	// From Stripe Discord:
+	//   > bmizerany: Does that mean that only manual testing using a browser
+	//     to collect fake card numbers and manually check the subscription?
+	//   > stripe: Yep.
+
+	type G struct {
+		updateSched bool
+		fromSub     string
+		card        string // "not_set" means not set
+	}
+
+	const existingSub = `{"data":[{
+		"id": "sub_123",
+		"metadata": {"tier.subscription": "default"},
+	}]}`
+
+	cases := []struct {
+		subResp string
+		card    string
+		want    []G
+	}{
+		{
+			subResp: `{}`,
+			card:    "pm_card_FAKE",
+			want: []G{
+				{card: "pm_card_FAKE"},
+			},
+		},
+		{
+			subResp: existingSub,
+			card:    "pm_card_FAKE",
+			want: []G{
+				{card: "not_set", fromSub: "sub_123"},
+				{card: "pm_card_FAKE", updateSched: true},
+			},
+		},
+		{
+			subResp: `{}`,
+			want: []G{
+				{card: "not_set"},
+			},
+		},
+		{
+			subResp: existingSub,
+			want: []G{
+				{card: "not_set", fromSub: "sub_123"},
+				{card: "not_set", updateSched: true},
+			},
+		},
+		{
+			subResp: `{"data":[{
+				"id": "sub_123",
+				"metadata": {"tier.subscription": "default"},
+				"schedule": {"id": "sub_sched_123"},
+			}]}`,
+			want: []G{
+				{card: "not_set", updateSched: true},
+			},
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run("", func(t *testing.T) {
+			var got List[G]
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Logf("fake stripe: %s %s", r.Method, r.URL.Path)
+				switch {
+				case wants(r, "GET", "/v1/customers"):
+					var c stripeCustomer
+					c.ID = "cust_123"
+					c.Metadata.Org = "org:example"
+					jsonEncodeList(t, w, c)
+				case wants(r, "GET", "/v1/subscriptions"):
+					writeHuJSON(w, tt.subResp) // force new schedule
+				case wants(r, "GET", "/v1/prices"):
+					var p stripePrice
+					p.ID = "price_123"
+					p.Metadata.Feature = mpf("feature:x@plan:test@0")
+					jsonEncodeList(t, w, p)
+				case wants(r, "GET", "/v1/subscription_schedules/sub_sched_123"):
+					var ss stripeSubSchedule
+					jsonEncode(t, w, ss)
+				case wants(r, "POST", "/v1/subscription_schedules/sub_sched_123"):
+					const key = "default_settings[default_payment_method]"
+					pm := r.FormValue(key)
+					if _, ok := r.Form[key]; !ok {
+						pm = "not_set"
+					}
+					got.Append(G{updateSched: true, card: pm})
+				case wants(r, "POST", "/v1/subscription_schedules"):
+					fromSub := r.FormValue("from_subscription")
+					const key = "default_settings[default_payment_method]"
+					pm := r.FormValue(key)
+					if _, ok := r.Form[key]; !ok {
+						pm = "not_set"
+					}
+					got.Append(G{fromSub: fromSub, card: pm})
+
+					writeHuJSON(w, `{"id": "sub_sched_123"}`)
+				default:
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				}
+			}))
+			t.Cleanup(s.Close)
+
+			cc := &Client{
+				Logf: t.Logf,
+				Stripe: &stripe.Client{
+					BaseURL: s.URL,
+				},
+			}
+
+			if err := cc.Schedule(context.Background(), "org:example", ScheduleParams{
+				PaymentMethod: tt.card,
+				Phases: []Phase{{
+					Features: []refs.FeaturePlan{mpf("feature:x@plan:test@0")},
+				}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			diff.Test(t, t.Errorf, got.Slice(), tt.want)
+		})
+	}
 }
 
 func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
@@ -1223,6 +1356,35 @@ type msa map[string]any
 func jsonEncode(t *testing.T, w io.Writer, v any) {
 	t.Helper()
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		t.Error(err)
+		t.Errorf("jsonEncode: %v", err)
 	}
+}
+
+func jsonEncodeList[T any](t *testing.T, w io.Writer, l ...T) {
+	t.Helper()
+	var v = struct {
+		Data []T `json:"data"`
+	}{
+		Data: l,
+	}
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Errorf("jsonEncode: %v", err)
+	}
+}
+
+type List[T any] struct {
+	mu sync.Mutex
+	a  []T
+}
+
+func (l *List[T]) Append(v T) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.a = append(l.a, v)
+}
+
+func (l *List[T]) Slice() []T {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.a)
 }
