@@ -152,6 +152,9 @@ Checkout only flags:
 	--cancel_url=<cancel_url>
 		specify a cancel_url for Stripe Checkout. This flag is ignored
 		if --checkout is not set.
+	--paymentmethod=<paymentmethod_id>
+		specify a payment method to use for the subscription. This flag
+		is ignored with --checkout.
 
 Global Flags:
 

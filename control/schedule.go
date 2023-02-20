@@ -177,7 +177,7 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 	return s, nil
 }
 
-func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub string, phases []Phase) (err error) {
+func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub string, p ScheduleParams) (err error) {
 	defer errorfmt.Handlef("stripe: createSchedule: %q: %w", org, &err)
 
 	create := func(f stripe.Form) (string, error) {
@@ -200,7 +200,7 @@ func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub s
 		}
 		// We can only update phases after the schedule is created from
 		// the subscription.
-		return c.updateSchedule(ctx, sid, name, phases)
+		return c.updateSchedule(ctx, sid, name, p)
 	} else {
 		defer errorfmt.Handlef("newSub: %w", &err)
 		cid, err := c.WhoIs(ctx, org)
@@ -208,12 +208,32 @@ func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub s
 			return err
 		}
 		var f stripe.Form
+		if p.PaymentMethod != "" {
+			f.Set("default_settings", "default_payment_method", p.PaymentMethod)
+		}
 		f.Set("customer", cid)
-		if err := addPhases(ctx, c, &f, false, name, phases); err != nil {
+		if err := addPhases(ctx, c, &f, false, name, p.Phases); err != nil {
 			return err
 		}
 		_, err = create(f)
 		return err
+	}
+}
+
+type stripeSubSchedule struct {
+	stripe.ID
+	Current struct {
+		Start int64 `json:"start_date"`
+		End   int64 `json:"end_date"`
+	} `json:"current_phase"`
+	Phases []struct {
+		Metadata struct {
+			Name string `json:"tier.subscription"`
+		}
+		Start int64 `json:"start_date"`
+		Items []struct {
+			Price stripePrice
+		}
 	}
 }
 
@@ -225,26 +245,9 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 		return ps[0], ps, nil
 	}
 
-	type T struct {
-		stripe.ID
-		Current struct {
-			Start int64 `json:"start_date"`
-			End   int64 `json:"end_date"`
-		} `json:"current_phase"`
-		Phases []struct {
-			Metadata struct {
-				Name string `json:"tier.subscription"`
-			}
-			Start int64 `json:"start_date"`
-			Items []struct {
-				Price stripePrice
-			}
-		}
-	}
-
 	g, ctx := errgroup.WithContext(ctx)
 
-	var ss T
+	var ss stripeSubSchedule
 	g.Go(func() error {
 		var f stripe.Form
 		f.Add("expand[]", "phases.items.price")
@@ -348,13 +351,16 @@ func subscriptionToPhases(org string, s subscription) []Phase {
 	return ps
 }
 
-func (c *Client) updateSchedule(ctx context.Context, schedID, name string, phases []Phase) (err error) {
+func (c *Client) updateSchedule(ctx context.Context, schedID, name string, p ScheduleParams) (err error) {
 	defer errorfmt.Handlef("stripe: updateSchedule: %q: %w", schedID, &err)
 	if schedID == "" {
 		return errors.New("subscription id required")
 	}
 	var f stripe.Form
-	if err := addPhases(ctx, c, &f, true, name, phases); err != nil {
+	if p.PaymentMethod != "" {
+		f.Set("default_settings", "default_payment_method", p.PaymentMethod)
+	}
+	if err := addPhases(ctx, c, &f, true, name, p.Phases); err != nil {
 		return err
 	}
 	return c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules/"+schedID, f, nil)
@@ -478,8 +484,13 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 	}
 }
 
-func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) error {
-	err := c.schedule(ctx, org, phases)
+type ScheduleParams struct {
+	PaymentMethod string
+	Phases        []Phase
+}
+
+func (c *Client) Schedule(ctx context.Context, org string, p ScheduleParams) error {
+	err := c.schedule(ctx, org, p)
 	c.Logf("stripe: schedule: %v", err)
 	var e *stripe.Error
 	if errors.As(err, &e) {
@@ -493,21 +504,21 @@ func (c *Client) Schedule(ctx context.Context, org string, phases []Phase) error
 	return err
 }
 
-func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err error) {
+func (c *Client) schedule(ctx context.Context, org string, p ScheduleParams) (err error) {
 	defer errorfmt.Handlef("tier: schedule: %q: %w", org, &err)
 
 	if err := c.PutCustomer(ctx, org, nil); err != nil {
 		return err
 	}
 
-	if len(phases) == 0 {
+	if len(p.Phases) == 0 {
 		return errors.New("tier: schedule: at least one phase required")
 	}
 
-	scheduleNow := phases[0].Effective.IsZero()
-	cancelNow := scheduleNow && len(phases[0].Features) == 0
+	scheduleNow := p.Phases[0].Effective.IsZero()
+	cancelNow := scheduleNow && len(p.Phases[0].Features) == 0
 
-	if cancelNow && len(phases) > 1 {
+	if cancelNow && len(p.Phases) > 1 {
 		return errors.New("tier: a cancel phase must be the final phase")
 	}
 
@@ -522,7 +533,7 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 		//
 		// If this is a "cancel immediately" request, it returns
 		// ErrInvalidCancel because there is no subscription to cancel.
-		return c.createSchedule(ctx, org, defaultScheduleName, "", phases)
+		return c.createSchedule(ctx, org, defaultScheduleName, "", p)
 	}
 	if err != nil {
 		return err
@@ -536,7 +547,7 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 
 	if s.ScheduleID == "" {
 		// We have a subscription, but it is has no active schedule, so start a new one.
-		return c.createSchedule(ctx, org, defaultScheduleName, s.ID, phases)
+		return c.createSchedule(ctx, org, defaultScheduleName, s.ID, p)
 	} else {
 		cp, _, err := c.lookupPhases(ctx, org, s, defaultScheduleName)
 		if err != nil {
@@ -546,18 +557,18 @@ func (c *Client) schedule(ctx context.Context, org string, phases []Phase) (err 
 		if cp.Valid() {
 			if scheduleNow {
 				// attach phase to current
-				phases[0].Effective = cp.Effective
+				p.Phases[0].Effective = cp.Effective
 			} else {
-				phases = append([]Phase{cp}, phases...)
+				p.Phases = append([]Phase{cp}, p.Phases...)
 			}
 		}
 
-		err = c.updateSchedule(ctx, s.ScheduleID, defaultScheduleName, phases)
+		err = c.updateSchedule(ctx, s.ScheduleID, defaultScheduleName, p)
 		if isReleased(err) {
 			// Lost a race with the clock and the schedule was
 			// released just after seeing it, but before our
 			// update.
-			return c.createSchedule(ctx, org, defaultScheduleName, s.ID, phases)
+			return c.createSchedule(ctx, org, defaultScheduleName, s.ID, p)
 		}
 		if err != nil {
 			return err
@@ -582,9 +593,9 @@ func isReleased(err error) bool {
 // taking over any in-progress schedule. The customer is billed immediately
 // with prorations if any.
 func (c *Client) SubscribeTo(ctx context.Context, org string, fs []refs.FeaturePlan) error {
-	return c.Schedule(ctx, org, []Phase{{
-		Features: fs,
-	}})
+	return c.Schedule(ctx, org, ScheduleParams{
+		Phases: []Phase{{Features: fs}},
+	})
 
 }
 
@@ -840,6 +851,14 @@ func (c *Client) Isolated() bool {
 	return c.Stripe.AccountID != ""
 }
 
+type stripeCustomer struct {
+	stripe.ID
+	Email    string
+	Metadata struct {
+		Org string `json:"tier.org"`
+	}
+}
+
 func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 	defer errorfmt.Handlef("whois: %q: %w", org, &err)
 	if !strings.HasPrefix(org, "org:") {
@@ -847,17 +866,11 @@ func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 	}
 
 	cid, err := c.cache.load(org, func() (string, error) {
-		type T struct {
-			stripe.ID
-			Email    string
-			Metadata struct {
-				Org string `json:"tier.org"`
-			}
-		}
 		var f stripe.Form
-		cus, err := stripe.List[T](ctx, c.Stripe, "GET", "/v1/customers", f).Find(func(v T) bool {
-			return v.Metadata.Org == org
-		})
+		cus, err := stripe.List[stripeCustomer](ctx, c.Stripe, "GET", "/v1/customers", f).
+			Find(func(v stripeCustomer) bool {
+				return v.Metadata.Org == org
+			})
 		if err != nil {
 			return "", err
 		}

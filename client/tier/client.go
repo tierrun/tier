@@ -271,15 +271,17 @@ type CheckoutParams struct {
 }
 
 type ScheduleParams struct {
-	Info   *OrgInfo
-	Phases []Phase
+	Info            *OrgInfo
+	Phases          []Phase
+	PaymentMethodID string
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) (*apitypes.ScheduleResponse, error) {
 	return fetchOK[*apitypes.ScheduleResponse, *apitypes.Error](ctx, c, "POST", "/v1/subscribe", &apitypes.ScheduleRequest{
-		Org:    org,
-		Info:   (*apitypes.OrgInfo)(p.Info),
-		Phases: p.Phases,
+		Org:             org,
+		Info:            (*apitypes.OrgInfo)(p.Info),
+		Phases:          p.Phases,
+		PaymentMethodID: p.PaymentMethodID,
 	})
 
 }

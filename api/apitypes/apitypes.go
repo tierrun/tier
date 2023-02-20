@@ -56,9 +56,10 @@ type CheckoutRequest struct {
 }
 
 type ScheduleRequest struct {
-	Org    string   `json:"org"`
-	Info   *OrgInfo `json:"info"`
-	Phases []Phase  `json:"phases"`
+	Org             string   `json:"org"`
+	PaymentMethodID string   `json:"payment_method_id"`
+	Info            *OrgInfo `json:"info"`
+	Phases          []Phase  `json:"phases"`
 }
 
 // ScheduleResponse is the expected response from a schedule request. It is

@@ -278,6 +278,7 @@ func runTier(cmd string, args []string) (err error) {
 		successURL := fs.String("checkout", "", "subscribe via Stripe checkout")
 		cancelURL := fs.String("cancel_url", "", "sets the cancel URL for use with -checkout")
 		requireBillingAddress := fs.Bool("require_billing_address", false, "require billing address for use with --checkout")
+		paymentMethod := fs.String("paymentmethod", "", "sets the Stripe payment method for the subscription (e.g. pm_123). It is ignored with --checkout")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -317,6 +318,7 @@ func runTier(cmd string, args []string) (err error) {
 				Info: &tier.OrgInfo{
 					Email: *email,
 				},
+				PaymentMethodID: *paymentMethod,
 			}
 			switch {
 			case *trial > 0:
