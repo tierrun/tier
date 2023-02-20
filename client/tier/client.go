@@ -102,6 +102,10 @@ func (c *Client) LookupLimits(ctx context.Context, org string) (apitypes.UsageRe
 	return fetchOK[apitypes.UsageResponse, *apitypes.Error](ctx, c, "GET", "/v1/limits?org="+org, nil)
 }
 
+func (c *Client) LookupPaymentMethods(ctx context.Context, org string) (apitypes.PaymentMethodsResponse, error) {
+	return fetchOK[apitypes.PaymentMethodsResponse, *apitypes.Error](ctx, c, "GET", "/v1/payment_methods?org="+org, nil)
+}
+
 // LookupLimit reports the current usage and limits for the provided org and
 // feature. If the feature is not currently available to the org, both limit
 // and used are zero and no error is reported.

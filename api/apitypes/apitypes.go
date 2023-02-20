@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"tier.run/refs"
+	"tier.run/types/payment"
 )
 
 type Error struct {
@@ -29,6 +30,11 @@ type PhaseResponse struct {
 	Features  []refs.FeaturePlan `json:"features,omitempty"`
 	Plans     []refs.Plan        `json:"plans,omitempty"`
 	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
+}
+
+type PaymentMethodsResponse struct {
+	Org            string           `json:"org"`
+	PaymentMethods []payment.Method `json:"methods"`
 }
 
 type InvoiceSettings struct {

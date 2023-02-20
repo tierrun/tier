@@ -182,6 +182,8 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 		return h.servePull(w, r)
 	case "/v1/push":
 		return h.servePush(w, r)
+	case "/v1/payment_methods":
+		return h.servePaymentMethods(w, r)
 	default:
 		return trweb.NotFound
 	}
@@ -394,6 +396,20 @@ func (h *Handler) servePush(w http.ResponseWriter, r *http.Request) error {
 		ee = append(ee, pr)
 	})
 	return httpJSON(w, apitypes.PushResponse{Results: ee})
+}
+
+func (h *Handler) servePaymentMethods(w http.ResponseWriter, r *http.Request) error {
+	org := r.FormValue("org")
+
+	pms, err := h.c.LookupPaymentMethods(r.Context(), org)
+	if err != nil {
+		return err
+	}
+
+	return httpJSON(w, apitypes.PaymentMethodsResponse{
+		Org:            org,
+		PaymentMethods: pms,
+	})
 }
 
 func httpJSON(w http.ResponseWriter, v any) error {
