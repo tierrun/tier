@@ -832,6 +832,25 @@ func TestLookupPhases(t *testing.T) {
 	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
 }
 
+func TestLookupPaymentMethods(t *testing.T) {
+	tc := newTestClient(t)
+	ctx := context.Background()
+	if err := tc.PutCustomer(ctx, "org:example", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// We can't get payment methods back from Stripe in Test Mode without
+	// manually creating them via SetupIntents. So we'll just check that we
+	// get an empty list, without an error.
+	pms, err := tc.LookupPaymentMethods(ctx, "org:example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pms) != 0 {
+		t.Errorf("len(pms) = %d, expected 0", len(pms))
+	}
+}
+
 func TestCheckoutRequiredAddress(t *testing.T) {
 	type G struct {
 		successURL string

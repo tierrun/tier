@@ -12,6 +12,7 @@ import (
 	"kr.dev/errorfmt"
 	"tier.run/refs"
 	"tier.run/stripe"
+	"tier.run/types/payment"
 	"tier.run/values"
 )
 
@@ -672,6 +673,16 @@ func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err 
 	}
 	_, all, err := c.lookupPhases(ctx, org, s, defaultScheduleName)
 	return all, err
+}
+
+// LookupPaymentMethods returns the payment methods for the given org.
+func (c *Client) LookupPaymentMethods(ctx context.Context, org string) ([]payment.Method, error) {
+	cid, err := c.WhoIs(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	var f stripe.Form
+	return stripe.Slurp[payment.Method](ctx, c.Stripe, "GET", "/v1/customers/"+cid+"/payment_methods", f)
 }
 
 type Period struct {

@@ -552,6 +552,27 @@ func TestScheduleWithCustomerInfoNoPhases(t *testing.T) {
 	}
 }
 
+func TestPaymentMethods(t *testing.T) {
+	ctx := context.Background()
+	tc, _ := newTestClient(t)
+
+	if err := tc.Subscribe(ctx, "org:test"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := tc.LookupPaymentMethods(ctx, "org:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := apitypes.PaymentMethodsResponse{
+		Org:            "org:test",
+		PaymentMethods: nil,
+	}
+
+	diff.Test(t, t.Errorf, got, want)
+}
+
 func maybeFailNow(t *testing.T) {
 	t.Helper()
 	if t.Failed() {
