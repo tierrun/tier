@@ -132,7 +132,7 @@ func (f *Feature) Limit() int {
 type Tier struct {
 	Upto  int     // the upper limit of the tier
 	Price float64 // the price of the tier
-	Base  int     // the base price of the tier
+	Base  float64 // the base price of the tier
 }
 
 type Client struct {
@@ -340,10 +340,9 @@ type stripePrice struct {
 	TiersMode     string  `json:"tiers_mode"`
 	UnitAmount    float64 `json:"unit_amount_decimal,string"`
 	Tiers         []struct {
-		Upto         int     `json:"up_to"`
-		Price        float64 `json:"unit_amount"`
-		PriceDecimal float64 `json:"unit_amount_decimal,string"`
-		Base         int     `json:"flat_amount"`
+		Upto  int     `json:"up_to"`
+		Price float64 `json:"unit_amount_decimal,string"`
+		Base  float64 `json:"flat_amount_decimal,string"`
 	}
 	Currency string
 }
@@ -363,7 +362,7 @@ func stripePriceToFeature(p stripePrice) Feature {
 	for i, t := range p.Tiers {
 		f.Tiers = append(f.Tiers, Tier{
 			Upto:  t.Upto,
-			Price: values.Coalesce(t.PriceDecimal, t.Price),
+			Price: t.Price,
 			Base:  t.Base,
 		})
 		if i == len(p.Tiers)-1 {

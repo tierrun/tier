@@ -46,6 +46,17 @@ func TestRoundTrip(t *testing.T) {
 			FeaturePlan: refs.MustParseFeaturePlan("feature:decimal@fractionalBase"),
 			Interval:    "@daily",
 			Currency:    "eur",
+			Mode:        "volume",
+			Aggregate:   "perpetual",
+			Tiers: []Tier{
+				{Upto: 1, Price: 100.01, Base: 1},
+				{Upto: 2, Price: 200.02, Base: 2},
+			},
+		},
+		{
+			FeaturePlan: refs.MustParseFeaturePlan("feature:decimal@fractionalTierBase"),
+			Interval:    "@daily",
+			Currency:    "eur",
 			Base:        0.1,
 		},
 		{
