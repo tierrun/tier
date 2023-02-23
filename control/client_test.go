@@ -43,6 +43,12 @@ func TestRoundTrip(t *testing.T) {
 
 	want := []Feature{
 		{
+			FeaturePlan: refs.MustParseFeaturePlan("feature:decimal@fractionalBase"),
+			Interval:    "@daily",
+			Currency:    "eur",
+			Base:        0.1,
+		},
+		{
 			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@3"),
 			Interval:    "@daily",
 			Currency:    "eur",
@@ -63,6 +69,12 @@ func TestRoundTrip(t *testing.T) {
 				{Upto: 3, Price: 300, Base: 3},
 			},
 		},
+	}
+
+	if !slices.IsSortedFunc(want, func(a, b Feature) bool {
+		return a.Less(b.FeaturePlan)
+	}) {
+		t.Fatal("want must be sorted")
 	}
 
 	if err := tc.Push(ctx, want, pushLogger(t)); err != nil {
