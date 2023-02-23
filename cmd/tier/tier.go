@@ -257,7 +257,7 @@ func runTier(cmd string, args []string) (err error) {
 
 		for plan, p := range m.Plans {
 			for feature, f := range p.Features {
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n",
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%f\n",
 					plan,
 					feature,
 					f.Mode,

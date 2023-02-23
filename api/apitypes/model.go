@@ -48,12 +48,12 @@ func (t *Tier) UnmarshalJSON(data []byte) error {
 }
 
 type Feature struct {
-	Title     string `json:"title,omitempty"`
-	Base      int    `json:"base,omitempty"`
-	Mode      string `json:"mode,omitempty"`
-	Aggregate string `json:"aggregate,omitempty"`
-	Tiers     []Tier `json:"tiers,omitempty"`
-	PermLink  string `json:"permLink,omitempty"`
+	Title     string  `json:"title,omitempty"`
+	Base      float64 `json:"base,omitempty"`
+	Mode      string  `json:"mode,omitempty"`
+	Aggregate string  `json:"aggregate,omitempty"`
+	Tiers     []Tier  `json:"tiers,omitempty"`
+	PermLink  string  `json:"permLink,omitempty"`
 }
 
 type Plan struct {

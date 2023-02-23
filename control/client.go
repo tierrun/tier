@@ -82,7 +82,7 @@ type Feature struct {
 
 	// Base is the base price for the feature. If Tiers is not empty, then Base
 	// is ignored.
-	Base int
+	Base float64
 
 	// Mode specifies the billing mode for use with Tiers.
 	//
@@ -280,7 +280,7 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) (providerID string,
 	if len(f.Tiers) == 0 {
 		data.Set("recurring", "usage_type", "licensed")
 		data.Set("billing_scheme", "per_unit")
-		data.Set("unit_amount", f.Base)
+		data.Set("unit_amount_decimal", f.Base)
 	} else {
 		data.Set("recurring", "usage_type", "metered")
 		data.Set("billing_scheme", "tiered")
@@ -336,9 +336,9 @@ type stripePrice struct {
 		UsageType      string `json:"usage_type"`
 		AggregateUsage string `json:"aggregate_usage"`
 	}
-	BillingScheme string `json:"billing_scheme"`
-	TiersMode     string `json:"tiers_mode"`
-	UnitAmount    int    `json:"unit_amount"`
+	BillingScheme string  `json:"billing_scheme"`
+	TiersMode     string  `json:"tiers_mode"`
+	UnitAmount    float64 `json:"unit_amount_decimal,string"`
 	Tiers         []struct {
 		Upto         int     `json:"up_to"`
 		Price        float64 `json:"unit_amount"`
