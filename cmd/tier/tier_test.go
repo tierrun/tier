@@ -305,7 +305,7 @@ func TestPushLinks(t *testing.T) {
 	    }
 	}`)
 	tt.Run("push", "-")
-	tt.GrepStdout("https://dashboard.stripe.com/acct_state/prices/price_123", "expected URL")
+	tt.GrepStdout("https://dashboard.stripe.com/acct_state/test/prices/price_123", "expected URL")
 
 	// get out of isolation
 	if err := os.Remove("tier.state"); err != nil {
@@ -323,7 +323,7 @@ func TestPushLinks(t *testing.T) {
 	    }
 	}`)
 	tt.Run("push", "-")
-	tt.GrepStdout("https://dashboard.stripe.com/acct_profile/prices/price_123", "expected URL")
+	tt.GrepStdout("https://dashboard.stripe.com/acct_profile/test/prices/price_123", "expected URL")
 
 	// assume default dashboard URL is okay if STRIPE_API_KEY is set
 	tt.SetStdinString(`{

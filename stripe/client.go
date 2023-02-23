@@ -46,13 +46,17 @@ func MakeID(parts ...string) string {
 // If live is true, a link to the live dashboard is returned, otherwise a test
 // link is returned.
 func Link(live bool, accountID string, parts ...string) (string, error) {
-	var base string
-	if !live && accountID == "" {
-		base = "https://dashboard.stripe.com/test"
-	} else {
-		base = "https://dashboard.stripe.com"
+	base, err := url.JoinPath("https://dashboard.stripe.com", accountID)
+	if err != nil {
+		return "", err
 	}
-	return url.JoinPath(base, append([]string{accountID}, parts...)...)
+	if !live {
+		base, err = url.JoinPath(base, "test")
+		if err != nil {
+			return "", err
+		}
+	}
+	return url.JoinPath(base, parts...)
 }
 
 type Error struct {

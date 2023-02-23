@@ -27,7 +27,7 @@ func TestLink(t *testing.T) {
 	}{
 		{true, "acct_123", "foo", "https://dashboard.stripe.com/acct_123/foo"},
 		{true, "", "foo", "https://dashboard.stripe.com/foo"},
-		{false, "acct_123", "foo", "https://dashboard.stripe.com/acct_123/foo"},
+		{false, "acct_123", "foo", "https://dashboard.stripe.com/acct_123/test/foo"},
 		{false, "", "foo", "https://dashboard.stripe.com/test/foo"},
 	}
 	for _, tc := range cases {
