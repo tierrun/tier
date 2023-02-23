@@ -301,7 +301,7 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) (providerID string,
 				limit = t.Upto
 			}
 			data.Set("tiers", i, "unit_amount_decimal", t.Price)
-			data.Set("tiers", i, "flat_amount", t.Base)
+			data.Set("tiers", i, "flat_amount_decimal", t.Base)
 		}
 		data.Set("metadata", "tier.limit", limit)
 	}
