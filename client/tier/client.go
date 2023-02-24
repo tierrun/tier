@@ -246,6 +246,11 @@ func (c *Client) Subscribe(ctx context.Context, org string, featuresAndPlans ...
 	return err
 }
 
+// Cancel cancels the subscription for the provided org.
+func (c *Client) Cancel(ctx context.Context, org string) error {
+	return c.Subscribe(ctx, org)
+}
+
 // Checkout creates a new checkout link for the provided org and features, if
 // any; otherwise, if no features are specified, and payment setup link is
 // returned instead.

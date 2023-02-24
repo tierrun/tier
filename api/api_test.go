@@ -252,6 +252,48 @@ func TestAPISubscribe(t *testing.T) {
 	})
 }
 
+func TestCancel(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	tc, _ := newTestClient(t)
+	_, err := tc.PushJSON(ctx, []byte(`{
+	  "plans": {
+	    "plan:test@0": {
+	      "features": {
+		"feature:t": {
+		  "tiers": [{}]
+		}
+	      }
+	    }
+	  }
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	checkUsage := func(org string, want []apitypes.Usage) {
+		t.Helper()
+		u, err := tc.LookupLimits(ctx, org)
+		if err != nil {
+			t.Fatal(err)
+		}
+		diff.Test(t, t.Errorf, u.Usage, want)
+	}
+
+	if err := tc.Subscribe(ctx, "org:test", "plan:test@0"); err != nil {
+		t.Fatal(err)
+	}
+	checkUsage("org:test", []apitypes.Usage{
+		{Feature: mpn("feature:t"), Used: 0, Limit: control.Inf},
+	})
+
+	if err := tc.Cancel(ctx, "org:test"); err != nil {
+		t.Fatal(err)
+	}
+	checkUsage("org:test", nil)
+}
+
 func TestPhaseBadOrg(t *testing.T) {
 	t.Parallel()
 
