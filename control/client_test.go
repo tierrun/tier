@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
@@ -29,12 +28,6 @@ func newTestClient(t *testing.T) *Client {
 		Stripe: stroke.WithAccount(t, sc),
 		Logf:   t.Logf,
 	}
-}
-
-func (c *Client) setClock(t *testing.T, now time.Time) *stroke.Clock {
-	clock := stroke.NewClock(t, c.Stripe, t.Name(), now)
-	c.Clock = clock.ID()
-	return clock
 }
 
 func TestRoundTrip(t *testing.T) {

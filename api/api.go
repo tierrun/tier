@@ -12,6 +12,7 @@ import (
 	"golang.org/x/exp/slices"
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
+	"tier.run/client/tier"
 	"tier.run/control"
 	"tier.run/refs"
 	"tier.run/stripe"
@@ -163,6 +164,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
+	clockID := r.Header.Get(tier.ClockHeader)
+	r = r.Clone(control.WithClock(r.Context(), clockID))
+
 	switch r.URL.Path {
 	case "/v1/whoami":
 		return h.serveWhoAmI(w, r)
@@ -184,6 +188,8 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 		return h.servePush(w, r)
 	case "/v1/payment_methods":
 		return h.servePaymentMethods(w, r)
+	case "/v1/clock":
+		return h.serveClock(w, r)
 	default:
 		return trweb.NotFound
 	}
@@ -287,6 +293,7 @@ func (h *Handler) serveWhoIs(w http.ResponseWriter, r *http.Request) error {
 			Name:            info.Name,
 			Description:     info.Description,
 			Phone:           info.Phone,
+			Created:         info.CreatedAt(),
 			Metadata:        info.Metadata,
 			PaymentMethod:   info.PaymentMethod,
 			InvoiceSettings: apitypes.InvoiceSettings(info.InvoiceSettings),
@@ -410,6 +417,48 @@ func (h *Handler) servePaymentMethods(w http.ResponseWriter, r *http.Request) er
 		Org:            org,
 		PaymentMethods: pms,
 	})
+}
+
+func (h *Handler) serveClock(w http.ResponseWriter, r *http.Request) error {
+	writeResp := func(c *control.Clock) error {
+		return httpJSON(w, apitypes.ClockResponse{
+			ID:      c.ID(),
+			Link:    c.Link(),
+			Present: c.Present(),
+			Status:  c.Status(),
+		})
+	}
+
+	switch r.Method {
+	case "GET":
+		clockID := r.FormValue("id")
+		c := h.c.ClockFromID(clockID)
+		if err := c.Sync(r.Context()); err != nil {
+			return err
+		}
+		return writeResp(c)
+	case "POST":
+		var v apitypes.ClockRequest
+		if err := trweb.DecodeStrict(r, &v); err != nil {
+			return err
+		}
+
+		if v.ID == "" {
+			c, err := h.c.NewClock(r.Context(), v.Name, v.Present)
+			if err != nil {
+				return err
+			}
+			return writeResp(c)
+		} else {
+			c := h.c.ClockFromID(v.ID)
+			if err := c.Advance(r.Context(), v.Present); err != nil {
+				return err
+			}
+			return writeResp(c)
+		}
+	default:
+		return trweb.MethodNotAllowed
+	}
 }
 
 func httpJSON(w http.ResponseWriter, v any) error {

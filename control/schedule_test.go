@@ -23,7 +23,6 @@ import (
 	"kr.dev/errorfmt"
 	"tier.run/refs"
 	"tier.run/stripe"
-	"tier.run/stripe/stroke"
 	"tier.run/values"
 )
 
@@ -48,8 +47,7 @@ var ignoreProviderIDs = diff.OptionList(
 func TestSchedule(t *testing.T) {
 	ciOnly(t)
 
-	c := newTestClient(t)
-	ctx := context.Background()
+	s := newScheduleTester(t)
 
 	var model []Feature
 	plan := func(ff []Feature) []refs.FeaturePlan {
@@ -74,20 +72,11 @@ func TestSchedule(t *testing.T) {
 		Currency:    "usd",
 	}})
 
-	c.Push(ctx, model, pushLogger(t))
-
-	sub := func(org string, fs []refs.FeaturePlan) {
-		t.Helper()
-		t.Logf("subscribing %s to %# v", org, pretty.Formatter(fs))
-
-		if err := c.SubscribeTo(ctx, org, fs); err != nil {
-			t.Fatalf("%# v", pretty.Formatter(err))
-		}
-	}
+	s.push(model)
 
 	check := func(org string, want []Phase) {
 		t.Helper()
-		got, err := c.LookupPhases(ctx, org)
+		got, err := s.cc.LookupPhases(s.ctx, org)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,8 +84,7 @@ func TestSchedule(t *testing.T) {
 		diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
 	}
 
-	clock := c.setClock(t, t0)
-	sub("org:example", planFree)
+	s.schedule("org:example", 0, "", planFree...)
 	check("org:example", []Phase{{
 		Org:       "org:example",
 		Current:   true,
@@ -105,8 +93,8 @@ func TestSchedule(t *testing.T) {
 		Plans:     plans("plan:free@0"),
 	}})
 
-	clock.Advance(t1)
-	sub("org:example", planPro)
+	s.advanceTo(t1)
+	s.schedule("org:example", 0, "", planPro...)
 	check("org:example", []Phase{
 		{
 			Org:       "org:example",
@@ -118,7 +106,7 @@ func TestSchedule(t *testing.T) {
 	})
 
 	// downgrade and check no new phases
-	sub("org:example", planFree)
+	s.schedule("org:example", 0, "", planFree...)
 	check("org:example", []Phase{
 		{
 			Org:       "org:example",
@@ -131,38 +119,52 @@ func TestSchedule(t *testing.T) {
 }
 
 type scheduleTester struct {
+	ctx   context.Context
 	t     *testing.T
 	cc    *Client
-	clock *stroke.Clock
+	clock *Clock
 }
 
 func newScheduleTester(t *testing.T) *scheduleTester {
 	t.Helper()
 	c := newTestClient(t)
-	clock := c.setClock(t, t0)
-	return &scheduleTester{t: t, cc: c, clock: clock}
+	clock, err := c.NewClock(context.Background(), t.Name(), t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := WithClock(context.Background(), clock.ID())
+	return &scheduleTester{ctx: ctx, t: t, cc: c, clock: clock}
 }
 
 func (s *scheduleTester) push(model []Feature) {
 	s.t.Helper()
-	s.cc.Push(context.Background(), model, pushLogger(s.t))
+	s.cc.Push(s.ctx, model, pushLogger(s.t))
 	if s.t.Failed() {
 		s.t.FailNow()
 	}
 }
 
 func (s *scheduleTester) advance(days int) {
-	s.clock.Advance(s.clock.Now().AddDate(0, 0, days))
+	s.advanceTo(s.clock.Present().AddDate(0, 0, days))
+}
+
+func (s *scheduleTester) advanceTo(t time.Time) {
+	if err := s.clock.Advance(s.ctx, t); err != nil {
+		s.t.Fatal(err)
+	}
+	if err := s.clock.Wait(s.ctx); err != nil {
+		s.t.Fatal(err)
+	}
 }
 
 func (s *scheduleTester) advanceToNextPeriod() {
 	// TODO(bmizerany): make Phase aware so that it jumps based on the
 	// start of the next phase if the current phase ends sooner than than 1
 	// interval of the current phase.
-	now := s.clock.Now()
+	now := s.clock.Present()
 	eop := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
 	s.t.Logf("advancing to next period %s", eop)
-	s.clock.Advance(eop)
+	s.advanceTo(eop)
 }
 
 func (s *scheduleTester) cancel(org string) {
@@ -174,7 +176,7 @@ func (s *scheduleTester) cancel(org string) {
 func (s *scheduleTester) setPaymentMethod(org string, pm string) {
 	s.t.Helper()
 	s.t.Logf("setting payment method for %s to %s", org, pm)
-	if err := s.cc.PutCustomer(context.Background(), org, &OrgInfo{
+	if err := s.cc.PutCustomer(s.ctx, org, &OrgInfo{
 		PaymentMethod: pm,
 		InvoiceSettings: InvoiceSettings{
 			DefaultPaymentMethod: pm,
@@ -209,14 +211,14 @@ func (s *scheduleTester) schedule(org string, trialDays int, payment string, fs 
 		PaymentMethod: payment,
 		Phases:        ps,
 	}
-	if err := s.cc.Schedule(context.Background(), org, p); err != nil {
+	if err := s.cc.Schedule(s.ctx, org, p); err != nil {
 		s.t.Fatalf("error subscribing: %v", err)
 	}
 }
 
 func (s *scheduleTester) report(org, name string, n int) {
 	s.t.Helper()
-	if err := s.cc.ReportUsage(context.Background(), org, mpn(name), Report{
+	if err := s.cc.ReportUsage(s.ctx, org, mpn(name), Report{
 		N: n,
 	}); err != nil {
 		s.t.Fatal(err)
@@ -228,10 +230,13 @@ func (s *scheduleTester) report(org, name string, n int) {
 //lint:ignore U1000 saving for a rainy day
 func (s *scheduleTester) checkLimits(org string, want []Usage) {
 	s.t.Helper()
-	got, err := s.cc.LookupLimits(context.Background(), org)
+	got, err := s.cc.LookupLimits(s.ctx, org)
 	if err != nil {
 		s.t.Fatal(err)
 	}
+	slices.SortFunc(got, func(a, b Usage) bool {
+		return refs.ByName(a.Feature, b.Feature)
+	})
 	s.diff(got, want, diff.ZeroFields[Usage]("Start", "End", "Feature"))
 	if s.t.Failed() {
 		s.t.FailNow()
@@ -241,7 +246,7 @@ func (s *scheduleTester) checkLimits(org string, want []Usage) {
 // ignores period dates
 func (s *scheduleTester) checkInvoices(org string, want []Invoice) {
 	s.t.Helper()
-	got, err := s.cc.LookupInvoices(context.Background(), org)
+	got, err := s.cc.LookupInvoices(s.ctx, org)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -360,7 +365,7 @@ func TestSchedule_TrialSwapWithPaid(t *testing.T) {
 	for i, step := range steps {
 		t.Logf("step: %+v", step)
 		s.schedule("org:test", step.trialDays, "", featureX)
-		status, err := s.cc.LookupStatus(context.Background(), "org:test")
+		status, err := s.cc.LookupStatus(s.ctx, "org:test")
 		if err != nil {
 			t.Fatalf("[%d]: unexpected error: %v", i, err)
 		}
@@ -623,8 +628,7 @@ func TestSchedulePaymentMethod(t *testing.T) {
 }
 
 func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
-	c := newTestClient(t)
-	ctx := context.Background()
+	s := newScheduleTester(t)
 
 	fs := []Feature{
 		{
@@ -656,13 +660,10 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 		fps[i] = f.FeaturePlan
 	}
 
-	c.setClock(t, t0)
-	c.Push(ctx, fs, pushLogger(t))
-	if err := c.SubscribeTo(ctx, "org:example", fps); err != nil {
-		t.Fatal(err)
-	}
+	s.push(fs)
+	s.schedule("org:example", 0, "", fps...)
 
-	got, err := c.LookupPhases(ctx, "org:example")
+	got, err := s.cc.LookupPhases(s.ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,20 +693,17 @@ func TestSubscribeToPlan(t *testing.T) {
 		Currency:    "usd",
 	}}
 
-	ctx := context.Background()
-	tc := newTestClient(t)
-	tc.Push(ctx, fs, pushLogger(t))
-	tc.setClock(t, t0)
+	s := newScheduleTester(t)
+	s.push(fs)
 
 	efs, err := Expand(fs, "plan:pro@0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.SubscribeTo(ctx, "org:example", efs); err != nil {
-		t.Fatal(err)
-	}
 
-	got, err := tc.LookupPhases(ctx, "org:example")
+	s.schedule("org:example", 0, "", efs...)
+
+	got, err := s.cc.LookupPhases(s.ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -764,17 +762,11 @@ func TestLookupPhases(t *testing.T) {
 		},
 	}
 
-	tc := newTestClient(t)
-	ctx := context.Background()
-	tc.Push(ctx, fs0, pushLogger(t))
+	s := newScheduleTester(t)
+	s.push(fs0)
+	s.schedule("org:example", 0, "", FeaturePlans(fs0)...)
 
-	tc.setClock(t, t0)
-
-	if err := tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs0)); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := tc.LookupPhases(ctx, "org:example")
+	got, err := s.cc.LookupPhases(s.ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -800,14 +792,12 @@ func TestLookupPhases(t *testing.T) {
 			Currency:    "usd",
 		},
 	}
-	tc.Push(ctx, fs1, pushLogger(t))
+	s.push(fs1)
 
 	fpsFrag := FeaturePlans(append(fs0, fs1[1:]...))
-	if err := tc.SubscribeTo(ctx, "org:example", fpsFrag); err != nil {
-		t.Fatal(err)
-	}
+	s.schedule("org:example", 0, "", fpsFrag...)
 
-	got, err = tc.LookupPhases(ctx, "org:example")
+	got, err = s.cc.LookupPhases(s.ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -817,8 +807,6 @@ func TestLookupPhases(t *testing.T) {
 		refs.SortGroupedByVersion(p.Features)
 		got[i] = p
 	}
-
-	t.Logf("got: %# v", pretty.Formatter(got))
 
 	want = []Phase{{
 		Org:       "org:example",
@@ -1131,16 +1119,12 @@ func TestReportUsage(t *testing.T) {
 		},
 	}
 
-	tc := newTestClient(t)
-	ctx := context.Background()
-	tc.Push(ctx, fs, pushLogger(t))
-	tc.setClock(t, t0)
+	s := newScheduleTester(t)
+	s.push(fs)
 
-	if err := tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs)); err != nil {
-		t.Fatal(err)
-	}
+	s.schedule("org:example", 0, "", FeaturePlans(fs)...)
 
-	g, groupCtx := errgroup.WithContext(ctx)
+	g, groupCtx := errgroup.WithContext(s.ctx)
 	report := func(feature string, n int) {
 		fn, err := refs.ParseName(feature)
 		if err != nil {
@@ -1148,9 +1132,8 @@ func TestReportUsage(t *testing.T) {
 		}
 		g.Go(func() (err error) {
 			defer errorfmt.Handlef("%s: %w", feature, &err)
-			return tc.ReportUsage(groupCtx, "org:example", fn, Report{
-				N:  n,
-				At: t0,
+			return s.cc.ReportUsage(groupCtx, "org:example", fn, Report{
+				N: n,
 			})
 		})
 	}
@@ -1161,22 +1144,11 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := tc.LookupLimits(ctx, "org:example")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	slices.SortFunc(got, func(a, b Usage) bool {
-		return refs.ByName(a.Feature, b.Feature)
-	})
-
-	want := []Usage{
+	s.checkLimits("org:example", []Usage{
 		{Feature: mpf("feature:10@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 3, Limit: 10},
 		{Feature: mpf("feature:inf@plan:test@0"), Start: t0, End: endOfStripeMonth(t0), Used: 9, Limit: Inf},
 		{Feature: mpf("feature:lic@plan:test@0"), Start: t1, End: t2, Used: 1, Limit: Inf},
-	}
-
-	diff.Test(t, t.Errorf, got, want)
+	})
 }
 
 func TestReportUsageFeatureNotFound(t *testing.T) {
@@ -1257,7 +1229,7 @@ func TestSchedulePutCustomer(t *testing.T) {
 				want.Metadata = map[string]string{}
 			}
 		}
-		diff.Test(t, t.Errorf, got, want)
+		diff.Test(t, t.Errorf, got, want, diff.ZeroFields[OrgInfo]("Created"))
 	}
 
 	check("org:invalid", &o{Email: "invalid"}, nil, ErrInvalidEmail, ErrOrgNotFound)

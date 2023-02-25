@@ -16,6 +16,19 @@ import (
 	"tier.run/values"
 )
 
+type clockKey struct{}
+
+func WithClock(ctx context.Context, clockID string) context.Context {
+	return context.WithValue(ctx, clockKey{}, clockID)
+}
+
+func clockFromContext(ctx context.Context) string {
+	if v := ctx.Value(clockKey{}); v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
 const defaultScheduleName = "default"
 
 // Errors
@@ -50,9 +63,14 @@ type OrgInfo struct {
 	Description string
 	Phone       string
 	Metadata    map[string]string
+	Created     int
 
 	PaymentMethod   string
 	InvoiceSettings InvoiceSettings
+}
+
+func (oi *OrgInfo) CreatedAt() time.Time {
+	return time.Unix(int64(oi.Created), 0)
 }
 
 type Phase struct {
@@ -923,8 +941,8 @@ func (c *Client) createCustomer(ctx context.Context, org string, info *OrgInfo) 
 		if err := setOrgInfo(&f, info); err != nil {
 			return "", err
 		}
-		if c.Clock != "" {
-			f.Set("test_clock", c.Clock)
+		if clockID := clockFromContext(ctx); clockID != "" {
+			f.Set("test_clock", clockID)
 		}
 		var created struct {
 			stripe.ID

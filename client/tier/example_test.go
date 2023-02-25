@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"tier.run/client/tier"
 )
@@ -58,6 +59,30 @@ func ExampleClient_Can_report() {
 	}
 	defer ans.Report() // report consumption after the conversion
 	fmt.Println(convert(readInput()))
+}
+
+func ExampleClient_WithClock_testClocks() {
+	c, err := tier.FromEnv()
+	if err != nil {
+		panic(err)
+	}
+
+	now := time.Now()
+
+	ctx, err := c.WithClock(context.Background(), "testName", now)
+	if err != nil {
+		panic(err)
+	}
+
+	// Use ctx with other Client methods
+
+	// This creates the customer and subscription using the clock.
+	_ = c.Subscribe(ctx, "org:example", "plan:free@0")
+
+	// Advance the clock by 24 hours, and then report usage.
+	_ = c.Advance(ctx, now.Add(24*time.Hour))
+
+	_ = c.Report(ctx, "org:example", "feature:bandwidth", 1000)
 }
 
 func orgFromSession(r *http.Request) string {
