@@ -10,7 +10,6 @@ import (
 
 	"golang.org/x/exp/maps"
 	"kr.dev/errorfmt"
-	"tailscale.com/logtail/backoff"
 	"tier.run/refs"
 	"tier.run/stripe"
 )
@@ -49,24 +48,7 @@ func (c *Client) ReportUsage(ctx context.Context, org string, feature refs.Name,
 
 	f.SetIdempotencyKey(randomString())
 
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
-	// TODO(bmizerany): use Dedup here
-	bo := backoff.NewBackoff("ReportUsage", c.Logf, 3*time.Second)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		err := c.Stripe.Do(ctx, "POST", "/v1/subscription_items/"+itemID+"/usage_records", f, nil)
-		c.Logf("ReportUsage: %v", err)
-		bo.BackOff(ctx, err)
-		if err == nil {
-			return nil
-		}
-	}
+	return c.Stripe.Do(ctx, "POST", "/v1/subscription_items/"+itemID+"/usage_records", f, nil)
 }
 
 func (c *Client) LookupLimits(ctx context.Context, org string) ([]Usage, error) {

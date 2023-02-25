@@ -46,6 +46,7 @@ type OrgInfo struct {
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
 	Phone       string            `json:"phone"`
+	Created     time.Time         `json:"created"`
 	Metadata    map[string]string `json:"metadata"`
 
 	PaymentMethod   string          `json:"payment_method"`
@@ -122,4 +123,17 @@ type WhoAmIResponse struct {
 	KeySource  string    `json:"key_source"`
 	Isolated   bool      `json:"isolated"`
 	URL        string    `json:"url"`
+}
+
+type ClockRequest struct {
+	ID      string
+	Name    string
+	Present time.Time
+}
+
+type ClockResponse struct {
+	ID      string    `json:"id"`
+	Link    string    `json:"link"`
+	Present time.Time `json:"present"`
+	Status  string    `json:"status"`
 }

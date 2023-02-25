@@ -7,15 +7,21 @@ package tier
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
 	"time"
 
+	"tailscale.com/logtail/backoff"
 	"tier.run/api/apitypes"
 	"tier.run/fetch"
 	"tier.run/refs"
 )
+
+// ClockHeader is the header used to pass the clock ID to the tier sidecar.
+// It is exported for use by the sidecar API. Most users want to use WithClock.
+const ClockHeader = "Tier-Clock"
 
 const Inf = 1<<63 - 1
 
@@ -25,6 +31,27 @@ type Client struct {
 
 	BaseURL    string // the base URL of the tier sidecar; default is http://127.0.0.1:8080
 	HTTPClient *http.Client
+
+	Logf func(fmt string, args ...any)
+}
+
+func (c *Client) logf(fmt string, args ...any) {
+	if c.Logf != nil {
+		c.Logf(fmt, args...)
+	}
+}
+
+type clockKey struct{}
+
+// WithClock returns a context with the provided clock ID set. The clock ID is
+// pass via the Tier-Clock header to be used by the tier sidecar.
+func WithClock(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, clockKey{}, id)
+}
+
+func clockFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(clockKey{}).(string)
+	return id
 }
 
 // FromEnv returns a Client configured from the environment. The BaseURL is set
@@ -80,7 +107,7 @@ func (c *Client) PullJSON(ctx context.Context) ([]byte, error) {
 	return fetchOK[[]byte, *apitypes.Error](ctx, c, "GET", "/v1/pull", nil)
 }
 
-// WhoIS reports the Stripe ID for the given organization.
+// WhoIs reports the Stripe customer ID for the provided org. OrgInfo is not set.
 func (c *Client) WhoIs(ctx context.Context, org string) (apitypes.WhoIsResponse, error) {
 	return fetchOK[apitypes.WhoIsResponse, *apitypes.Error](ctx, c, "GET", "/v1/whois?org="+org, nil)
 }
@@ -299,7 +326,69 @@ func (c *Client) WhoAmI(ctx context.Context) (apitypes.WhoAmIResponse, error) {
 	return fetchOK[apitypes.WhoAmIResponse, *apitypes.Error](ctx, c, "GET", "/v1/whoami", nil)
 }
 
+// WithClock creates a new test clock with the provided name and start time,
+// and returns a new context with the clock ID set.
+//
+// It is an error to call WithClock if a clock is already set in the context.
+func (c *Client) WithClock(ctx context.Context, name string, start time.Time) (context.Context, error) {
+	if clockFromContext(ctx) != "" {
+		return nil, errors.New("tier: clock already set in context")
+	}
+	clock, err := fetchOK[apitypes.ClockResponse, *apitypes.Error](ctx, c, "POST", "/v1/clock", apitypes.ClockRequest{
+		Name:    name,
+		Present: start,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return WithClock(ctx, clock.ID), nil
+}
+
+// Advance advances the test clock set in the context to t.
+//
+// It is an error to call Advance if no clock is set in the context.
+func (c *Client) Advance(ctx context.Context, t time.Time) error {
+	clockID := clockFromContext(ctx)
+	if clockID == "" {
+		return errors.New("tier: no clock set in context")
+	}
+	cr, err := fetchOK[apitypes.ClockResponse, *apitypes.Error](ctx, c, "POST", "/v1/clock", apitypes.ClockRequest{
+		ID:      clockID,
+		Present: t,
+	})
+	if err != nil {
+		return err
+	}
+	return c.awaitClockReady(ctx, cr.ID)
+}
+
+var errForBackoff = errors.New("force backoff")
+
+func (c *Client) awaitClockReady(ctx context.Context, id string) error {
+	bo := backoff.NewBackoff("tier", c.logf, 5*time.Second)
+	for {
+		cr, err := c.syncClock(ctx, id)
+		if err != nil {
+			return err
+		}
+		if cr.Status == "ready" {
+			return nil
+		}
+		c.logf("clock %s status = %q; waiting", id, cr.Status)
+		bo.BackOff(ctx, errForBackoff)
+	}
+}
+
+func (c *Client) syncClock(ctx context.Context, id string) (apitypes.ClockResponse, error) {
+	return fetchOK[apitypes.ClockResponse, *apitypes.Error](ctx, c, "GET", "/v1/clock?id="+id, nil)
+}
+
 func fetchOK[T any, E error](ctx context.Context, c *Client, method, path string, body any) (T, error) {
 	up := url.UserPassword(c.APIKey, "")
-	return fetch.OK[T, E](ctx, c.client(), method, c.baseURL(path), body, up)
+	clockID := clockFromContext(ctx)
+	var h http.Header
+	if clockID != "" {
+		h = http.Header{ClockHeader: []string{clockID}}
+	}
+	return fetch.OK[T, E](ctx, c.client(), method, c.baseURL(path), body, up, h)
 }

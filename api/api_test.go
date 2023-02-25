@@ -36,6 +36,7 @@ func newTestClient(t *testing.T) (*tier.Client, *control.Client) {
 	s := httptest.NewTLSServer(h)
 	t.Cleanup(s.Close)
 	tc := &tier.Client{
+		Logf:       t.Logf,
 		BaseURL:    s.URL,
 		HTTPClient: s.Client(),
 	}
@@ -135,7 +136,6 @@ func TestAPISubscribe(t *testing.T) {
 		defer maybeFailNow(t)
 		fn := mpn(feature)
 		err := tc.ReportUsage(ctx, org, fn.String(), n, &tier.ReportParams{
-			At:      time.Now().Add(1 * time.Minute),
 			Clobber: false,
 		})
 		diff.Test(t, t.Errorf, err, wantErr)
@@ -465,15 +465,46 @@ func TestWhoAmI(t *testing.T) {
 	}
 }
 
+func TestClock(t *testing.T) {
+	t.Parallel()
+
+	tc, _ := newTestClient(t)
+
+	now := time.Now().Truncate(time.Second)
+	ctx, err := tc.WithClock(context.Background(), t.Name(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now = now.Add(100 * time.Hour)
+	if err := tc.Advance(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tc.Subscribe(ctx, "org:test"); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := tc.LookupOrg(ctx, "org:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !c.Created.Equal(now) {
+		t.Errorf("c.Created = %v; want %v", c.Created, now)
+	}
+}
+
 func TestTierReport(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	tc, cc := newTestClient(t)
+	tc, _ := newTestClient(t)
 
-	farIntoTheFuture := time.Now().Add(24 * time.Hour)
-	clock := stroke.NewClock(t, cc.Stripe, t.Name(), farIntoTheFuture)
-	cc.Clock = clock.ID()
+	now := time.Now()
+	ctx, err := tc.WithClock(context.Background(), t.Name(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	pr, err := tc.PushJSON(ctx, []byte(`
 		{
@@ -503,9 +534,10 @@ func TestTierReport(t *testing.T) {
 	}
 
 	report := func(n int, at time.Time, wantErr error) {
+		t.Helper()
 		if err := tc.ReportUsage(ctx, "org:test", "feature:t", n, &tier.ReportParams{
 			// Force 'now' at Stripe.
-			At: time.Time{},
+			At: at,
 
 			Clobber: false,
 		}); !errors.Is(err, wantErr) {
@@ -513,8 +545,8 @@ func TestTierReport(t *testing.T) {
 		}
 	}
 
-	report(10, time.Time{}, nil)
-	report(10, clock.Now().Add(1*time.Minute), nil)
+	report(10, now, nil)
+	report(10, now.Add(1*time.Minute), nil)
 
 	limit, used, err := tc.LookupLimit(ctx, "org:test", "feature:t")
 	if err != nil {

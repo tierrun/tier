@@ -6,8 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -75,95 +73,3 @@ func createAccount(c *stripe.Client, t testing.TB) (string, error) {
 	}
 
 }
-
-type Clock struct {
-	id      string
-	helper  func()
-	advance func(time.Time)
-
-	sync   func()
-	now    time.Time
-	status string
-
-	logf func(string, ...any)
-
-	dashURL string
-}
-
-func NewClock(t *testing.T, c *stripe.Client, name string, start time.Time) *Clock {
-	type T struct {
-		ID     string
-		Status string
-		Time   int64 `json:"frozen_time"`
-	}
-
-	ctx := context.Background()
-
-	do := func(method, path string, f stripe.Form) (v T) {
-		t.Helper()
-		if err := c.Do(ctx, method, path, f, &v); err != nil {
-			t.Fatalf("error calling %s %s: %v", method, path, err)
-		}
-		return
-	}
-
-	var f stripe.Form
-	f.Set("name", name)
-	f.Set("frozen_time", start)
-	v := do("POST", "/v1/test_helpers/test_clocks", f)
-	path := "/v1/test_helpers/test_clocks/" + v.ID
-
-	// NOTE: There is no point in deleting clocks. Clients should use
-	// isolated accounts, which when deleted, delete all associated clocks
-	// and other objects. The API call to delete each clock would just be a
-	// waste of time.
-
-	dashURL, err := url.JoinPath("https://dashboard.stripe.com", c.AccountID, "/test/test-clocks", v.ID)
-	if err != nil {
-		panic(err) // should never happen
-	}
-
-	var cl *Clock
-	cl = &Clock{
-		id:     v.ID,
-		helper: t.Helper,
-		advance: func(now time.Time) {
-			var f stripe.Form
-			f.Set("frozen_time", now)
-			do("POST", path+"/advance", f)
-		},
-		sync: func() {
-			v := do("GET", path, stripe.Form{})
-			cl.logf("clock: sync: status=%s, time=%v", v.Status, time.Unix(v.Time, 0))
-			cl.now = time.Unix(v.Time, 0).UTC()
-			cl.status = v.Status
-		},
-		now:     start.Truncate(time.Second),
-		logf:    t.Logf,
-		dashURL: dashURL,
-	}
-
-	return cl
-}
-
-var errForceBackoff = errors.New("force backoff")
-
-// ID returns the ID of the clock.
-func (c *Clock) ID() string           { return c.id }
-func (c *Clock) DashboardURL() string { return c.dashURL }
-
-func (c *Clock) Advance(t time.Time) {
-	c.helper()
-	c.advance(t)
-	bo := backoff.NewBackoff("stroke: clock: advance backoff", c.logf, 5*time.Second)
-	for {
-		c.sync()
-		if c.status == "ready" {
-			return
-		}
-		bo.BackOff(context.Background(), errForceBackoff)
-	}
-}
-
-// Now retrieves the current time for the clock from Stripe and returns it.
-func (c *Clock) Now() time.Time { return c.now }
