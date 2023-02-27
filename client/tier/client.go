@@ -362,20 +362,18 @@ func (c *Client) Advance(ctx context.Context, t time.Time) error {
 	return c.awaitClockReady(ctx, cr.ID)
 }
 
-var errForBackoff = errors.New("force backoff")
+var errClockNotReady = errors.New("force backoff")
 
 func (c *Client) awaitClockReady(ctx context.Context, id string) error {
 	bo := backoff.NewBackoff("tier", c.logf, 5*time.Second)
 	for {
 		cr, err := c.syncClock(ctx, id)
-		if err != nil {
-			return err
+		if err != nil || cr.Status != "ready" {
+			c.logf("clock %s not ready: err=%v status=%q; retrying", id, err, cr.Status)
+			bo.BackOff(ctx, errClockNotReady)
+			continue
 		}
-		if cr.Status == "ready" {
-			return nil
-		}
-		c.logf("clock %s status = %q; waiting", id, cr.Status)
-		bo.BackOff(ctx, errForBackoff)
+		return nil
 	}
 }
 
