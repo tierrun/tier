@@ -31,7 +31,7 @@ func newTestClient(t *testing.T) *Client {
 }
 
 func TestRoundTrip(t *testing.T) {
-	tc := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
 
 	want := []Feature{
@@ -70,11 +70,11 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatal("want must be sorted")
 	}
 
-	if err := tc.Push(ctx, want, pushLogger(t)); err != nil {
+	if err := cc.Push(ctx, want, pushLogger(t)); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := tc.Pull(ctx, 0)
+	got, err := cc.Pull(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestRoundTrip(t *testing.T) {
 		var got struct {
 			Name string
 		}
-		if err := tc.Stripe.Do(ctx, "GET", "/v1/products/tier__feature-test-plan-free-theVersion", stripe.Form{}, &got); err != nil {
+		if err := cc.Stripe.Do(ctx, "GET", "/v1/products/tier__feature-test-plan-free-theVersion", stripe.Form{}, &got); err != nil {
 			t.Fatal(err)
 		}
 		const want = "PlanTitle - FeatureTitle"
@@ -102,7 +102,7 @@ func TestRoundTrip(t *testing.T) {
 }
 
 func TestPushPlanInvalidDecimal(t *testing.T) {
-	tc := newTestClient(t) // TODO(bmizerany): use a client without creating an account
+	cc := newTestClient(t) // TODO(bmizerany): use a client without creating an account
 	ctx := context.Background()
 
 	fs := []Feature{
@@ -118,14 +118,14 @@ func TestPushPlanInvalidDecimal(t *testing.T) {
 			},
 		},
 	}
-	got := tc.Push(ctx, fs, pushLogWith(t, t.Logf))
+	got := cc.Push(ctx, fs, pushLogWith(t, t.Logf))
 	if !errors.Is(got, ErrInvalidPrice) {
 		t.Fatalf("got %v, want ErrInvalidDecimal", got)
 	}
 }
 
 func TestPushPlanImmutability(t *testing.T) {
-	tc := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
 
 	pushes := []struct {
@@ -148,7 +148,7 @@ func TestPushPlanImmutability(t *testing.T) {
 		cb := func(_ Feature, err error) {
 			errs = append(errs, err)
 		}
-		if err := tc.Push(ctx, fs, cb); !errors.Is(err, push.err) {
+		if err := cc.Push(ctx, fs, cb); !errors.Is(err, push.err) {
 			t.Errorf("[%d]: got %v, want %v", i, err, push.err)
 		}
 		if push.err != nil {
@@ -163,7 +163,7 @@ func TestPushPlanImmutability(t *testing.T) {
 }
 
 func TestPushAllFeaturesLoggedOnFailure(t *testing.T) {
-	tc := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
 
 	fs := []Feature{
@@ -190,7 +190,7 @@ func TestPushAllFeaturesLoggedOnFailure(t *testing.T) {
 
 		var mu sync.Mutex
 		var got []error
-		if err := tc.Push(ctx, fs, func(_ Feature, err error) {
+		if err := cc.Push(ctx, fs, func(_ Feature, err error) {
 			mu.Lock()
 			defer mu.Unlock()
 			got = append(got, err)

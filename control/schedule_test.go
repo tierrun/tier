@@ -127,13 +127,13 @@ type scheduleTester struct {
 
 func newScheduleTester(t *testing.T) *scheduleTester {
 	t.Helper()
-	c := newTestClient(t)
-	clock, err := c.NewClock(context.Background(), t.Name(), t0)
+	cc := newTestClient(t)
+	clock, err := cc.NewClock(context.Background(), t.Name(), t0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := WithClock(context.Background(), clock.ID())
-	return &scheduleTester{ctx: ctx, t: t, cc: c, clock: clock}
+	return &scheduleTester{ctx: ctx, t: t, cc: cc, clock: clock}
 }
 
 func (s *scheduleTester) push(model []Feature) {
@@ -452,7 +452,7 @@ func TestScheduleCancelNoLimits(t *testing.T) {
 }
 
 func TestScheduleMinMaxItems(t *testing.T) {
-	c := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
 
 	var fs []Feature
@@ -464,27 +464,27 @@ func TestScheduleMinMaxItems(t *testing.T) {
 		})
 	}
 
-	c.Push(ctx, fs, pushLogger(t))
+	cc.Push(ctx, fs, pushLogger(t))
 
 	// effectively cancel an org that does not exist
-	err := c.SubscribeTo(ctx, "org:example", nil)
+	err := cc.SubscribeTo(ctx, "org:example", nil)
 	if err != nil {
 		// canceling an org that does not exist is not an error, it's a nop
 		t.Fatal(err)
 	}
 
 	fps := FeaturePlans(fs)
-	err = c.SubscribeTo(ctx, "org:example", fps)
+	err = cc.SubscribeTo(ctx, "org:example", fps)
 	if !errors.Is(err, ErrTooManyItems) {
 		t.Fatalf("got %v, want %v", err, ErrTooManyItems)
 	}
 
 	// check that we can still subscribe to the max number of items
 	wantFeatures := fps[:20]
-	if err := c.SubscribeTo(ctx, "org:example", wantFeatures); err != nil {
+	if err := cc.SubscribeTo(ctx, "org:example", wantFeatures); err != nil {
 		t.Fatal(err)
 	}
-	got, err := c.LookupPhases(ctx, "org:example")
+	got, err := cc.LookupPhases(ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -726,21 +726,21 @@ func TestDedupCustomer(t *testing.T) {
 		Currency:    "usd",
 	}}
 
-	tc := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
-	tc.Push(ctx, fs, pushLogger(t))
+	cc.Push(ctx, fs, pushLogger(t))
 
 	var g errgroup.Group
 	for i := 0; i < 3; i++ {
 		g.Go(func() error {
-			return tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs))
+			return cc.SubscribeTo(ctx, "org:example", FeaturePlans(fs))
 		})
 	}
 	if err := g.Wait(); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := tc.ListOrgs(ctx)
+	got, err := cc.ListOrgs(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -821,16 +821,16 @@ func TestLookupPhases(t *testing.T) {
 }
 
 func TestLookupPaymentMethods(t *testing.T) {
-	tc := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
-	if err := tc.PutCustomer(ctx, "org:example", nil); err != nil {
+	if err := cc.PutCustomer(ctx, "org:example", nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// We can't get payment methods back from Stripe in Test Mode without
 	// manually creating them via SetupIntents. So we'll just check that we
 	// get an empty list, without an error.
-	pms, err := tc.LookupPaymentMethods(ctx, "org:example")
+	pms, err := cc.LookupPaymentMethods(ctx, "org:example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1152,7 +1152,7 @@ func TestReportUsage(t *testing.T) {
 }
 
 func TestReportUsageFeatureNotFound(t *testing.T) {
-	tc := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
 
 	fs := []Feature{{
@@ -1164,19 +1164,19 @@ func TestReportUsageFeatureNotFound(t *testing.T) {
 		Aggregate:   "sum",
 	}}
 
-	tc.Push(ctx, fs, pushLogger(t))
-	if err := tc.SubscribeTo(ctx, "org:example", FeaturePlans(fs)); err != nil {
+	cc.Push(ctx, fs, pushLogger(t))
+	if err := cc.SubscribeTo(ctx, "org:example", FeaturePlans(fs)); err != nil {
 		t.Fatal(err)
 	}
 	fn := mpn("feature:nope")
-	got := tc.ReportUsage(ctx, "org:example", fn, Report{})
+	got := cc.ReportUsage(ctx, "org:example", fn, Report{})
 	if !errors.Is(got, ErrFeatureNotFound) {
 		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
 	}
 }
 
 func TestSubscribeToUnknownFeatures(t *testing.T) {
-	tc := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
 
 	fs := refs.MustParseFeaturePlans(
@@ -1184,13 +1184,13 @@ func TestSubscribeToUnknownFeatures(t *testing.T) {
 		"feature:B@plan:b@0",
 	)
 
-	got := tc.SubscribeTo(ctx, "org:example", fs)
+	got := cc.SubscribeTo(ctx, "org:example", fs)
 	if !errors.Is(got, ErrFeatureNotFound) {
 		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
 	}
 
 	// make only plan:a valid
-	tc.Push(ctx, []Feature{{
+	cc.Push(ctx, []Feature{{
 		FeaturePlan: mpf("feature:A@plan:a@0"),
 		Interval:    "@monthly",
 		Currency:    "usd",
@@ -1199,7 +1199,7 @@ func TestSubscribeToUnknownFeatures(t *testing.T) {
 		Aggregate:   "sum",
 	}}, pushLogger(t))
 
-	got = tc.SubscribeTo(ctx, "org:example", fs)
+	got = cc.SubscribeTo(ctx, "org:example", fs)
 	if !errors.Is(got, ErrFeatureNotFound) {
 		t.Fatalf("got %v, want %v", got, ErrFeatureNotFound)
 	}
@@ -1207,7 +1207,7 @@ func TestSubscribeToUnknownFeatures(t *testing.T) {
 
 func TestSchedulePutCustomer(t *testing.T) {
 	// TODO(bmizerany): convert this all to table tests
-	tc := newTestClient(t)
+	cc := newTestClient(t)
 	ctx := context.Background()
 
 	type o = OrgInfo
@@ -1215,11 +1215,11 @@ func TestSchedulePutCustomer(t *testing.T) {
 
 	check := func(org string, in, want *OrgInfo, wantPutErr, wantLookupErr error) {
 		t.Helper()
-		err := tc.PutCustomer(ctx, org, in)
+		err := cc.PutCustomer(ctx, org, in)
 		if !errors.Is(err, wantPutErr) {
 			t.Fatalf("got %v, want %v", err, wantPutErr)
 		}
-		got, err := tc.LookupOrg(ctx, org)
+		got, err := cc.LookupOrg(ctx, org)
 		if !errors.Is(err, wantLookupErr) {
 			t.Fatalf("got %v, want %v", err, wantLookupErr)
 		}

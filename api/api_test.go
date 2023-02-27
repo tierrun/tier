@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/api/apitypes"
@@ -24,7 +25,7 @@ var (
 	mpfs = refs.MustParseFeaturePlans
 )
 
-func newTestClient(t *testing.T) (*tier.Client, *control.Client) {
+func newTestClient(t *testing.T) *tier.Client {
 	sc := stroke.Client(t)
 	sc = stroke.WithAccount(t, sc)
 	cc := &control.Client{
@@ -40,18 +41,22 @@ func newTestClient(t *testing.T) (*tier.Client, *control.Client) {
 		BaseURL:    s.URL,
 		HTTPClient: s.Client(),
 	}
-	return tc, cc
+	return tc
 }
 
 func TestAPICheckout(t *testing.T) {
 	ctx := context.Background()
-	tc, cc := newTestClient(t)
-	m := []control.Feature{{
-		FeaturePlan: mpf("feature:x@plan:test@0"),
-		Interval:    "@monthly",
-		Currency:    "usd",
-	}}
-	cc.Push(ctx, m, pushLogger(t))
+	tc := newTestClient(t)
+	m := []byte(`
+		{"plans": {"plan:test@0": {"features": {
+			"feature:x": {}
+		}}}}
+	`)
+	pr, err := tc.PushJSON(ctx, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("pushed: %s", pretty.Formatter(pr))
 
 	t.Run("card setup", func(t *testing.T) {
 		r, err := tc.Checkout(ctx, "org:test", "https://example.com/success", nil)
@@ -81,32 +86,20 @@ func TestAPISubscribe(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tc, cc := newTestClient(t)
+	tc := newTestClient(t)
 
-	m := []control.Feature{
-		{
-			FeaturePlan: mpf("feature:x@plan:test@0"),
-			Interval:    "@monthly",
-			Currency:    "usd",
-		},
-		{
-			FeaturePlan: mpf("feature:t@plan:test@0"),
-			Interval:    "@monthly",
-			Currency:    "usd",
-			Aggregate:   "sum",
-			Mode:        "graduated",
-			Tiers: []control.Tier{
-				{Upto: control.Inf, Price: 100},
-			},
-		},
-	}
-	if err := cc.Push(ctx, m, func(f control.Feature, err error) {
-		if err != nil {
-			t.Logf("error pushing %q: %v", f.FeaturePlan, err)
-		}
-	}); err != nil {
+	m := []byte(`
+		{"plans": {"plan:test@0": {"features": {
+			"feature:x": {},
+			"feature:t": {"tiers": [{"price": 100}]}
+		}}}}
+	`)
+
+	pr, err := tc.PushJSON(ctx, m)
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("pushed: %s", pretty.Formatter(pr))
 
 	whoIs := func(org string, wantErr error) {
 		t.Helper()
@@ -230,7 +223,7 @@ func TestAPISubscribe(t *testing.T) {
 		Message: "feature or plan not found",
 	})
 
-	_, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
+	_, err = tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
 		Phases: []apitypes.Phase{
 			{Trial: true, Features: []string{"plan:test@0"}},
 		},
@@ -256,7 +249,7 @@ func TestCancel(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 	_, err := tc.PushJSON(ctx, []byte(`{
 	  "plans": {
 	    "plan:test@0": {
@@ -298,7 +291,7 @@ func TestPhaseBadOrg(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 	_, err := tc.LookupPhase(ctx, "org:nope")
 	diff.Test(t, t.Errorf, err, &apitypes.Error{
 		Status:  400,
@@ -317,37 +310,22 @@ func TestPhaseFragments(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tc, cc := newTestClient(t)
+	tc := newTestClient(t)
 
-	m := []control.Feature{
-		{
-			FeaturePlan: mpf("feature:x@plan:test@0"),
-			Interval:    "@monthly",
-			Currency:    "usd",
-		},
-		{
-			FeaturePlan: mpf("feature:t@plan:test@0"),
-			Interval:    "@monthly",
-			Currency:    "usd",
-			Aggregate:   "sum",
-			Mode:        "graduated",
-			Tiers: []control.Tier{
-				{Upto: control.Inf, Price: 100},
-			},
-		},
-	}
-	if err := cc.Push(ctx, m, func(f control.Feature, err error) {
-		if err != nil {
-			t.Logf("error pushing %q: %v", f.FeaturePlan, err)
-		}
-	}); err != nil {
+	m := []byte(`
+		{"plans": {"plan:test@0": {"features": {
+			"feature:x": {},
+			"feature:t": {"tiers": [{"price": 100}]}
+		}}}}
+	`)
+
+	pr, err := tc.PushJSON(ctx, m)
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("pushed: %s", pretty.Formatter(pr))
 
-	// cheating and using the tier client because ATM the API only supports
-	// subscribing to plans.
-	frag := m[1:]
-	if err := cc.SubscribeTo(ctx, "org:test", control.FeaturePlans(frag)); err != nil {
+	if err := tc.Subscribe(ctx, "org:test", "feature:x@plan:test@0"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -357,9 +335,9 @@ func TestPhaseFragments(t *testing.T) {
 	}
 
 	want := apitypes.PhaseResponse{
-		Features:  mpfs("feature:t@plan:test@0"),
+		Features:  mpfs("feature:x@plan:test@0"),
 		Plans:     nil,
-		Fragments: mpfs("feature:t@plan:test@0"),
+		Fragments: mpfs("feature:x@plan:test@0"),
 	}
 
 	// actively avoiding a stripe test clock here to keep the test
@@ -376,7 +354,7 @@ func TestTierPull(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 
 	want := apitypes.Model{
 		Plans: map[refs.Plan]apitypes.Plan{
@@ -415,7 +393,7 @@ func TestPushInvalidPrice(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 
 	in := apitypes.Model{
 		Plans: map[refs.Plan]apitypes.Plan{
@@ -451,7 +429,7 @@ func TestWhoAmI(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 	a, err := tc.WhoAmI(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -468,7 +446,7 @@ func TestWhoAmI(t *testing.T) {
 func TestClock(t *testing.T) {
 	t.Parallel()
 
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 
 	now := time.Now().Truncate(time.Second)
 	ctx, err := tc.WithClock(context.Background(), t.Name(), now)
@@ -498,7 +476,7 @@ func TestClock(t *testing.T) {
 func TestTierReport(t *testing.T) {
 	t.Parallel()
 
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 
 	now := time.Now()
 	ctx, err := tc.WithClock(context.Background(), t.Name(), now)
@@ -563,7 +541,7 @@ func TestTierReport(t *testing.T) {
 
 func TestScheduleWithCustomerInfoNoPhases(t *testing.T) {
 	ctx := context.Background()
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 
 	p := &tier.ScheduleParams{
 		Info: &tier.OrgInfo{
@@ -628,7 +606,7 @@ func TestScheduleWithCustomerInfoNoPhases(t *testing.T) {
 
 func TestPaymentMethods(t *testing.T) {
 	ctx := context.Background()
-	tc, _ := newTestClient(t)
+	tc := newTestClient(t)
 
 	if err := tc.Subscribe(ctx, "org:test"); err != nil {
 		t.Fatal(err)
@@ -651,22 +629,5 @@ func maybeFailNow(t *testing.T) {
 	t.Helper()
 	if t.Failed() {
 		t.FailNow()
-	}
-}
-
-func pushLogger(t *testing.T) func(f control.Feature, err error) {
-	t.Helper()
-	return pushLogWith(t, t.Fatalf)
-}
-
-func pushLogWith(t *testing.T, fatalf func(string, ...any)) func(f control.Feature, err error) {
-	t.Helper()
-	return func(f control.Feature, err error) {
-		t.Helper()
-		if err == nil {
-			t.Logf("pushed %q", f.FeaturePlan)
-		} else {
-			fatalf("error pushing %q: %v", f.FeaturePlan, err)
-		}
 	}
 }
