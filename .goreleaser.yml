@@ -41,15 +41,16 @@ dockers:
     goos: linux
     goarch: arm64
     image_templates:
-      - "tierrun/{{ .ProjectName }}:{{ .Tag }}-arm64"
-      - "tierrun/{{ .ProjectName }}:latest-arm64"
+      - "tierrun/{{ .ProjectName }}:{{ .Tag }}-arm64v8"
+      - "tierrun/{{ .ProjectName }}:latest-arm64v8"
     build_flag_templates:
     - "--pull"
     - "--label=org.opencontainers.image.created={{.Date}}"
     - "--label=org.opencontainers.image.title={{.ProjectName}}"
     - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-    - "--label=org.opencontainers.image.version={{.Version}}"
+    - "--label=org.opencontainers.image.version={{.Tag}}"
     - "--label=org.opencontainers.image.source={{.GitURL}}"
+    - "--platform=linux/arm64/v8"
     dockerfile: Dockerfile.goreleaser
   - use: buildx
     goos: linux
@@ -62,14 +63,19 @@ dockers:
     - "--label=org.opencontainers.image.created={{.Date}}"
     - "--label=org.opencontainers.image.title={{.ProjectName}}"
     - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-    - "--label=org.opencontainers.image.version={{.Version}}"
+    - "--label=org.opencontainers.image.version={{.Tag}}"
     - "--label=org.opencontainers.image.source={{.GitURL}}"
+    - "--platform=linux/amd64"
     dockerfile: Dockerfile.goreleaser
 docker_manifests:
 - name_template: "tierrun/{{ .ProjectName }}:{{ .Tag }}"
   image_templates:
   - "tierrun/{{ .ProjectName }}:{{ .Tag }}-amd64"
-  - "tierrun/{{ .ProjectName }}:{{ .Tag }}-arm64"
+  - "tierrun/{{ .ProjectName }}:{{ .Tag }}-arm64v8"
+- name_template: "tierrun/{{ .ProjectName }}:latest"
+  image_templates:
+  - "tierrun/{{ .ProjectName }}:{{ .Tag }}-amd64"
+  - "tierrun/{{ .ProjectName }}:{{ .Tag }}-arm64v8"
 nfpms:
   - maintainer: Tier
     description: The Tier CLI
