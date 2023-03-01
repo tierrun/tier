@@ -302,7 +302,6 @@ func TestScheduleFreeTrials(t *testing.T) {
 	s.checkInvoices("org:paid", []Invoice{{
 		Lines: []InvoiceLineItem{
 			lineItem(featureX, 2, 2),
-			zero,
 		},
 		SubtotalPreTax: 2,
 		Subtotal:       2,
