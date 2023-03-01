@@ -110,11 +110,11 @@ type Feature struct {
 
 // IsMetered reports if the feature is metered.
 func (f *Feature) IsMetered() bool {
-	// checking the mode is more reliable than checking the existence of
-	// tiers because not all responses from stripe containing prices
+	// checking the aggregate is more reliable than checking the existence
+	// of tiers because not all responses from stripe containing prices
 	// include tiers, but they all include the mode, which is empty for
 	// license prices.
-	return f.Mode != ""
+	return f.Aggregate != ""
 }
 
 func (f *Feature) ID() string {
@@ -276,11 +276,24 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) (providerID string,
 	data.Set("recurring", "interval", interval)
 	data.Set("recurring", "interval_count", 1) // TODO: support user-defined interval count
 
-	if len(f.Tiers) == 0 {
+	numTiers := len(f.Tiers)
+	switch {
+	case numTiers == 0:
 		data.Set("recurring", "usage_type", "licensed")
 		data.Set("billing_scheme", "per_unit")
 		data.Set("unit_amount_decimal", f.Base)
-	} else {
+	case numTiers == 1 && f.Tiers[0].Base == 0:
+		t := f.Tiers[0]
+		data.Set("recurring", "usage_type", "metered")
+		data.Set("billing_scheme", "per_unit")
+		aggregate := aggregateToStripe[f.Aggregate]
+		if aggregate == "" {
+			return "", fmt.Errorf("unknown aggregate: %q", f.Aggregate)
+		}
+		data.Set("recurring", "aggregate_usage", aggregate)
+		data.Set("unit_amount_decimal", t.Price)
+		data.Set("metadata", "tier.limit", t.Upto)
+	default:
 		data.Set("recurring", "usage_type", "metered")
 		data.Set("billing_scheme", "tiered")
 		data.Set("tiers_mode", f.Mode)
@@ -357,8 +370,17 @@ func stripePriceToFeature(p stripePrice) Feature {
 		Interval:    intervalFromStripe[p.Recurring.Interval],
 		Mode:        p.TiersMode,
 		Aggregate:   aggregateFromStripe[p.Recurring.AggregateUsage],
-		Base:        p.UnitAmount,
 	}
+
+	if len(p.Tiers) == 0 && p.Recurring.UsageType == "metered" {
+		f.Tiers = append(f.Tiers, Tier{
+			Upto:  parseLimit(p.Metadata.Limit),
+			Price: p.UnitAmount,
+		})
+	} else {
+		f.Base = p.UnitAmount
+	}
+
 	for i, t := range p.Tiers {
 		f.Tiers = append(f.Tiers, Tier{
 			Upto:  t.Upto,

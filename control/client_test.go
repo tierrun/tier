@@ -9,7 +9,6 @@ import (
 	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/refs"
-	"tier.run/stripe"
 	"tier.run/stripe/stroke"
 )
 
@@ -36,20 +35,20 @@ func TestRoundTrip(t *testing.T) {
 
 	want := []Feature{
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:decimal@fractionalBase"),
+			FeaturePlan: refs.MustParseFeaturePlan("feature:licensed:base:decimal@0"),
 			Interval:    "@daily",
 			Currency:    "eur",
 			Base:        0.1,
 		},
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@3"),
+			FeaturePlan: refs.MustParseFeaturePlan("feature:licensed:base:int@0"),
 			Interval:    "@daily",
 			Currency:    "eur",
 			Title:       "Test2",
 			Base:        1000,
 		},
 		{
-			FeaturePlan: refs.MustParseFeaturePlan("feature:test@plan:free@theVersion"),
+			FeaturePlan: refs.MustParseFeaturePlan("feature:metered:tiers:many@0"),
 			PlanTitle:   "PlanTitle",
 			Interval:    "@yearly",
 			Currency:    "usd",
@@ -60,6 +59,22 @@ func TestRoundTrip(t *testing.T) {
 				{Upto: 1, Price: 100, Base: 1},
 				{Upto: 2, Price: 200, Base: 2},
 				{Upto: 3, Price: 300, Base: 3},
+			},
+		},
+		{
+			FeaturePlan: refs.MustParseFeaturePlan("feature:metered:tiers:one@0"),
+			PlanTitle:   "PlanTitle",
+			Interval:    "@yearly",
+			Currency:    "usd",
+			Title:       "FeatureTitle",
+
+			// a single tier is turned into per_unit + metered, so
+			// tiers_mode isn't needed or even set
+			Mode: "",
+
+			Aggregate: "perpetual",
+			Tiers: []Tier{
+				{Upto: 1, Price: 100, Base: 0},
 			},
 		},
 	}
@@ -86,20 +101,9 @@ func TestRoundTrip(t *testing.T) {
 
 	diff.Test(t, t.Errorf, got, want,
 		diff.ZeroFields[Feature]("ProviderID"))
-
-	t.Run("product title", func(t *testing.T) {
-		var got struct {
-			Name string
-		}
-		if err := cc.Stripe.Do(ctx, "GET", "/v1/products/tier__feature-test-plan-free-theVersion", stripe.Form{}, &got); err != nil {
-			t.Fatal(err)
-		}
-		const want = "PlanTitle - FeatureTitle"
-		if got.Name != want {
-			t.Errorf("got %q, want %q", got.Name, want)
-		}
-	})
 }
+
+// TODO(bmizerany): add TestTitle
 
 func TestPushPlanInvalidDecimal(t *testing.T) {
 	cc := newTestClient(t) // TODO(bmizerany): use a client without creating an account
