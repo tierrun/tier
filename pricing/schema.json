@@ -40,6 +40,14 @@
         "tiers": {
           "type": "array",
           "items": { "$ref": "#/$defs/tier" }
+        },
+        "divide": {
+          "type": "object",
+          "properties": {
+            "by": { "type": "number" },
+            "rounding": { "enum": ["up"] },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false
