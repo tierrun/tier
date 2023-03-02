@@ -39,6 +39,8 @@ func FromPricingHuJSON(data []byte) (fs []control.Feature, err error) {
 	for plan, p := range m.Plans {
 		for feature, f := range p.Features {
 			fn := feature.WithPlan(plan)
+
+			divide := values.Coalesce(f.Divide, &apitypes.Divide{})
 			ff := control.Feature{
 				FeaturePlan: fn,
 
@@ -52,6 +54,9 @@ func FromPricingHuJSON(data []byte) (fs []control.Feature, err error) {
 
 				Mode:      values.Coalesce(f.Mode, "graduated"),
 				Aggregate: values.Coalesce(f.Aggregate, "sum"),
+
+				TransformDenominator: divide.By,
+				TransformRoundUp:     divide.Rounding == "up",
 			}
 
 			if len(f.Tiers) > 0 {
@@ -99,13 +104,24 @@ func ToPricingJSON(fs []control.Feature) ([]byte, error) {
 			}
 		}
 
-		p.Features[f.FeaturePlan.Name()] = apitypes.Feature{
+		af := apitypes.Feature{
 			Title:     values.ZeroIf(f.Title, f.FeaturePlan.String()),
 			Base:      f.Base,
 			Mode:      values.ZeroIf(f.Mode, "graduated"),
 			Aggregate: values.ZeroIf(f.Aggregate, "sum"),
 			Tiers:     tiers,
 		}
+		if f.TransformDenominator != 0 {
+			var round string
+			if f.TransformRoundUp {
+				round = "up"
+			}
+			af.Divide = &apitypes.Divide{
+				By:       f.TransformDenominator,
+				Rounding: round,
+			}
+		}
+		p.Features[f.FeaturePlan.Name()] = af
 		m.Plans[f.Plan()] = p
 	}
 	return json.MarshalIndent(m, "", "  ")

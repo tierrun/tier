@@ -157,12 +157,12 @@ func (s *scheduleTester) advanceTo(t time.Time) {
 	}
 }
 
-func (s *scheduleTester) advanceToNextPeriod() {
+func (s *scheduleTester) advanceToNextPeriod(numPeriods int) {
 	// TODO(bmizerany): make Phase aware so that it jumps based on the
 	// start of the next phase if the current phase ends sooner than than 1
 	// interval of the current phase.
 	now := s.clock.Present()
-	eop := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+	eop := time.Date(now.Year(), now.Month()+time.Month(numPeriods), 1, 0, 0, 0, 0, time.UTC)
 	s.t.Logf("advancing to next period %s", eop)
 	s.advanceTo(eop)
 }
@@ -398,7 +398,7 @@ func TestScheduleCancel(t *testing.T) {
 	s.report("org:paid", "feature:x", 99)
 	s.advance(10)
 	s.cancel("org:paid")
-	s.advanceToNextPeriod()
+	s.advanceToNextPeriod(1)
 
 	// check usage is billed
 	s.checkInvoices("org:paid", []Invoice{{
@@ -424,6 +424,44 @@ func TestScheduleCancel(t *testing.T) {
 		Subtotal:       31000,
 		TotalPreTax:    31000,
 		Total:          31000,
+	}})
+}
+
+func TestScheduleTransforms(t *testing.T) {
+	featureUp := mpf("feature:up@0")
+
+	s := newScheduleTester(t)
+	s.push([]Feature{{
+		FeaturePlan:          featureUp,
+		Interval:             "@monthly",
+		Currency:             "usd",
+		Mode:                 "graduated",
+		Aggregate:            "sum",
+		Tiers:                []Tier{{Upto: Inf, Price: 2}},
+		TransformDenominator: 3,
+		TransformRoundUp:     true,
+	}})
+
+	s.setPaymentMethod("org:paid", "pm_card_us")
+	s.schedule("org:paid", 0, "", featureUp)
+	s.report("org:paid", "feature:up", 100)
+	s.advanceToNextPeriod(2)
+
+	const wantAmount = 68 // 100 / 3 = 33.3333, rounded up to 34, 34 * 2 = 68
+
+	// check usage is billed
+	s.checkInvoices("org:paid", []Invoice{{
+		Lines: []InvoiceLineItem{
+			{Feature: featureUp, Quantity: 100, Amount: wantAmount}, // 100 / 3 = 33.3333, rounded up to 34, 34 * 2 = 68 },
+		},
+		SubtotalPreTax: wantAmount,
+		Subtotal:       wantAmount,
+		TotalPreTax:    wantAmount,
+		Total:          wantAmount,
+	}, {
+		Lines: []InvoiceLineItem{
+			{Feature: featureUp},
+		},
 	}})
 }
 

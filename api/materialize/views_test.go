@@ -36,6 +36,9 @@ func TestPricingHuJSON(t *testing.T) {
 					"feature:base": {
 						"base": 100,
 					},
+					"feature:xform": {
+						"divide": {"by": 100, "rounding": "up"},
+					}
 				},
 			},
 		}
@@ -74,6 +77,17 @@ func TestPricingHuJSON(t *testing.T) {
 				{Upto: tier.Inf, Price: 50, Base: 0},
 			},
 		},
+		{
+			PlanTitle:            "Just an example plan to show off features part duex",
+			Title:                "feature:xform@plan:example@2",
+			FeaturePlan:          refs.MustParseFeaturePlan("feature:xform@plan:example@2"),
+			Currency:             "usd",
+			Interval:             "@monthly",
+			Mode:                 "graduated", // defaults
+			Aggregate:            "sum",
+			TransformDenominator: 100,
+			TransformRoundUp:     true,
+		},
 	}
 
 	diff.Test(t, t.Errorf, got, want)
@@ -104,6 +118,9 @@ func TestPricingHuJSON(t *testing.T) {
 				"features": {
 					"feature:base": {
 						"base": 100,
+					},
+					"feature:xform": {
+						"divide": {"by": 100, "rounding": "up"},
 					}
 				}
 			}

@@ -72,6 +72,9 @@ func TestRoundTrip(t *testing.T) {
 			// tiers_mode isn't needed or even set
 			Mode: "",
 
+			TransformDenominator: 100,
+			TransformRoundUp:     true,
+
 			Aggregate: "perpetual",
 			Tiers: []Tier{
 				{Upto: 1, Price: 100, Base: 0},
