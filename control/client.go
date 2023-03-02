@@ -103,6 +103,9 @@ type Feature struct {
 
 	// ReportID is the ID for reporting usage to the billing provider.
 	ReportID string
+
+	TransformDenominator int  // the denominator for transforming usage
+	TransformRoundUp     bool // whether to round up transformed usage; otherwise round down
 }
 
 // TODO(bmizerany): remove FQN and replace with simply adding the version to
@@ -276,6 +279,15 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) (providerID string,
 	data.Set("recurring", "interval", interval)
 	data.Set("recurring", "interval_count", 1) // TODO: support user-defined interval count
 
+	if f.TransformDenominator != 0 {
+		round := "down"
+		if f.TransformRoundUp {
+			round = "up"
+		}
+		data.Set("transform_quantity", "divide_by", f.TransformDenominator)
+		data.Set("transform_quantity", "round", round)
+	}
+
 	numTiers := len(f.Tiers)
 	switch {
 	case numTiers == 0:
@@ -357,19 +369,25 @@ type stripePrice struct {
 		PriceDecimal float64 `json:"unit_amount_decimal,string"`
 		Base         int     `json:"flat_amount"`
 	}
-	Currency string
+	Currency          string
+	TransformQuantity struct {
+		DivideBy int    `json:"divide_by"`
+		Round    string `json:"round"`
+	} `json:"transform_quantity"`
 }
 
 func stripePriceToFeature(p stripePrice) Feature {
 	f := Feature{
-		ProviderID:  p.ProviderID(),
-		PlanTitle:   p.Metadata.PlanTitle,
-		FeaturePlan: p.Metadata.Feature,
-		Title:       p.Metadata.Title,
-		Currency:    p.Currency,
-		Interval:    intervalFromStripe[p.Recurring.Interval],
-		Mode:        p.TiersMode,
-		Aggregate:   aggregateFromStripe[p.Recurring.AggregateUsage],
+		ProviderID:           p.ProviderID(),
+		PlanTitle:            p.Metadata.PlanTitle,
+		FeaturePlan:          p.Metadata.Feature,
+		Title:                p.Metadata.Title,
+		Currency:             p.Currency,
+		Interval:             intervalFromStripe[p.Recurring.Interval],
+		Mode:                 p.TiersMode,
+		Aggregate:            aggregateFromStripe[p.Recurring.AggregateUsage],
+		TransformDenominator: p.TransformQuantity.DivideBy,
+		TransformRoundUp:     p.TransformQuantity.Round == "up",
 	}
 
 	if len(p.Tiers) == 0 && p.Recurring.UsageType == "metered" {

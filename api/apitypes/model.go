@@ -47,13 +47,18 @@ func (t *Tier) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type Divide struct {
+	By       int    `json:"by,omitempty"`
+	Rounding string `json:"rounding,omitempty"`
+}
+
 type Feature struct {
 	Title     string  `json:"title,omitempty"`
 	Base      float64 `json:"base,omitempty"`
 	Mode      string  `json:"mode,omitempty"`
 	Aggregate string  `json:"aggregate,omitempty"`
 	Tiers     []Tier  `json:"tiers,omitempty"`
-	PermLink  string  `json:"permLink,omitempty"`
+	Divide    *Divide `json:"divide,omitempty"`
 }
 
 type Plan struct {
