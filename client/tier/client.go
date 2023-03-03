@@ -228,14 +228,13 @@ func (c *Client) Report(ctx context.Context, org, feature string, n int) error {
 		Org:     org,
 		Feature: fn,
 		N:       n,
-		At:      time.Now(),
 	})
 
 	return err
 }
 
 type ReportParams struct {
-	At      time.Time // default is time.Now()
+	At      time.Time // default is 'now' at Stripe
 	Clobber bool      // default is false
 }
 
