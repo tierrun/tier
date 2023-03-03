@@ -905,7 +905,7 @@ func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 	cid, err := c.cache.load(key, func() (string, error) {
 		var f stripe.Form
 		if clockID != "" {
-			f.Add("test_clock", clockID)
+			f.Set("test_clock", clockID)
 		}
 		cus, err := stripe.List[stripeCustomer](ctx, c.Stripe, "GET", "/v1/customers", f).
 			Find(func(v stripeCustomer) bool {
