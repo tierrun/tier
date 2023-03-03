@@ -894,8 +894,19 @@ func (c *Client) WhoIs(ctx context.Context, org string) (id string, err error) {
 		return "", &ValidationError{Message: "org must be prefixed with \"org:\""}
 	}
 
-	cid, err := c.cache.load(org, func() (string, error) {
+	clockID := clockFromContext(ctx)
+
+	key := orgKey{
+		name:    org,
+		account: c.Stripe.AccountID,
+		clock:   clockID,
+	}
+
+	cid, err := c.cache.load(key, func() (string, error) {
 		var f stripe.Form
+		if clockID != "" {
+			f.Add("test_clock", clockID)
+		}
 		cus, err := stripe.List[stripeCustomer](ctx, c.Stripe, "GET", "/v1/customers", f).
 			Find(func(v stripeCustomer) bool {
 				return v.Metadata.Org == org
@@ -934,14 +945,29 @@ func (c *Client) LookupOrg(ctx context.Context, org string) (*OrgInfo, error) {
 
 func (c *Client) createCustomer(ctx context.Context, org string, info *OrgInfo) (id string, err error) {
 	defer errorfmt.Handlef("createCustomer: %w", &err)
-	return c.cache.load(org, func() (string, error) {
+
+	clockID := clockFromContext(ctx)
+	key := orgKey{
+		account: c.Stripe.AccountID,
+		clock:   clockID,
+		name:    org,
+	}
+
+	return c.cache.load(key, func() (string, error) {
 		var f stripe.Form
-		f.SetIdempotencyKey("customer:create:" + org)
+
+		var b strings.Builder
+		b.WriteString("customer:create:")
+		b.WriteString(key.name)
+		b.WriteString(key.account)
+		b.WriteString(key.clock)
+		f.SetIdempotencyKey(b.String())
+
 		f.Set("metadata[tier.org]", org)
 		if err := setOrgInfo(&f, info); err != nil {
 			return "", err
 		}
-		if clockID := clockFromContext(ctx); clockID != "" {
+		if clockID != "" {
 			f.Set("test_clock", clockID)
 		}
 		var created struct {

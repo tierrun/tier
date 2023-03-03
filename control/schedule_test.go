@@ -1343,6 +1343,35 @@ func TestSchedulePutCustomer(t *testing.T) {
 	}, nil, nil)
 }
 
+func TestClocksWithCache(t *testing.T) {
+	cc := newTestClient(t)
+
+	var want string
+	for i := 0; i < 3; i++ {
+		ctx := context.Background()
+		c, err := cc.NewClock(ctx, t.Name(), time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		ctx = WithClock(ctx, c.ID())
+		if err := cc.PutCustomer(ctx, "org:example", nil); err != nil {
+			t.Fatal(err)
+		}
+		got, err := cc.WhoIs(ctx, "org:example")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			want = got
+		} else {
+			if got == want {
+				t.Errorf("unexpected match on iteration %d", i)
+			}
+		}
+	}
+}
+
 func ciOnly(t *testing.T) {
 	if os.Getenv("CI") == "" {
 		t.Skip("not in CI; skipping long test")
