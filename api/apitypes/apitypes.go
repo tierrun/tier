@@ -27,9 +27,11 @@ type Phase struct {
 
 type PhaseResponse struct {
 	Effective time.Time          `json:"effective,omitempty"`
+	End       time.Time          `json:"end,omitempty"`
 	Features  []refs.FeaturePlan `json:"features,omitempty"`
 	Plans     []refs.Plan        `json:"plans,omitempty"`
 	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
+	Trial     bool               `json:"trial,omitempty"`
 }
 
 type PaymentMethodsResponse struct {

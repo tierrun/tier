@@ -306,6 +306,87 @@ func TestPhaseBadOrg(t *testing.T) {
 	})
 }
 
+func TestPhase(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	ctx := context.Background()
+	tc := newTestClient(t)
+
+	ctx, err := tc.WithClock(ctx, t.Name(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := []byte(`
+		{"plans": {"plan:test@0": {"features": {"feature:x": {}}}}}
+	`)
+
+	_, err = tc.PushJSON(ctx, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		phases []tier.Phase
+		want   apitypes.PhaseResponse
+	}{
+		{
+			phases: []tier.Phase{{
+				Trial:    true,
+				Features: []string{"plan:test@0"},
+			}, {
+				Effective: now.AddDate(0, 0, 14),
+				Trial:     false,
+				Features:  []string{"plan:test@0"},
+			}},
+			want: apitypes.PhaseResponse{
+				Effective: now,
+				End:       now.AddDate(0, 0, 14),
+				Features:  mpfs("feature:x@plan:test@0"),
+				Plans:     mpps("plan:test@0"),
+				Trial:     true,
+			},
+		},
+		{
+			phases: []tier.Phase{{
+				Features: []string{"plan:test@0"},
+			}},
+			want: apitypes.PhaseResponse{
+				Effective: now,
+				Features:  mpfs("feature:x@plan:test@0"),
+				Plans:     mpps("plan:test@0"),
+			},
+		},
+		{
+			phases: []tier.Phase{{
+				Trial:    true,
+				Features: []string{"plan:test@0"},
+			}},
+			want: apitypes.PhaseResponse{
+				Trial:     true,
+				Effective: now,
+				Features:  mpfs("feature:x@plan:test@0"),
+				Plans:     mpps("plan:test@0"),
+			},
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run("", func(t *testing.T) {
+			if _, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{Phases: tt.phases}); err != nil {
+				t.Fatal(err)
+			}
+			got, err := tc.LookupPhase(ctx, "org:test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			diff.Test(t, t.Errorf, got, tt.want)
+		})
+	}
+}
+
 func TestPhaseFragments(t *testing.T) {
 	t.Parallel()
 

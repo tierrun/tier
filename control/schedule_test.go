@@ -118,6 +118,51 @@ func TestSchedule(t *testing.T) {
 	})
 }
 
+func TestScheduleTrial(t *testing.T) {
+	s := newScheduleTester(t)
+
+	model := []Feature{{
+		FeaturePlan: mpf("feature:x@plan:free@0"),
+		Interval:    "@monthly",
+		Currency:    "usd",
+	}}
+
+	fps := FeaturePlans(model)
+	s.push(model)
+
+	s.schedule("org:example", 14, "", fps...)
+	s.checkPhases("org:example", []Phase{
+		{
+			Org:       "org:example",
+			Current:   true,
+			Effective: t0, // unchanged by advanced clock
+			Features:  FeaturePlans(model),
+			Plans:     plans("plan:free@0"),
+			Trial:     true,
+		},
+		{
+			Org:       "org:example",
+			Current:   false,
+			Effective: t0.AddDate(0, 0, 14), // unchanged by advanced clock
+			Features:  FeaturePlans(model),
+			Plans:     plans("plan:free@0"),
+			Trial:     false,
+		},
+	})
+
+	s.schedule("org:example", -1, "", fps...)
+	s.checkPhases("org:example", []Phase{
+		{
+			Org:       "org:example",
+			Current:   true,
+			Effective: t0, // unchanged by advanced clock
+			Features:  FeaturePlans(model),
+			Plans:     plans("plan:free@0"),
+			Trial:     true,
+		},
+	})
+}
+
 type scheduleTester struct {
 	ctx   context.Context
 	t     *testing.T
@@ -203,7 +248,7 @@ func (s *scheduleTester) schedule(org string, trialDays int, payment string, fs 
 			Trial:    true,
 			Features: fs,
 		}, {
-			Effective: t0.AddDate(0, 1, 0),
+			Effective: t0.AddDate(0, 0, trialDays),
 			Features:  fs,
 		}}
 	}
@@ -214,6 +259,16 @@ func (s *scheduleTester) schedule(org string, trialDays int, payment string, fs 
 	if err := s.cc.Schedule(s.ctx, org, p); err != nil {
 		s.t.Fatalf("error subscribing: %v", err)
 	}
+}
+
+func (s *scheduleTester) checkPhases(org string, want []Phase) {
+	s.t.Helper()
+	got, err := s.cc.LookupPhases(s.ctx, org)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	s.t.Logf("got phases %# v", pretty.Formatter(got))
+	diff.Test(s.t, s.t.Errorf, got, want, ignoreProviderIDs)
 }
 
 func (s *scheduleTester) report(org, name string, n int) {
@@ -315,7 +370,15 @@ func TestScheduleFreeTrials(t *testing.T) {
 
 	s.checkInvoices("org:trial", []Invoice{{
 		Lines: []InvoiceLineItem{
-			lineItem(featureX, 2, 0),
+			lineItem(featureX, 1, 1),
+		},
+		SubtotalPreTax: 1,
+		Subtotal:       1,
+		TotalPreTax:    1,
+		Total:          1,
+	}, {
+		Lines: []InvoiceLineItem{
+			lineItem(featureX, 1, 0),
 		},
 	}, {
 		Lines: []InvoiceLineItem{

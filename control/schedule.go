@@ -249,8 +249,9 @@ type stripeSubSchedule struct {
 		Metadata struct {
 			Name string `json:"tier.subscription"`
 		}
-		Start int64 `json:"start_date"`
-		Items []struct {
+		Start    int64 `json:"start_date"`
+		TrialEnd int64 `json:"trial_end"`
+		Items    []struct {
 			Price stripePrice
 		}
 	}
@@ -317,6 +318,8 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 			Current:   p.Start == ss.Current.Start,
 
 			Plans: plans,
+
+			Trial: p.TrialEnd > 0,
 		}
 		all = append(all, p)
 		if p.Current {
