@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kr/pretty"
 	"golang.org/x/exp/slices"
@@ -327,13 +328,19 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 
 	h.Logf("lookup phases: %# v", pretty.Formatter(ps))
 
-	for _, p := range ps {
+	for i, p := range ps {
 		if p.Current {
+			var end time.Time
+			if i+1 < len(ps) {
+				end = ps[i+1].Effective
+			}
 			return httpJSON(w, apitypes.PhaseResponse{
 				Effective: p.Effective,
+				End:       end,
 				Features:  p.Features,
 				Plans:     p.Plans,
 				Fragments: p.Fragments(),
+				Trial:     p.Trial,
 			})
 		}
 	}
