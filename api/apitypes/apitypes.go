@@ -1,6 +1,7 @@
 package apitypes
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -32,6 +33,26 @@ type PhaseResponse struct {
 	Plans     []refs.Plan        `json:"plans,omitempty"`
 	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
 	Trial     bool               `json:"trial,omitempty"`
+}
+
+func (pr PhaseResponse) MarshalJSON() ([]byte, error) {
+	type Alias PhaseResponse
+	if pr.End.IsZero() {
+		return json.Marshal(&struct {
+			*Alias
+			End byte `json:"end,omitempty"`
+		}{
+			Alias: (*Alias)(&pr),
+		})
+	} else {
+		return json.Marshal(&struct {
+			*Alias
+			End time.Time `json:"end"`
+		}{
+			Alias: (*Alias)(&pr),
+			End:   pr.End,
+		})
+	}
 }
 
 type PaymentMethodsResponse struct {
