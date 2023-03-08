@@ -305,10 +305,14 @@ type CheckoutParams struct {
 	RequireBillingAddress bool
 }
 
+type Taxation = apitypes.Taxation
+
 type ScheduleParams struct {
 	Info            *OrgInfo
 	Phases          []Phase
 	PaymentMethodID string
+
+	Tax Taxation
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) (*apitypes.ScheduleResponse, error) {
@@ -317,6 +321,7 @@ func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) (*
 		Info:            (*apitypes.OrgInfo)(p.Info),
 		Phases:          p.Phases,
 		PaymentMethodID: p.PaymentMethodID,
+		Tax:             p.Tax,
 	})
 
 }

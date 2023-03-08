@@ -26,6 +26,10 @@ type Phase struct {
 	Features  []string  `json:"features,omitempty"`
 }
 
+type Taxation struct {
+	Automatic bool `json:"automatic,omitempty"`
+}
+
 type PhaseResponse struct {
 	Effective time.Time          `json:"effective,omitempty"`
 	End       time.Time          `json:"end,omitempty"`
@@ -33,6 +37,7 @@ type PhaseResponse struct {
 	Plans     []refs.Plan        `json:"plans,omitempty"`
 	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
 	Trial     bool               `json:"trial,omitempty"`
+	Tax       Taxation           `json:"tax,omitempty"`
 }
 
 func (pr PhaseResponse) MarshalJSON() ([]byte, error) {
@@ -90,6 +95,7 @@ type ScheduleRequest struct {
 	PaymentMethodID string   `json:"payment_method_id"`
 	Info            *OrgInfo `json:"info"`
 	Phases          []Phase  `json:"phases"`
+	Tax             Taxation `json:"tax"`
 }
 
 // ScheduleResponse is the expected response from a schedule request. It is

@@ -279,6 +279,7 @@ func runTier(cmd string, args []string) (err error) {
 		cancelURL := fs.String("cancel_url", "", "sets the cancel URL for use with -checkout")
 		requireBillingAddress := fs.Bool("require_billing_address", false, "require billing address for use with --checkout")
 		paymentMethod := fs.String("paymentmethod", "", "sets the Stripe payment method for the subscription (e.g. pm_123). It is ignored with --checkout")
+		tax := fs.String("tax", "", "sets the Stripe tax rate for the subscription ('auto' is currently the only supported value)")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -290,6 +291,10 @@ func runTier(cmd string, args []string) (err error) {
 		// the cancel must be used without arguments
 		if *cancel && fs.NArg() > 1 {
 			fmt.Fprintln(stderr, "tier: the -cancel flag must be used without arguments")
+			return errUsage
+		}
+		if *tax != "" && *tax != "auto" {
+			fmt.Fprintf(stderr, "tier: invalid tax rate %q\n", *tax)
 			return errUsage
 		}
 
@@ -319,6 +324,7 @@ func runTier(cmd string, args []string) (err error) {
 					Email: *email,
 				},
 				PaymentMethodID: *paymentMethod,
+				Tax:             tier.Taxation{Automatic: *tax == "auto"},
 			}
 			switch {
 			case *trial > 0:
