@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"regexp"
 	"strconv"
 	"sync"
 	"testing"
@@ -23,6 +22,7 @@ import (
 	"kr.dev/errorfmt"
 	"tier.run/refs"
 	"tier.run/stripe"
+	"tier.run/types/they"
 	"tier.run/values"
 )
 
@@ -668,29 +668,29 @@ func TestSchedulePaymentMethod(t *testing.T) {
 			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				t.Logf("fake stripe: %s %s", r.Method, r.URL.Path)
 				switch {
-				case wants(r, "GET", "/v1/customers"):
+				case they.Want(r, "GET", "/v1/customers"):
 					var c stripeCustomer
 					c.ID = "cust_123"
 					c.Metadata.Org = "org:example"
 					jsonEncodeList(t, w, c)
-				case wants(r, "GET", "/v1/subscriptions"):
+				case they.Want(r, "GET", "/v1/subscriptions"):
 					writeHuJSON(w, tt.subResp) // force new schedule
-				case wants(r, "GET", "/v1/prices"):
+				case they.Want(r, "GET", "/v1/prices"):
 					var p stripePrice
 					p.ID = "price_123"
 					p.Metadata.Feature = mpf("feature:x@plan:test@0")
 					jsonEncodeList(t, w, p)
-				case wants(r, "GET", "/v1/subscription_schedules/sub_sched_123"):
+				case they.Want(r, "GET", "/v1/subscription_schedules/sub_sched_123"):
 					var ss stripeSubSchedule
 					jsonEncode(t, w, ss)
-				case wants(r, "POST", "/v1/subscription_schedules/sub_sched_123"):
+				case they.Want(r, "POST", "/v1/subscription_schedules/sub_sched_123"):
 					const key = "default_settings[default_payment_method]"
 					pm := r.FormValue(key)
 					if _, ok := r.Form[key]; !ok {
 						pm = "not_set"
 					}
 					got.Append(G{updateSched: true, card: pm})
-				case wants(r, "POST", "/v1/subscription_schedules"):
+				case they.Want(r, "POST", "/v1/subscription_schedules"):
 					fromSub := r.FormValue("from_subscription")
 					const key = "default_settings[default_payment_method]"
 					pm := r.FormValue(key)
@@ -951,7 +951,7 @@ func TestCheckoutRequiredAddress(t *testing.T) {
 	var got []G
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case wants(r, "GET", "/v1/customers"):
+		case they.Want(r, "GET", "/v1/customers"):
 			jsonEncode(t, w, msa{
 				"data": []msa{
 					{
@@ -961,7 +961,7 @@ func TestCheckoutRequiredAddress(t *testing.T) {
 					},
 				},
 			})
-		case wants(r, "POST", "/v1/checkout/sessions"):
+		case they.Want(r, "POST", "/v1/checkout/sessions"):
 			mu.Lock()
 			got = append(got, G{
 				successURL: r.FormValue("success_url"),
@@ -1035,7 +1035,7 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 	newHandler := func(s string) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
-			case wants(r, "GET", "/v1/customers"):
+			case they.Want(r, "GET", "/v1/customers"):
 				writeHuJSON(w, `
 					{"data": [
 						{
@@ -1044,7 +1044,7 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 						},
 					]}
 				`)
-			case wants(r, "GET", "/v1/subscriptions"):
+			case they.Want(r, "GET", "/v1/subscriptions"):
 				writeHuJSON(w, `
 					{"data": [
 						{
@@ -1451,12 +1451,6 @@ func plans(ss ...string) []refs.Plan {
 		ps = append(ps, mpp(s))
 	}
 	return ps
-}
-
-func wants(r *http.Request, method, pattern string) bool {
-	pattern = "^" + pattern + "$"
-	rx := regexp.MustCompile(pattern)
-	return r.Method == method && rx.MatchString(r.URL.Path)
 }
 
 func writeHuJSON(w io.Writer, s string, args ...any) {

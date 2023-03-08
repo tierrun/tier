@@ -13,13 +13,13 @@ func TestPhaseResponseJSON(t *testing.T) {
 	}{
 		{
 			pr:   PhaseResponse{},
-			want: `{"effective":"0001-01-01T00:00:00Z"}`,
+			want: `{"effective":"0001-01-01T00:00:00Z","tax":{}}`,
 		},
 		{
 			pr: PhaseResponse{
 				End: time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC),
 			},
-			want: `{"effective":"0001-01-01T00:00:00Z","end":"2018-01-01T00:00:00Z"}`,
+			want: `{"effective":"0001-01-01T00:00:00Z","tax":{},"end":"2018-01-01T00:00:00Z"}`,
 		},
 	}
 

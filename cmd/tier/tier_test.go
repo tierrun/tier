@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +18,7 @@ import (
 	"tier.run/profile"
 	"tier.run/stripe"
 	"tier.run/stripe/stroke"
+	"tier.run/types/they"
 )
 
 var serveInvalidAPIKey = func(w http.ResponseWriter, r *http.Request) {
@@ -407,17 +407,13 @@ func TestIsolatedAccountInvalid(t *testing.T) {
 }
 
 func TestCleanSwitchAccounts(t *testing.T) {
-	wants := func(r *http.Request, method, path string) bool {
-		re := regexp.MustCompile(path)
-		return r.Method == method && re.MatchString(r.URL.Path)
-	}
 	var (
 		mu     sync.Mutex
 		delLog []string
 	)
 	tt := testtier(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case wants(r, "GET", "^/v1/accounts$"):
+		case they.Want(r, "GET", "/v1/accounts"):
 			io.WriteString(w, `{
 				"data": [
 					{
@@ -437,7 +433,7 @@ func TestCleanSwitchAccounts(t *testing.T) {
 					}
 				]
 			}`)
-		case wants(r, "DELETE", "^/v1/accounts/.*"):
+		case they.Want(r, "DELETE", "/v1/accounts/.*"):
 			mu.Lock()
 			defer mu.Unlock()
 			delLog = append(delLog, r.URL.Path)
@@ -508,7 +504,7 @@ func TestSubscribe(t *testing.T) {
 	tt = testtier(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Logf("got request: %s %s", r.Method, r.URL.Path)
 		switch {
-		case wants(r, "GET", "/v1/subscriptions"):
+		case they.Want(r, "GET", "/v1/subscriptions"):
 			io.WriteString(w, `{
 				"data": [
 					{
@@ -522,7 +518,7 @@ func TestSubscribe(t *testing.T) {
 					}
 				]
 			}`)
-		case wants(r, "DELETE", "/v1/subscriptions/sub_123"):
+		case they.Want(r, "DELETE", "/v1/subscriptions/sub_123"):
 			got.Append(r.URL.Path)
 		default:
 			io.WriteString(w, `{}`)
@@ -533,6 +529,11 @@ func TestSubscribe(t *testing.T) {
 
 	want := []string{"/v1/subscriptions/sub_123"}
 	diff.Test(t, t.Errorf, got.Load(), want)
+
+	tt = testtier(t, okHandler(t))
+	tt.RunFail("subscribe", "--tax", "x", "plan:error@0")
+	tt.GrepStderr("^tier: invalid tax rate \"x\"", "expected invalid tax rate error")
+	tt.GrepStderr("^Usage:", "expected usage")
 }
 
 const responsePricesValidPlan = `
@@ -577,7 +578,7 @@ const responsePricesValidPlan = `
 func TestSubscribeUnexpectedMissingCustomer(t *testing.T) {
 	tt := testtier(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Logf("request: %s %s", r.Method, r.URL.Path)
-		if wants(r, "POST", "/v1/subscription_schedules") {
+		if they.Want(r, "POST", "/v1/subscription_schedules") {
 			w.WriteHeader(400)
 			io.WriteString(w, `{
 				"error": {
@@ -608,12 +609,6 @@ func chdir(t *testing.T, dir string) {
 			panic(err)
 		}
 	})
-}
-
-func wants(r *http.Request, method, pattern string) bool {
-	pattern = "^" + pattern + "$"
-	rx := regexp.MustCompile(pattern)
-	return r.Method == method && rx.MatchString(r.URL.Path)
 }
 
 type atomicSlice[T any] struct {

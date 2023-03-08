@@ -87,6 +87,8 @@ type Phase struct {
 	// without the other features in the plan, this phase is considered
 	// "fragmented".
 	Plans []refs.Plan
+
+	AutomaticTax bool
 }
 
 // Valid reports if the Phase is one that would be retured from the Stripe API.
@@ -106,15 +108,16 @@ func (p *Phase) Fragments() []refs.FeaturePlan {
 }
 
 type subscription struct {
-	ID         string
-	ScheduleID string
-	Status     string
-	Name       string
-	Effective  time.Time
-	TrialEnd   time.Time
-	EndDate    time.Time
-	CanceledAt time.Time
-	Features   []Feature
+	ID           string
+	ScheduleID   string
+	Status       string
+	Name         string
+	Effective    time.Time
+	TrialEnd     time.Time
+	EndDate      time.Time
+	CanceledAt   time.Time
+	Features     []Feature
+	AutomaticTax bool
 }
 
 func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub subscription, err error) {
@@ -147,6 +150,9 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 		Schedule struct {
 			ID string
 		}
+		AutomaticTax struct {
+			Enabled bool
+		} `json:"automatic_tax"`
 	}
 
 	// TODO(bmizerany): cache the subscription ID and looked it up
@@ -178,11 +184,12 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 	}
 
 	s := subscription{
-		ID:         v.ProviderID(),
-		ScheduleID: v.Schedule.ID,
-		Effective:  time.Unix(v.StartDate, 0),
-		Status:     v.Status,
-		Features:   fs,
+		ID:           v.ProviderID(),
+		ScheduleID:   v.Schedule.ID,
+		Effective:    time.Unix(v.StartDate, 0),
+		Status:       v.Status,
+		Features:     fs,
+		AutomaticTax: v.AutomaticTax.Enabled,
 	}
 	if v.TrialEnd > 0 {
 		s.TrialEnd = time.Unix(v.TrialEnd, 0)
@@ -320,6 +327,8 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 			Plans: plans,
 
 			Trial: p.TrialEnd > 0,
+
+			AutomaticTax: s.AutomaticTax,
 		}
 		all = append(all, p)
 		if p.Current {
@@ -402,7 +411,15 @@ func (c *Client) cancelSubscription(ctx context.Context, subID string) (err erro
 }
 
 func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name string, phases []Phase) error {
+	var automaticTax bool
 	for i, p := range phases {
+		if i > 0 && p.AutomaticTax != automaticTax {
+			// TODO(bmizerany): make sentinel error
+			return errors.New("stripe: automatic tax must be consistent across phases")
+		}
+		automaticTax = p.AutomaticTax
+		f.Set("default_settings", "automatic_tax", "enabled", automaticTax)
+
 		if len(p.Features) == 0 {
 			if i != len(phases)-1 {
 				return errors.New("stripe: cancel phase must be the final phase")
@@ -526,21 +543,21 @@ func (c *Client) Schedule(ctx context.Context, org string, p ScheduleParams) err
 	return err
 }
 
-func (c *Client) schedule(ctx context.Context, org string, p ScheduleParams) (err error) {
+func (c *Client) schedule(ctx context.Context, org string, sp ScheduleParams) (err error) {
 	defer errorfmt.Handlef("tier: schedule: %q: %w", org, &err)
 
 	if err := c.PutCustomer(ctx, org, nil); err != nil {
 		return err
 	}
 
-	if len(p.Phases) == 0 {
+	if len(sp.Phases) == 0 {
 		return errors.New("tier: schedule: at least one phase required")
 	}
 
-	scheduleNow := p.Phases[0].Effective.IsZero()
-	cancelNow := scheduleNow && len(p.Phases[0].Features) == 0
+	scheduleNow := sp.Phases[0].Effective.IsZero()
+	cancelNow := scheduleNow && len(sp.Phases[0].Features) == 0
 
-	if cancelNow && len(p.Phases) > 1 {
+	if cancelNow && len(sp.Phases) > 1 {
 		return errors.New("tier: a cancel phase must be the final phase")
 	}
 
@@ -555,7 +572,7 @@ func (c *Client) schedule(ctx context.Context, org string, p ScheduleParams) (er
 		//
 		// If this is a "cancel immediately" request, it returns
 		// ErrInvalidCancel because there is no subscription to cancel.
-		return c.createSchedule(ctx, org, defaultScheduleName, "", p)
+		return c.createSchedule(ctx, org, defaultScheduleName, "", sp)
 	}
 	if err != nil {
 		return err
@@ -569,7 +586,7 @@ func (c *Client) schedule(ctx context.Context, org string, p ScheduleParams) (er
 
 	if s.ScheduleID == "" {
 		// We have a subscription, but it is has no active schedule, so start a new one.
-		return c.createSchedule(ctx, org, defaultScheduleName, s.ID, p)
+		return c.createSchedule(ctx, org, defaultScheduleName, s.ID, sp)
 	} else {
 		cp, _, err := c.lookupPhases(ctx, org, s, defaultScheduleName)
 		if err != nil {
@@ -579,18 +596,18 @@ func (c *Client) schedule(ctx context.Context, org string, p ScheduleParams) (er
 		if cp.Valid() {
 			if scheduleNow {
 				// attach phase to current
-				p.Phases[0].Effective = cp.Effective
+				sp.Phases[0].Effective = cp.Effective
 			} else {
-				p.Phases = append([]Phase{cp}, p.Phases...)
+				sp.Phases = append([]Phase{cp}, sp.Phases...)
 			}
 		}
 
-		err = c.updateSchedule(ctx, s.ScheduleID, defaultScheduleName, p)
+		err = c.updateSchedule(ctx, s.ScheduleID, defaultScheduleName, sp)
 		if isReleased(err) {
 			// Lost a race with the clock and the schedule was
 			// released just after seeing it, but before our
 			// update.
-			return c.createSchedule(ctx, org, defaultScheduleName, s.ID, p)
+			return c.createSchedule(ctx, org, defaultScheduleName, s.ID, sp)
 		}
 		if err != nil {
 			return err

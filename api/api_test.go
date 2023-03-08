@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -14,7 +16,9 @@ import (
 	"tier.run/client/tier"
 	"tier.run/control"
 	"tier.run/refs"
+	"tier.run/stripe"
 	"tier.run/stripe/stroke"
+	"tier.run/types/they"
 )
 
 var (
@@ -28,6 +32,37 @@ var (
 func newTestClient(t *testing.T) *tier.Client {
 	sc := stroke.Client(t)
 	sc = stroke.WithAccount(t, sc)
+	cc := &control.Client{
+		Stripe: sc,
+		Logf:   t.Logf,
+	}
+	h := NewHandler(cc, t.Logf)
+	h.helper = t.Helper
+	s := httptest.NewTLSServer(h)
+	t.Cleanup(s.Close)
+	tc := &tier.Client{
+		Logf:       t.Logf,
+		BaseURL:    s.URL,
+		HTTPClient: s.Client(),
+	}
+	return tc
+}
+
+func newTestClientWithStripe(t *testing.T, fakeStripe http.HandlerFunc) *tier.Client {
+	var sc *stripe.Client
+	if fakeStripe == nil {
+		sc = stroke.Client(t)
+		sc = stroke.WithAccount(t, sc)
+	} else {
+		s := httptest.NewServer(fakeStripe)
+		t.Cleanup(s.Close)
+		sc = &stripe.Client{
+			BaseURL:    s.URL,
+			HTTPClient: s.Client(),
+			Logf:       t.Logf,
+		}
+	}
+
 	cc := &control.Client{
 		Stripe: sc,
 		Logf:   t.Logf,
@@ -243,6 +278,61 @@ func TestAPISubscribe(t *testing.T) {
 		Code:    "invalid_payment_method",
 		Message: "No such PaymentMethod: 'pm_card_us'",
 	})
+}
+
+func TestScheduleAutomaticTax(t *testing.T) {
+	ctx := context.Background()
+	var gotTaxEnabled string
+	tc := newTestClientWithStripe(t, func(w http.ResponseWriter, r *http.Request) {
+		// TODO(bmizerany): Build a statefull-ish stripe mock service
+		switch {
+		case they.Want(r, "GET", "/v1/prices"):
+			io.WriteString(w, `{"data": [{"metadata": {
+				"tier.plan": "plan:test@0",
+				"tier.feature": "feature:t@plan:test@0"
+			}}]}`)
+		case they.Want(r, "GET", "/v1/customers"):
+			io.WriteString(w, `{"data":[{"id": "cus_123", "meatadata": {
+				"tier.org": "org:test"
+			}}]}`)
+		case they.Want(r, "POST", "/v1/customers"):
+			io.WriteString(w, `{"id": "cus_123"}`)
+		case they.Want(r, "GET", "/v1/subscriptions"):
+			io.WriteString(w, `{"data": [{
+				"id": "sub_123",
+				"metadata": {
+					"tier.subscription": "default"
+				},
+				"schedule": {"id": "sub_sched_123"}
+			}]}`)
+		case they.Want(r, "GET", "/v1/subscription_schedules/sub_sched_123"):
+			io.WriteString(w, `{"data": [{"id": "sub_sched_123", "metadata": {
+				"tier.subscription": "default"
+			}}]}`)
+		case they.Want(r, "POST", "/v1/subscription_schedules/sub_sched_123"):
+			gotTaxEnabled = r.FormValue("default_settings[automatic_tax][enabled]")
+			io.WriteString(w, `{"id": "sub_sched_123"}`)
+		default:
+			t.Logf("unexpected stripe request: %s %s", r.Method, r.URL)
+			w.WriteHeader(999)
+			io.WriteString(w, `{}`)
+		}
+	})
+	_, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
+		Tax: tier.Taxation{Automatic: true},
+		Phases: []apitypes.Phase{
+			{
+				Features: []string{"plan:test@0"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if gotTaxEnabled != "true" {
+		t.Errorf("got %q, want true", gotTaxEnabled)
+	}
 }
 
 func TestCancel(t *testing.T) {
