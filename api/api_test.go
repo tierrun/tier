@@ -706,6 +706,10 @@ func TestPaymentMethods(t *testing.T) {
 	diff.Test(t, t.Errorf, got, want)
 }
 
+func TestStripeErrorPassthrough(t *testing.T) {
+
+}
+
 func maybeFailNow(t *testing.T) {
 	t.Helper()
 	if t.Failed() {

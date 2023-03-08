@@ -10,10 +10,11 @@ import (
 )
 
 type HTTPError struct {
-	Source  string `json:"source,omitempty"`
-	Status  int    `json:"status"`
-	Code    string `json:"code"` // (e.g. "invalid_request")
-	Message string `json:"message"`
+	Source   string `json:"source,omitempty"`
+	Status   int    `json:"status"`
+	Code     string `json:"code"` // (e.g. "invalid_request")
+	Message  string `json:"message"`
+	Original error  `json:"raw,omitempty"`
 }
 
 var (
@@ -25,7 +26,7 @@ var (
 )
 
 func Error(status int, code string, message string) error {
-	return &HTTPError{"", status, code, message}
+	return &HTTPError{"", status, code, message, nil}
 }
 
 // WriteError encodes err to w, setting the approriate headers, if the underlying
@@ -72,7 +73,7 @@ func jsonErr(err error) error {
 	}
 	switch err.(type) {
 	case *json.SyntaxError:
-		return &HTTPError{"", 400, "invalid_request", "invalid json syntax"}
+		return &HTTPError{"", 400, "invalid_request", "invalid json syntax", nil}
 	default:
 		if msg := err.Error(); strings.HasPrefix(msg, "json: unknown field ") {
 			msg = strings.TrimPrefix(msg, "json: ")

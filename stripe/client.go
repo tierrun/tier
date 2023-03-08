@@ -60,13 +60,13 @@ func Link(live bool, accountID string, parts ...string) (string, error) {
 }
 
 type Error struct {
-	AccountID string
-	Type      string
-	Code      string
-	Param     string
-	Message   string
-	DocURL    string
-	RequestID string
+	AccountID string `json:"account_id,omitempty"`
+	Type      string `json:"type,omitempty"`
+	Code      string `json:"code,omitempty"`
+	Param     string `json:"param,omitempty"`
+	Message   string `json:"message,omitempty"`
+	DocURL    string `json:"doc_url,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
 func (e *Error) Error() string {

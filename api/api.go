@@ -134,6 +134,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var rawStripeErr *stripe.Error
+	if errors.As(err, &rawStripeErr) {
+		trweb.WriteError(w, &trweb.HTTPError{
+			Status:   502,
+			Original: rawStripeErr,
+		})
+		return
+	}
+
 	if trweb.WriteError(w, lookupErr(err)) || trweb.WriteError(w, err) {
 		return
 	}
