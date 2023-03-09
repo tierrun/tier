@@ -62,8 +62,12 @@ func clockFromContext(ctx context.Context) string {
 // invalid URL.
 func FromEnv() (*Client, error) {
 	key := os.Getenv("TIER_API_KEY")
-
 	baseURL := os.Getenv("TIER_BASE_URL")
+	if key != "" {
+		if baseURL == "" {
+			baseURL = "https://api.tier.run"
+		}
+	}
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
