@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"tier.run/refs"
+	"tier.run/types/tax"
 	"tier.run/values"
 )
 
@@ -53,12 +54,47 @@ type Divide struct {
 }
 
 type Feature struct {
-	Title     string  `json:"title,omitempty"`
-	Base      float64 `json:"base,omitempty"`
-	Mode      string  `json:"mode,omitempty"`
-	Aggregate string  `json:"aggregate,omitempty"`
-	Tiers     []Tier  `json:"tiers,omitempty"`
-	Divide    *Divide `json:"divide,omitempty"`
+	Title     string       `json:"title,omitempty"`
+	Base      float64      `json:"base,omitempty"`
+	Mode      string       `json:"mode,omitempty"`
+	Aggregate string       `json:"aggregate,omitempty"`
+	Tiers     []Tier       `json:"tiers,omitempty"`
+	Divide    Divide       `json:"divide"`
+	Tax       tax.Settings `json:"tax"`
+}
+
+func (v Feature) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Title     string        `json:"title,omitempty"`
+		Base      float64       `json:"base,omitempty"`
+		Mode      string        `json:"mode,omitempty"`
+		Aggregate string        `json:"aggregate,omitempty"`
+		Tiers     []Tier        `json:"tiers,omitempty"`
+		Divide    *Divide       `json:"divide,omitempty"`
+		Tax       *tax.Settings `json:"tax,omitempty"`
+	}{
+		Title:     v.Title,
+		Base:      v.Base,
+		Mode:      v.Mode,
+		Aggregate: v.Aggregate,
+		Tiers:     v.Tiers,
+		Divide:    zeroAsNil(v.Divide),
+		Tax:       zeroAsNil(v.Tax),
+	})
+}
+
+// zeroAsNil returns a pointer to v if v is not the zero value for its type.
+// If v implements IsZero, it is used to determine if v is the zero value.
+func zeroAsNil[T comparable](v T) *T {
+	z, ok := any(v).(interface{ IsZero() bool })
+	if ok && z.IsZero() {
+		return nil
+	}
+	var zero T
+	if v == zero {
+		return nil
+	}
+	return &v
 }
 
 type Plan struct {

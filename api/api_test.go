@@ -18,6 +18,7 @@ import (
 	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/stripe/stroke"
+	"tier.run/types/tax"
 	"tier.run/types/they"
 )
 
@@ -319,7 +320,7 @@ func TestScheduleAutomaticTax(t *testing.T) {
 		}
 	})
 	_, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
-		Tax: tier.Taxation{Automatic: true},
+		Tax: tax.Applied{Automatically: true},
 		Phases: []apitypes.Phase{
 			{
 				Features: []string{"plan:test@0"},

@@ -13,6 +13,7 @@ import (
 	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/types/payment"
+	"tier.run/types/tax"
 	"tier.run/values"
 )
 
@@ -88,7 +89,7 @@ type Phase struct {
 	// "fragmented".
 	Plans []refs.Plan
 
-	AutomaticTax bool
+	Tax tax.Applied
 }
 
 // Valid reports if the Phase is one that would be retured from the Stripe API.
@@ -108,16 +109,16 @@ func (p *Phase) Fragments() []refs.FeaturePlan {
 }
 
 type subscription struct {
-	ID           string
-	ScheduleID   string
-	Status       string
-	Name         string
-	Effective    time.Time
-	TrialEnd     time.Time
-	EndDate      time.Time
-	CanceledAt   time.Time
-	Features     []Feature
-	AutomaticTax bool
+	ID         string
+	ScheduleID string
+	Status     string
+	Name       string
+	Effective  time.Time
+	TrialEnd   time.Time
+	EndDate    time.Time
+	CanceledAt time.Time
+	Features   []Feature
+	Tax        tax.Applied
 }
 
 func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub subscription, err error) {
@@ -184,12 +185,14 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 	}
 
 	s := subscription{
-		ID:           v.ProviderID(),
-		ScheduleID:   v.Schedule.ID,
-		Effective:    time.Unix(v.StartDate, 0),
-		Status:       v.Status,
-		Features:     fs,
-		AutomaticTax: v.AutomaticTax.Enabled,
+		ID:         v.ProviderID(),
+		ScheduleID: v.Schedule.ID,
+		Effective:  time.Unix(v.StartDate, 0),
+		Status:     v.Status,
+		Features:   fs,
+		Tax: tax.Applied{
+			Automatically: v.AutomaticTax.Enabled,
+		},
 	}
 	if v.TrialEnd > 0 {
 		s.TrialEnd = time.Unix(v.TrialEnd, 0)
@@ -328,7 +331,7 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 
 			Trial: p.TrialEnd > 0,
 
-			AutomaticTax: s.AutomaticTax,
+			Tax: s.Tax,
 		}
 		all = append(all, p)
 		if p.Current {
@@ -413,12 +416,11 @@ func (c *Client) cancelSubscription(ctx context.Context, subID string) (err erro
 func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name string, phases []Phase) error {
 	var automaticTax bool
 	for i, p := range phases {
-		if i > 0 && p.AutomaticTax != automaticTax {
+		if i > 0 && p.Tax.Automatically != automaticTax {
 			// TODO(bmizerany): make sentinel error
 			return errors.New("stripe: automatic tax must be consistent across phases")
 		}
-		automaticTax = p.AutomaticTax
-		f.Set("default_settings", "automatic_tax", "enabled", automaticTax)
+		f.Set("default_settings", "automatic_tax", "enabled", p.Tax.Automatically)
 
 		if len(p.Features) == 0 {
 			if i != len(phases)-1 {

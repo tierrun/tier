@@ -249,10 +249,10 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			phases = append(phases, control.Phase{
-				Trial:        p.Trial,
-				Effective:    p.Effective,
-				Features:     fs,
-				AutomaticTax: sr.Tax.Automatic,
+				Trial:     p.Trial,
+				Effective: p.Effective,
+				Features:  fs,
+				Tax:       sr.Tax,
 			})
 		}
 	}
@@ -342,9 +342,7 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 				Plans:     p.Plans,
 				Fragments: p.Fragments(),
 				Trial:     p.Trial,
-				Tax: apitypes.Taxation{
-					Automatic: p.AutomaticTax,
-				},
+				Tax:       p.Tax,
 			})
 		}
 	}
