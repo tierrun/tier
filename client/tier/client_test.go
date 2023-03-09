@@ -42,6 +42,57 @@ func TestUserPassword(t *testing.T) {
 	diff.Test(t, t.Errorf, got, want)
 }
 
+func TestFromEnv(t *testing.T) {
+	cases := []struct {
+		envBaseURL  string
+		envAPIKey   string
+		wantBaseURL string
+		wantAPIKey  string
+	}{
+		{
+			envBaseURL:  "https://x.com",
+			envAPIKey:   "testKey",
+			wantBaseURL: "https://x.com",
+			wantAPIKey:  "testKey",
+		},
+		{
+			envBaseURL:  "",
+			envAPIKey:   "testKey",
+			wantBaseURL: "https://api.tier.run",
+			wantAPIKey:  "testKey",
+		},
+		{
+			envBaseURL:  "",
+			envAPIKey:   "",
+			wantBaseURL: defaultBaseURL,
+			wantAPIKey:  "",
+		},
+		{
+			envBaseURL:  "https://y.com",
+			envAPIKey:   "",
+			wantBaseURL: "https://y.com",
+			wantAPIKey:  "",
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run("", func(t *testing.T) {
+			t.Setenv("TIER_BASE_URL", tt.envBaseURL)
+			t.Setenv("TIER_API_KEY", tt.envAPIKey)
+			c, err := FromEnv()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.BaseURL != tt.wantBaseURL {
+				t.Errorf("BaseURL = %q; want %q", c.BaseURL, tt.wantBaseURL)
+			}
+			if c.APIKey != tt.wantAPIKey {
+				t.Errorf("APIKey = %q; want %q", c.APIKey, tt.wantAPIKey)
+			}
+		})
+	}
+}
+
 func TestReportNow(t *testing.T) {
 	var mu sync.Mutex
 	var got []apitypes.ReportRequest
