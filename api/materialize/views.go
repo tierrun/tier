@@ -40,7 +40,6 @@ func FromPricingHuJSON(data []byte) (fs []control.Feature, err error) {
 		for feature, f := range p.Features {
 			fn := feature.WithPlan(plan)
 
-			divide := values.Coalesce(f.Divide, &apitypes.Divide{})
 			ff := control.Feature{
 				FeaturePlan: fn,
 
@@ -55,8 +54,10 @@ func FromPricingHuJSON(data []byte) (fs []control.Feature, err error) {
 				Mode:      values.Coalesce(f.Mode, "graduated"),
 				Aggregate: values.Coalesce(f.Aggregate, "sum"),
 
-				TransformDenominator: divide.By,
-				TransformRoundUp:     divide.Rounding == "up",
+				TransformDenominator: f.Divide.By,
+				TransformRoundUp:     f.Divide.Rounding == "up",
+
+				Tax: f.Tax,
 			}
 
 			if len(f.Tiers) > 0 {
@@ -110,13 +111,14 @@ func ToPricingJSON(fs []control.Feature) ([]byte, error) {
 			Mode:      values.ZeroIf(f.Mode, "graduated"),
 			Aggregate: values.ZeroIf(f.Aggregate, "sum"),
 			Tiers:     tiers,
+			Tax:       f.Tax,
 		}
 		if f.TransformDenominator != 0 {
 			var round string
 			if f.TransformRoundUp {
 				round = "up"
 			}
-			af.Divide = &apitypes.Divide{
+			af.Divide = apitypes.Divide{
 				By:       f.TransformDenominator,
 				Rounding: round,
 			}

@@ -17,6 +17,7 @@ import (
 	"tier.run/api/apitypes"
 	"tier.run/fetch"
 	"tier.run/refs"
+	"tier.run/types/tax"
 )
 
 // ClockHeader is the header used to pass the clock ID to the tier sidecar.
@@ -309,14 +310,12 @@ type CheckoutParams struct {
 	RequireBillingAddress bool
 }
 
-type Taxation = apitypes.Taxation
-
 type ScheduleParams struct {
 	Info            *OrgInfo
 	Phases          []Phase
 	PaymentMethodID string
 
-	Tax Taxation
+	Tax tax.Applied
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) (*apitypes.ScheduleResponse, error) {

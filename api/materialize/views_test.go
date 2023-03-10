@@ -11,6 +11,7 @@ import (
 	"tier.run/client/tier"
 	"tier.run/control"
 	"tier.run/refs"
+	"tier.run/types/tax"
 )
 
 func TestPricingHuJSON(t *testing.T) {
@@ -41,6 +42,13 @@ func TestPricingHuJSON(t *testing.T) {
 					}
 				},
 			},
+			"plan:tax@1": {
+				"features": {
+					"feature:tax:not:included": {
+						"tax": {"included": true},
+					},
+				},
+			},
 		}
 	}`)
 
@@ -62,6 +70,16 @@ func TestPricingHuJSON(t *testing.T) {
 			Mode:        "graduated", // defaults
 			Aggregate:   "sum",       // defaults
 			Base:        100,
+		},
+		{
+			PlanTitle:   "plan:tax@1",
+			Title:       "feature:tax:not:included@plan:tax@1",
+			FeaturePlan: refs.MustParseFeaturePlan("feature:tax:not:included@plan:tax@1"),
+			Currency:    "usd",
+			Interval:    "@monthly",
+			Mode:        "graduated", // defaults
+			Aggregate:   "sum",
+			Tax:         tax.Settings{Included: true},
 		},
 		{
 			PlanTitle:   "Just an example plan to show off features",
@@ -123,6 +141,14 @@ func TestPricingHuJSON(t *testing.T) {
 						"divide": {"by": 100, "rounding": "up"},
 					}
 				}
+			},
+			"plan:tax@1": {
+				"title": "plan:tax@1",
+				"features": {
+					"feature:tax:not:included": {
+						"tax": {"included": true}
+					}
+				}
 			}
 		}
 	}`)
@@ -134,6 +160,7 @@ func diffJSON(t *testing.T, got, want []byte) {
 	t.Helper()
 
 	format := func(b []byte) string {
+		t.Helper()
 		b, err := hujson.Standardize(b)
 		if err != nil {
 			t.Fatal(err)

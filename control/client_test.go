@@ -10,6 +10,7 @@ import (
 	"kr.dev/diff"
 	"tier.run/refs"
 	"tier.run/stripe/stroke"
+	"tier.run/types/tax"
 )
 
 func newTestClient(t *testing.T) *Client {
@@ -79,6 +80,14 @@ func TestRoundTrip(t *testing.T) {
 			Tiers: []Tier{
 				{Upto: 1, Price: 100, Base: 0},
 			},
+		},
+		{
+			FeaturePlan: refs.MustParseFeaturePlan("feature:tax@0"),
+			Interval:    "@daily",
+			Currency:    "eur",
+			Title:       "Test2",
+			Base:        1000,
+			Tax:         tax.Settings{Included: true},
 		},
 	}
 

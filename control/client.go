@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"tier.run/refs"
 	"tier.run/stripe"
+	"tier.run/types/tax"
 	"tier.run/values"
 )
 
@@ -106,6 +107,8 @@ type Feature struct {
 
 	TransformDenominator int  // the denominator for transforming usage
 	TransformRoundUp     bool // whether to round up transformed usage; otherwise round down
+
+	Tax tax.Settings
 }
 
 // TODO(bmizerany): remove FQN and replace with simply adding the version to
@@ -330,9 +333,13 @@ func (c *Client) pushFeature(ctx context.Context, f Feature) (providerID string,
 		data.Set("metadata", "tier.limit", limit)
 	}
 
+	if f.Tax.Included {
+		data.Set("tax_behavior", "inclusive")
+	} else {
+		data.Set("tax_behavior", "exclusive")
+	}
+
 	// TODO(bmizerany): data.Set("active", ?)
-	// TODO(bmizerany): data.Set("tax_behavior", "?")
-	// TODO(bmizerany): data.Set("transform_quantity", "?")
 	// TODO(bmizerany): data.Set("currency_options", "?")
 
 	var v struct {
@@ -374,6 +381,7 @@ type stripePrice struct {
 		DivideBy int    `json:"divide_by"`
 		Round    string `json:"round"`
 	} `json:"transform_quantity"`
+	TaxBehavior string `json:"tax_behavior"`
 }
 
 func stripePriceToFeature(p stripePrice) Feature {
@@ -388,6 +396,7 @@ func stripePriceToFeature(p stripePrice) Feature {
 		Aggregate:            aggregateFromStripe[p.Recurring.AggregateUsage],
 		TransformDenominator: p.TransformQuantity.DivideBy,
 		TransformRoundUp:     p.TransformQuantity.Round == "up",
+		Tax:                  tax.Settings{Included: p.TaxBehavior == "inclusive"},
 	}
 
 	if len(p.Tiers) == 0 && p.Recurring.UsageType == "metered" {
