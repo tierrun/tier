@@ -322,11 +322,12 @@ func (h *Handler) serveWhoAmI(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 	org := r.FormValue("org")
-	ps, err := h.c.LookupPhases(r.Context(), org)
+	s, err := h.c.LookupPhases(r.Context(), org)
 	if err != nil {
 		return err
 	}
 
+	ps := s.Phases
 	h.Logf("lookup phases: %# v", pretty.Formatter(ps))
 
 	for i, p := range ps {
@@ -345,6 +346,7 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 				Tax: apitypes.Taxation{
 					Automatic: p.AutomaticTax,
 				},
+				Current: apitypes.Period(s.Current),
 			})
 		}
 	}

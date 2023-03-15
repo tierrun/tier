@@ -196,7 +196,7 @@ func TestAPISubscribe(t *testing.T) {
 		if got.Effective.IsZero() {
 			t.Error("unexpected zero effective time")
 		}
-		ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective")
+		ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective", "Current")
 		diff.Test(t, t.Errorf, got, want, ignore)
 	}
 
@@ -472,6 +472,20 @@ func TestPhase(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			c := got.Current
+
+			if c.Effective.IsZero() {
+				t.Errorf("got zero effective time, want non-zero")
+			}
+			if c.End.IsZero() {
+				t.Errorf("got zero end time, want non-zero")
+			}
+			if !c.End.After(c.Effective) {
+				t.Errorf("unexpected effective time %s after end time %s", c.Effective, c.End)
+			}
+
+			got.Current = apitypes.Period{}
 			diff.Test(t, t.Errorf, got, tt.want)
 		})
 	}
@@ -517,7 +531,7 @@ func TestPhaseFragments(t *testing.T) {
 	if got.Effective.IsZero() {
 		t.Error("unexpected zero effective time")
 	}
-	ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective")
+	ignore := diff.ZeroFields[apitypes.PhaseResponse]("Effective", "Current")
 	diff.Test(t, t.Errorf, got, want, ignore)
 }
 

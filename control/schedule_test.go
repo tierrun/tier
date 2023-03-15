@@ -44,6 +44,8 @@ var ignoreProviderIDs = diff.OptionList(
 	diff.ZeroFields[Org]("ProviderID"),
 )
 
+var ignoreScheduleTimes = diff.ZeroFields[Schedule]("Current")
+
 func TestSchedule(t *testing.T) {
 	ciOnly(t)
 
@@ -81,7 +83,8 @@ func TestSchedule(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Logf("got phases %# v", pretty.Formatter(got))
-		diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
+		w := &Schedule{Phases: want}
+		diff.Test(t, t.Errorf, got, w, ignoreProviderIDs, ignoreScheduleTimes)
 	}
 
 	s.schedule("org:example", 0, "", planFree...)
@@ -268,7 +271,8 @@ func (s *scheduleTester) checkPhases(org string, want []Phase) {
 		s.t.Fatal(err)
 	}
 	s.t.Logf("got phases %# v", pretty.Formatter(got))
-	diff.Test(s.t, s.t.Errorf, got, want, ignoreProviderIDs)
+	w := &Schedule{Phases: want}
+	diff.Test(s.t, s.t.Errorf, got, w, ignoreProviderIDs, ignoreScheduleTimes)
 }
 
 func (s *scheduleTester) report(org, name string, n int) {
@@ -589,13 +593,16 @@ func TestScheduleMinMaxItems(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []Phase{{
+	want := &Schedule{Phases: []Phase{{
 		Org:      "org:example",
 		Features: wantFeatures,
 		Current:  true,
 		Plans:    nil, // fragments only
-	}}
-	diff.Test(t, t.Errorf, got, want, diff.ZeroFields[Phase]("Effective"))
+	}}}
+	diff.Test(t, t.Errorf, got, want,
+		diff.ZeroFields[Phase]("Effective"),
+		ignoreScheduleTimes,
+	)
 }
 
 func TestSchedulePaymentMethod(t *testing.T) {
@@ -768,16 +775,16 @@ func TestLookupPhasesWithTiersRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []Phase{{
+	want := &Schedule{Phases: []Phase{{
 		Org:       "org:example",
 		Effective: t0,
 		Current:   true,
 		Features:  fps,
 
 		Plans: plans("plan:test@0"),
-	}}
+	}}}
 
-	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
+	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs, ignoreScheduleTimes)
 }
 
 func TestSubscribeToPlan(t *testing.T) {
@@ -807,16 +814,16 @@ func TestSubscribeToPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Phase{{
+	want := &Schedule{Phases: []Phase{{
 		Org:       "org:example",
 		Current:   true,
 		Effective: t0,
 		Features:  FeaturePlans(fs),
 
 		Plans: plans("plan:pro@0"),
-	}}
+	}}}
 
-	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
+	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs, ignoreScheduleTimes)
 }
 
 func TestDedupCustomer(t *testing.T) {
@@ -870,15 +877,15 @@ func TestLookupPhases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Phase{{
+	want := &Schedule{Phases: []Phase{{
 		Org:       "org:example",
 		Current:   true,
 		Effective: t0,
 		Features:  FeaturePlans(fs0),
 
 		Plans: plans("plan:test@0"),
-	}}
-	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
+	}}}
+	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs, ignoreScheduleTimes)
 
 	fs1 := []Feature{
 		{
@@ -902,22 +909,22 @@ func TestLookupPhases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for i, p := range got {
+	for i, p := range got.Phases {
 		p.Features = slices.Clone(p.Features)
 		refs.SortGroupedByVersion(p.Features)
-		got[i] = p
+		got.Phases[i] = p
 	}
 
-	want = []Phase{{
+	want = &Schedule{Phases: []Phase{{
 		Org:       "org:example",
 		Current:   true,
 		Effective: t0,
 		Features:  fpsFrag,
 
 		Plans: plans("plan:test@0"),
-	}}
+	}}}
 
-	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs)
+	diff.Test(t, t.Errorf, got, want, ignoreProviderIDs, ignoreScheduleTimes)
 }
 
 func TestLookupPaymentMethods(t *testing.T) {
@@ -1189,7 +1196,10 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			diff.Test(t, t.Errorf, got, tt.want)
+			want := &Schedule{
+				Phases: tt.want,
+			}
+			diff.Test(t, t.Errorf, got, want, ignoreScheduleTimes)
 		})
 	}
 }
