@@ -117,7 +117,8 @@ type subscription struct {
 	EndDate      time.Time
 	CanceledAt   time.Time
 	Features     []Feature
-	AutomaticTax bool
+	AutomaticTax bool // TODO(bmizerany): cheange to tax.Applied
+	Current      Period
 }
 
 func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub subscription, err error) {
@@ -153,6 +154,8 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 		AutomaticTax struct {
 			Enabled bool
 		} `json:"automatic_tax"`
+		CurrentPeriodStart int64 `json:"current_period_start"`
+		CurrentPeriodEnd   int64 `json:"current_period_end"`
 	}
 
 	// TODO(bmizerany): cache the subscription ID and looked it up
@@ -190,6 +193,10 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 		Status:       v.Status,
 		Features:     fs,
 		AutomaticTax: v.AutomaticTax.Enabled,
+		Current: Period{
+			Effective: timeUnix(v.CurrentPeriodStart),
+			End:       timeUnix(v.CurrentPeriodEnd),
+		},
 	}
 	if v.TrialEnd > 0 {
 		s.TrialEnd = time.Unix(v.TrialEnd, 0)
@@ -701,16 +708,29 @@ func (c *Client) LookupStatus(ctx context.Context, org string) (string, error) {
 	return s.Status, nil
 }
 
-func (c *Client) LookupPhases(ctx context.Context, org string) (ps []Phase, err error) {
+type Schedule struct {
+	Current Period
+	Phases  []Phase
+}
+
+func (c *Client) LookupPhases(ctx context.Context, org string) (ps *Schedule, err error) {
 	s, err := c.lookupSubscription(ctx, org, defaultScheduleName)
 	if errors.Is(err, errSubscriptionNotFound) {
-		return nil, nil
+		return &Schedule{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+
 	_, all, err := c.lookupPhases(ctx, org, s, defaultScheduleName)
-	return all, err
+	if err != nil {
+		return nil, err
+	}
+	cs := &Schedule{
+		Current: s.Current,
+		Phases:  all,
+	}
+	return cs, nil
 }
 
 // LookupPaymentMethods returns the payment methods for the given org.
@@ -1045,4 +1065,12 @@ func numFeaturesInPlan(fs []refs.FeaturePlan, plan refs.Plan) (n int) {
 		}
 	}
 	return n
+}
+
+// timeUnix is like time.Unix, but returns the zero time if n is zero.
+func timeUnix(n int64) time.Time {
+	if n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(n, 0)
 }

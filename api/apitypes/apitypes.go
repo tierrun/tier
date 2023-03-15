@@ -30,6 +30,15 @@ type Taxation struct {
 	Automatic bool `json:"automatic,omitempty"`
 }
 
+type Period struct {
+	Effective time.Time `json:"effective,omitempty"`
+	End       time.Time `json:"end,omitempty"`
+}
+
+func (p *Period) IsZero() bool {
+	return p.Effective.IsZero() && p.End.IsZero()
+}
+
 type PhaseResponse struct {
 	Effective time.Time          `json:"effective,omitempty"`
 	End       time.Time          `json:"end,omitempty"`
@@ -38,26 +47,24 @@ type PhaseResponse struct {
 	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
 	Trial     bool               `json:"trial,omitempty"`
 	Tax       Taxation           `json:"tax,omitempty"`
+	Current   Period             `json:"current,omitempty"`
 }
 
 func (pr PhaseResponse) MarshalJSON() ([]byte, error) {
 	type Alias PhaseResponse
-	if pr.End.IsZero() {
-		return json.Marshal(&struct {
-			*Alias
-			End byte `json:"end,omitempty"`
-		}{
-			Alias: (*Alias)(&pr),
-		})
-	} else {
-		return json.Marshal(&struct {
-			*Alias
-			End time.Time `json:"end"`
-		}{
-			Alias: (*Alias)(&pr),
-			End:   pr.End,
-		})
-	}
+	return json.Marshal(&struct {
+		*Alias
+		Effective any `json:"effective,omitempty"`
+		End       any `json:"end,omitempty"`
+		Current   any `json:"current,omitempty"`
+		Tax       any `json:"tax,omitempty"`
+	}{
+		Alias:     (*Alias)(&pr),
+		Effective: nilIfZero(pr.Effective),
+		End:       nilIfZero(pr.End),
+		Current:   nilIfZero(pr.Current),
+		Tax:       nilIfZero(pr.Tax),
+	})
 }
 
 type PaymentMethodsResponse struct {
@@ -165,4 +172,15 @@ type ClockResponse struct {
 	Link    string    `json:"link"`
 	Present time.Time `json:"present"`
 	Status  string    `json:"status"`
+}
+
+func nilIfZero[T comparable](v T) any {
+	if z, ok := any(v).(interface{ IsZero() bool }); ok && z.IsZero() {
+		return nil
+	}
+	var zero T
+	if v == zero {
+		return nil
+	}
+	return v
 }
