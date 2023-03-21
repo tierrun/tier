@@ -1039,9 +1039,19 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 	// TODO(bmizerany): This tests assumptions, but we need an integration
 	// test provin fields "like" trial actually fall off / go to zero when
 	// the trial is over. This needs a test clock with stripe.
+
 	newHandler := func(s string) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
+			case they.Want(r, "GET", "/v1/prices"):
+				writeHuJSON(w, `
+					{"data": [
+						{
+							"id":       "price_test",
+							"metadata": {"tier.feature": "feature:x@plan:test@0"},
+						},
+					]}
+				`)
 			case they.Want(r, "GET", "/v1/customers"):
 				writeHuJSON(w, `
 					{"data": [
@@ -1060,7 +1070,7 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 								"tier.subscription": "default",
 							},
 							"items": {"data": [{"price": {
-								"metadata": {"tier.feature": "feature:x@0"},
+								"metadata": {"tier.feature": "feature:x@plan:test@0"},
 							}}]},
 						},
 					]}
@@ -1072,7 +1082,7 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 	}
 
 	fs := []refs.FeaturePlan{
-		mpf("feature:x@0"),
+		mpf("feature:x@plan:test@0"),
 	}
 
 	cases := []struct {
@@ -1089,6 +1099,7 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 				Current:   true,
 				Trial:     false,
 				Features:  fs,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
 			}},
 		},
 		{
@@ -1101,6 +1112,7 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 				Effective: time.Unix(123123123, 0),
 				Current:   true,
 				Features:  fs,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
 			}, {
 				Org:       "org:test",
 				Effective: time.Unix(223123123, 0),
@@ -1119,12 +1131,14 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 				Current:   false,
 				Trial:     true,
 				Features:  fs,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
 			}, {
 				Org:       "org:test",
 				Effective: time.Unix(200000000, 0),
 				Features:  fs,
 				Current:   true, // <---- current
 				Trial:     false,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
 			}, {
 				Org:       "org:test",
 				Effective: time.Unix(400000000, 0),
@@ -1145,10 +1159,12 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 				Current:   true,
 				Trial:     true,
 				Features:  fs,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
 			}, {
 				Org:       "org:test",
 				Effective: time.Unix(200000000, 0),
 				Features:  fs,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
 			}},
 		},
 		{
@@ -1165,10 +1181,12 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 				Current:   false,
 				Trial:     true,
 				Features:  fs,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
 			}, {
 				Org:       "org:test",
 				Effective: time.Unix(200000000, 0),
 				Features:  fs,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
 			}, {
 				Org:       "org:test",
 				Effective: time.Unix(400000000, 0),
