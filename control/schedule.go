@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"golang.org/x/exp/slices"
-	"golang.org/x/sync/errgroup"
 	"kr.dev/errorfmt"
 	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/types/payment"
-	"tier.run/values"
 )
 
 type clockKey struct{}
@@ -274,44 +272,23 @@ type stripeSubSchedule struct {
 func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, name string) (current Phase, all []Phase, err error) {
 	defer errorfmt.Handlef("lookupPhases: %w", &err)
 
-	if s.ScheduleID == "" {
-		ps := subscriptionToPhases(org, s)
-		return ps[0], ps, nil
-	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	var ss stripeSubSchedule
-	g.Go(func() error {
-		var f stripe.Form
-		f.Add("expand[]", "phases.items.price")
-		return c.Stripe.Do(ctx, "GET", "/v1/subscription_schedules/"+s.ScheduleID, f, &ss)
-	})
-
-	var m []refs.FeaturePlan
-	featureByProviderID := make(map[string]refs.FeaturePlan)
-	g.Go(func() (err error) {
+	fut := futureGo(func() ([]Feature, error) {
 		fs, err := c.Pull(ctx, 0)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		m = values.MapFunc(fs, func(f Feature) refs.FeaturePlan {
-			featureByProviderID[f.ProviderID] = f.FeaturePlan
-			return f.FeaturePlan
-		})
-		return err
+		return fs, nil
 	})
 
-	if err := g.Wait(); err != nil {
-		return Phase{}, nil, err
-	}
-
-	for _, p := range ss.Phases {
-		fs := make([]refs.FeaturePlan, 0, len(p.Items))
-		for _, pi := range p.Items {
-			fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
+	wholePlans := func(fs []refs.FeaturePlan) ([]refs.Plan, error) {
+		mfs, err := fut.get()
+		if err != nil {
+			return nil, err
 		}
-
+		m := FeaturePlans(mfs)
 		var plans []refs.Plan
 		for _, f := range fs {
 			if slices.Contains(plans, f.Plan()) {
@@ -322,7 +299,47 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 			if inModel == inPhase {
 				plans = append(plans, f.Plan())
 			}
+		}
+		return plans, nil
+	}
 
+	if s.ScheduleID == "" {
+		ps := subscriptionToPhases(org, s)
+		for i, p := range ps {
+			plans, err := wholePlans(p.Features)
+			if err != nil {
+				return Phase{}, nil, err
+			}
+			ps[i].Plans = plans
+		}
+		return ps[0], ps, nil
+	}
+
+	var ss stripeSubSchedule
+	var f stripe.Form
+	f.Add("expand[]", "phases.items.price")
+	if err := c.Stripe.Do(ctx, "GET", "/v1/subscription_schedules/"+s.ScheduleID, f, &ss); err != nil {
+		return Phase{}, nil, err
+	}
+
+	m, err := fut.get()
+	if err != nil {
+		return Phase{}, nil, err
+	}
+	featureByProviderID := make(map[string]refs.FeaturePlan)
+	for _, f := range m {
+		featureByProviderID[f.ProviderID] = f.FeaturePlan
+	}
+
+	for _, p := range ss.Phases {
+		fs := make([]refs.FeaturePlan, 0, len(p.Items))
+		for _, pi := range p.Items {
+			fs = append(fs, featureByProviderID[pi.Price.ProviderID()])
+		}
+
+		plans, err := wholePlans(fs)
+		if err != nil {
+			return Phase{}, nil, err
 		}
 
 		p := Phase{
@@ -1073,4 +1090,24 @@ func timeUnix(n int64) time.Time {
 		return time.Time{}
 	}
 	return time.Unix(n, 0)
+}
+
+type future[T any] struct {
+	ch  chan struct{}
+	v   T
+	err error
+}
+
+func futureGo[T any](fn func() (T, error)) *future[T] {
+	f := &future[T]{ch: make(chan struct{})}
+	go func() {
+		f.v, f.err = fn()
+		close(f.ch)
+	}()
+	return f
+}
+
+func (f *future[T]) get() (T, error) {
+	<-f.ch
+	return f.v, f.err
 }
