@@ -948,10 +948,11 @@ func TestLookupPaymentMethods(t *testing.T) {
 
 func TestCheckoutRequiredAddress(t *testing.T) {
 	type G struct {
-		successURL string
-		cancelURL  string
-		bac        string // billing_address_collection
-		trialDays  string
+		successURL   string
+		cancelURL    string
+		bac          string // billing_address_collection
+		trialDays    string
+		automaticTax string
 	}
 
 	var mu sync.Mutex
@@ -971,10 +972,11 @@ func TestCheckoutRequiredAddress(t *testing.T) {
 		case they.Want(r, "POST", "/v1/checkout/sessions"):
 			mu.Lock()
 			got = append(got, G{
-				successURL: r.FormValue("success_url"),
-				cancelURL:  r.FormValue("cancel_url"),
-				bac:        r.FormValue("billing_address_collection"),
-				trialDays:  r.FormValue("subscription_data[trial_period_days]"),
+				successURL:   r.FormValue("success_url"),
+				cancelURL:    r.FormValue("cancel_url"),
+				bac:          r.FormValue("billing_address_collection"),
+				trialDays:    r.FormValue("subscription_data[trial_period_days]"),
+				automaticTax: r.FormValue("automatic_tax[enabled]"),
 			})
 			mu.Unlock()
 			jsonEncode(t, w, msa{
@@ -1000,35 +1002,39 @@ func TestCheckoutRequiredAddress(t *testing.T) {
 		for _, withFeatures := range TF {
 			for _, withCancel := range TF {
 				for _, withTrial := range TF {
-					got = nil
+					for _, withTax := range TF {
+						got = nil
 
-					var (
-						bac       = values.ReturnIf(withAddress, "required")
-						cancelURL = values.ReturnIf(withCancel, "https://c.com")
-						features  = values.ReturnIf(withFeatures, []Feature{{}})
-						trialDays = values.ReturnIf(withTrial, 14)
-					)
+						var (
+							bac       = values.ReturnIf(withAddress, "required")
+							cancelURL = values.ReturnIf(withCancel, "https://c.com")
+							features  = values.ReturnIf(withFeatures, []Feature{{}})
+							trialDays = values.ReturnIf(withTrial, 14)
+						)
 
-					link, err := cc.Checkout(context.Background(), "org:demo", "http://s.com", &CheckoutParams{
-						Features:              features,
-						RequireBillingAddress: withAddress,
-						CancelURL:             cancelURL,
-						TrialDays:             trialDays,
-					})
-					if err != nil {
-						t.Fatal(err)
+						link, err := cc.Checkout(context.Background(), "org:demo", "http://s.com", &CheckoutParams{
+							Features:              features,
+							RequireBillingAddress: withAddress,
+							CancelURL:             cancelURL,
+							TrialDays:             trialDays,
+							AutomaticTax:          withTax,
+						})
+						if err != nil {
+							t.Fatal(err)
+						}
+
+						if want := "http://co.com/123"; link != want {
+							t.Errorf("link = %q; want %q", link, want)
+						}
+
+						diff.Test(t, t.Errorf, got, []G{{
+							successURL:   "http://s.com",
+							cancelURL:    cancelURL,
+							bac:          bac,
+							trialDays:    values.ReturnIf(withTrial && withFeatures, strconv.Itoa(trialDays)),
+							automaticTax: fmt.Sprintf("%v", withTax),
+						}})
 					}
-
-					if want := "http://co.com/123"; link != want {
-						t.Errorf("link = %q; want %q", link, want)
-					}
-
-					diff.Test(t, t.Errorf, got, []G{{
-						successURL: "http://s.com",
-						cancelURL:  cancelURL,
-						bac:        bac,
-						trialDays:  values.ReturnIf(withTrial && withFeatures, strconv.Itoa(trialDays)),
-					}})
 				}
 			}
 		}
