@@ -492,6 +492,7 @@ type CheckoutParams struct {
 	Features              []Feature
 	CancelURL             string
 	RequireBillingAddress bool
+	AutomaticTax          bool
 }
 
 func (c *Client) Checkout(ctx context.Context, org string, successURL string, p *CheckoutParams) (link string, err error) {
@@ -513,6 +514,7 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 	var f stripe.Form
 	f.Set("customer", cid)
 	f.Set("success_url", successURL)
+	f.Set("automatic_tax", "enabled", p.AutomaticTax)
 	if p.CancelURL != "" {
 		f.Set("cancel_url", p.CancelURL)
 	}
