@@ -295,6 +295,7 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 		TrialDays:             p.TrialDays,
 		Features:              p.Features,
 		RequireBillingAddress: p.RequireBillingAddress,
+		Tax:                   p.Tax,
 	}
 	return fetchOK[*apitypes.CheckoutResponse, *apitypes.Error](ctx, c, "POST", "/v1/checkout", r)
 }
@@ -307,6 +308,7 @@ type CheckoutParams struct {
 	Features              []string
 	CancelURL             string
 	RequireBillingAddress bool
+	Tax                   Taxation
 }
 
 type Taxation = apitypes.Taxation
