@@ -28,6 +28,7 @@ type Phase struct {
 
 type Taxation struct {
 	Automatic bool `json:"automatic,omitempty"`
+	CollectID bool `json:"collect_id,omitempty"` // specifics is taxID is collected
 }
 
 type Period struct {

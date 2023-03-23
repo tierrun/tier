@@ -214,6 +214,8 @@ func (h *Handler) serveCheckout(w http.ResponseWriter, r *http.Request) error {
 		Features:              fs,
 		CancelURL:             cr.CancelURL,
 		RequireBillingAddress: cr.RequireBillingAddress,
+		AutomaticTax:          cr.Tax.Automatic,
+		CollectTaxID:          cr.Tax.CollectID,
 	})
 	if err != nil {
 		return err

@@ -493,6 +493,7 @@ type CheckoutParams struct {
 	CancelURL             string
 	RequireBillingAddress bool
 	AutomaticTax          bool
+	CollectTaxID          bool
 }
 
 func (c *Client) Checkout(ctx context.Context, org string, successURL string, p *CheckoutParams) (link string, err error) {
@@ -515,6 +516,7 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 	f.Set("customer", cid)
 	f.Set("success_url", successURL)
 	f.Set("automatic_tax", "enabled", p.AutomaticTax)
+	f.Set("tax_id_collection[enabled]", p.CollectTaxID)
 	if p.CancelURL != "" {
 		f.Set("cancel_url", p.CancelURL)
 	}
