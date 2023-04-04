@@ -87,6 +87,8 @@ type Phase struct {
 	Plans []refs.Plan
 
 	AutomaticTax bool
+
+	Coupon string
 }
 
 // Valid reports if the Phase is one that would be retured from the Stripe API.
@@ -117,6 +119,7 @@ type subscription struct {
 	Features     []Feature
 	AutomaticTax bool // TODO(bmizerany): cheange to tax.Applied
 	Current      Period
+	Coupon       string
 }
 
 func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub subscription, err error) {
@@ -154,6 +157,11 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 		} `json:"automatic_tax"`
 		CurrentPeriodStart int64 `json:"current_period_start"`
 		CurrentPeriodEnd   int64 `json:"current_period_end"`
+		Discount           struct {
+			Coupon struct {
+				ID string
+			}
+		}
 	}
 
 	// TODO(bmizerany): cache the subscription ID and looked it up
@@ -195,6 +203,7 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 			Effective: timeUnix(v.CurrentPeriodStart),
 			End:       timeUnix(v.CurrentPeriodEnd),
 		},
+		Coupon: v.Discount.Coupon.ID,
 	}
 	if v.TrialEnd > 0 {
 		s.TrialEnd = time.Unix(v.TrialEnd, 0)
@@ -266,6 +275,7 @@ type stripeSubSchedule struct {
 		Items    []struct {
 			Price stripePrice
 		}
+		Coupon string
 	}
 }
 
@@ -353,6 +363,8 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 			Trial: p.TrialEnd > 0,
 
 			AutomaticTax: s.AutomaticTax,
+
+			Coupon: p.Coupon,
 		}
 		all = append(all, p)
 		if p.Current {
@@ -401,6 +413,12 @@ func subscriptionToPhases(org string, s subscription) []Phase {
 			Features:  nil,
 			Current:   s.Status == "canceled",
 		})
+	}
+
+	for i := range ps {
+		if ps[i].Current {
+			ps[i].Coupon = s.Coupon
+		}
 	}
 
 	return ps
@@ -467,6 +485,9 @@ func addPhases(ctx context.Context, c *Client, f *stripe.Form, update bool, name
 
 		f.Set("phases", i, "metadata[tier.subscription]", name)
 		f.Set("phases", i, "trial", p.Trial)
+		if p.Coupon != "" {
+			f.Set("phases", i, "coupon", p.Coupon)
+		}
 
 		if i == 0 {
 			if update {

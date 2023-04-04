@@ -29,7 +29,25 @@ var (
 	mpfs = refs.MustParseFeaturePlans
 )
 
-func newTestClient(t *testing.T) *tier.Client {
+type testClient struct {
+	t *testing.T
+	*tier.Client
+	cc *control.Client
+}
+
+func (tc *testClient) createCoupon(ctx context.Context, code string) {
+	tc.t.Helper()
+	var f stripe.Form
+	f.Set("amount_off", 1)
+	f.Set("currency", "usd")
+	f.Set("duration", "once")
+	f.Set("id", code)
+	if err := tc.cc.Stripe.Do(ctx, "POST", "/v1/coupons", f, nil); err != nil {
+		tc.t.Fatal(err)
+	}
+}
+
+func newTestClient(t *testing.T) *testClient {
 	sc := stroke.Client(t)
 	sc = stroke.WithAccount(t, sc)
 	cc := &control.Client{
@@ -45,7 +63,7 @@ func newTestClient(t *testing.T) *tier.Client {
 		BaseURL:    s.URL,
 		HTTPClient: s.Client(),
 	}
-	return tc
+	return &testClient{t, tc, cc}
 }
 
 func newTestClientWithStripe(t *testing.T, fakeStripe http.HandlerFunc) *tier.Client {
@@ -418,6 +436,8 @@ func TestPhase(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tc.createCoupon(ctx, "coupon_test")
+
 	cases := []struct {
 		phases []tier.Phase
 		want   apitypes.PhaseResponse
@@ -426,6 +446,7 @@ func TestPhase(t *testing.T) {
 			phases: []tier.Phase{{
 				Trial:    true,
 				Features: []string{"plan:test@0"},
+				Coupon:   "coupon_test",
 			}, {
 				Effective: now.AddDate(0, 0, 14),
 				Trial:     false,
@@ -437,6 +458,7 @@ func TestPhase(t *testing.T) {
 				Features:  mpfs("feature:x@plan:test@0"),
 				Plans:     mpps("plan:test@0"),
 				Trial:     true,
+				Coupon:    "coupon_test",
 			},
 		},
 		{
