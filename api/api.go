@@ -255,6 +255,7 @@ func (h *Handler) serveSubscribe(w http.ResponseWriter, r *http.Request) error {
 				Effective:    p.Effective,
 				Features:     fs,
 				AutomaticTax: sr.Tax.Automatic,
+				Coupon:       p.Coupon,
 			})
 		}
 	}
@@ -349,6 +350,7 @@ func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
 					Automatic: p.AutomaticTax,
 				},
 				Current: apitypes.Period(s.Current),
+				Coupon:  p.Coupon,
 			})
 		}
 	}

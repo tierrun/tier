@@ -24,6 +24,7 @@ type Phase struct {
 	Trial     bool      `json:"trial,omitempty"`
 	Effective time.Time `json:"effective,omitempty"`
 	Features  []string  `json:"features,omitempty"`
+	Coupon    string    `json:"coupon,omitempty"`
 }
 
 type Taxation struct {
@@ -49,6 +50,7 @@ type PhaseResponse struct {
 	Trial     bool               `json:"trial,omitempty"`
 	Tax       Taxation           `json:"tax,omitempty"`
 	Current   Period             `json:"current,omitempty"`
+	Coupon    string             `json:"coupon,omitempty"`
 }
 
 func (pr PhaseResponse) MarshalJSON() ([]byte, error) {
@@ -59,12 +61,14 @@ func (pr PhaseResponse) MarshalJSON() ([]byte, error) {
 		End       any `json:"end,omitempty"`
 		Current   any `json:"current,omitempty"`
 		Tax       any `json:"tax,omitempty"`
+		Coupon    any `json:"coupon,omitempty"`
 	}{
 		Alias:     (*Alias)(&pr),
 		Effective: nilIfZero(pr.Effective),
 		End:       nilIfZero(pr.End),
 		Current:   nilIfZero(pr.Current),
 		Tax:       nilIfZero(pr.Tax),
+		Coupon:    nilIfZero(pr.Coupon),
 	})
 }
 
