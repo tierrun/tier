@@ -52,7 +52,7 @@ type ValidationError struct {
 func (e *ValidationError) Error() string { return e.Message }
 
 type InvoiceSettings struct {
-	DefaultPaymentMethod string
+	DefaultPaymentMethod string `json:"default_payment_method"`
 }
 
 type OrgInfo struct {
@@ -64,7 +64,7 @@ type OrgInfo struct {
 	Created     int
 
 	PaymentMethod   string
-	InvoiceSettings InvoiceSettings
+	InvoiceSettings InvoiceSettings `json:"invoice_settings"`
 }
 
 func (oi *OrgInfo) CreatedAt() time.Time {
@@ -1071,7 +1071,7 @@ func setOrgInfo(f *stripe.Form, info *OrgInfo) error {
 	stripe.MaybeSet(f, "phone", info.Phone)
 	stripe.MaybeSet(f, "description", info.Description)
 	stripe.MaybeSet(f, "payment_method", info.PaymentMethod)
-	stripe.MaybeSet(f, "invoice_settings[default_payment_method]", info.PaymentMethod)
+	stripe.MaybeSet(f, "invoice_settings[default_payment_method]", info.InvoiceSettings.DefaultPaymentMethod)
 	for k, v := range info.Metadata {
 		if strings.HasPrefix(k, "tier.") {
 			return fmt.Errorf("%w: %q", ErrInvalidMetadata, k)

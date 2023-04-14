@@ -322,6 +322,9 @@ type ScheduleParams struct {
 }
 
 func (c *Client) Schedule(ctx context.Context, org string, p *ScheduleParams) (*apitypes.ScheduleResponse, error) {
+	if p == nil {
+		p = &ScheduleParams{}
+	}
 	return fetchOK[*apitypes.ScheduleResponse, *apitypes.Error](ctx, c, "POST", "/v1/subscribe", &apitypes.ScheduleRequest{
 		Org:             org,
 		Info:            (*apitypes.OrgInfo)(p.Info),

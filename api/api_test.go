@@ -811,6 +811,50 @@ func TestScheduleWithCustomerInfoNoPhases(t *testing.T) {
 	}
 }
 
+func TestScheduleWithCustomerPaymentMethodUpdate(t *testing.T) {
+	ctx := context.Background()
+	tc := newTestClient(t)
+
+	_, err := tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
+		Info: &tier.OrgInfo{
+			PaymentMethod: "pm_card_us", // "auto attach" payment method
+			Email:         "e@example.com",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pms, err := tc.LookupPaymentMethods(ctx, "org:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pms.PaymentMethods) != 1 {
+		t.Fatalf("unexpected number of payment methods: %d", len(pms.PaymentMethods))
+	}
+
+	resolvedPM := pms.PaymentMethods[0].ProviderID()
+	_, err = tc.Schedule(ctx, "org:test", &tier.ScheduleParams{
+		Info: &tier.OrgInfo{
+			InvoiceSettings: apitypes.InvoiceSettings{
+				DefaultPaymentMethod: resolvedPM,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	o, err := tc.LookupOrg(ctx, "org:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if o.InvoiceSettings.DefaultPaymentMethod != resolvedPM {
+		t.Errorf("default_payment_method = %q; want %q", o.InvoiceSettings.DefaultPaymentMethod, resolvedPM)
+	}
+}
+
 func TestPaymentMethods(t *testing.T) {
 	ctx := context.Background()
 	tc := newTestClient(t)
