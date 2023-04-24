@@ -58,7 +58,7 @@ var errorLookup = map[error]*trweb.HTTPError{
 	control.ErrUnexpectedMissingOrg: {
 		Status:  500,
 		Code:    "TERR1050",
-		Message: "Stripe reported a customer was created and then reported it did not exist. This might mean you purged your Test Mode and need to reset TIER_PREFIX_KEY=<randomString>.",
+		Message: "Stripe reported a customer was created and then reported it did not exist. This might mean you purged your Test Mode and need to reset TIER_KEY_PREFIX=<randomString>.",
 	},
 	control.ErrFeatureNotMetered: { // TODO(bmizerany): this may be relaxed if we decide to log and accept
 		Status:  400,
