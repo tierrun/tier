@@ -88,7 +88,11 @@ type Phase struct {
 
 	AutomaticTax bool
 
-	Coupon string
+	Coupon string // deprecated
+
+	// CouponData is the coupon that was applied to the subscription. It is
+	// nil if no coupon was applied.
+	CouponData *Coupon
 }
 
 // Valid reports if the Phase is one that would be retured from the Stripe API.
@@ -119,7 +123,7 @@ type subscription struct {
 	Features     []Feature
 	AutomaticTax bool // TODO(bmizerany): cheange to tax.Applied
 	Current      Period
-	Coupon       string
+	Coupon       *Coupon
 }
 
 func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub subscription, err error) {
@@ -132,6 +136,7 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 	var f stripe.Form
 	f.Set("customer", cid)
 	f.Add("expand[]", "data.schedule")
+	f.Add("expand[]", "data.discount.coupon")
 
 	type T struct {
 		stripe.ID
@@ -158,9 +163,7 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 		CurrentPeriodStart int64 `json:"current_period_start"`
 		CurrentPeriodEnd   int64 `json:"current_period_end"`
 		Discount           struct {
-			Coupon struct {
-				ID string
-			}
+			Coupon stripeCoupon
 		}
 	}
 
@@ -203,7 +206,7 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 			Effective: timeUnix(v.CurrentPeriodStart),
 			End:       timeUnix(v.CurrentPeriodEnd),
 		},
-		Coupon: v.Discount.Coupon.ID,
+		Coupon: stripeCouponToCoupon(v.Discount.Coupon),
 	}
 	if v.TrialEnd > 0 {
 		s.TrialEnd = time.Unix(v.TrialEnd, 0)
@@ -434,8 +437,9 @@ func subscriptionToPhases(org string, s subscription) []Phase {
 	}
 
 	for i := range ps {
-		if ps[i].Current {
-			ps[i].Coupon = s.Coupon
+		if ps[i].Current && s.Coupon != nil {
+			ps[i].Coupon = s.Coupon.ID
+			ps[i].CouponData = s.Coupon
 		}
 	}
 
@@ -766,6 +770,38 @@ func (c *Client) LookupStatus(ctx context.Context, org string) (string, error) {
 		return "", err
 	}
 	return s.Status, nil
+}
+
+type Coupon struct {
+	ID               string `json:"id"`
+	Metadata         map[string]string
+	Created          time.Time
+	AmountOff        int     `json:"amount_off"`
+	Currency         string  `json:"currency"`
+	Duration         string  `json:"duration"`
+	DurationInMonths int     `json:"duration_in_months"`
+	MaxRedemptions   int     `json:"max_redemptions"`
+	Name             string  `json:"name"`
+	PercentOff       float64 `json:"percent_off"`
+	RedeemBy         time.Time
+	TimesRedeemed    int  `json:"times_redeemed"`
+	Valid            bool `json:"valid"`
+}
+
+type stripeCoupon struct {
+	Coupon
+	Created  int64
+	RedeemBy int64 `json:"redeem_by"`
+}
+
+func stripeCouponToCoupon(sc stripeCoupon) *Coupon {
+	if sc.ID == "" {
+		return nil
+	}
+	c := &sc.Coupon
+	c.Created = timeUnix(sc.Created)
+	c.RedeemBy = timeUnix(sc.RedeemBy)
+	return c
 }
 
 type Schedule struct {
