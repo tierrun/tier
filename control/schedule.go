@@ -296,7 +296,7 @@ type stripeSubSchedule struct {
 		Items    []struct {
 			Price stripePrice
 		}
-		Coupon string
+		Coupon stripeCoupon
 	}
 }
 
@@ -348,6 +348,7 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 
 	var ss stripeSubSchedule
 	var f stripe.Form
+	f.Add("expand[]", "phases.coupon")
 	f.Add("expand[]", "phases.items.price")
 	if err := c.Stripe.Do(ctx, "GET", "/v1/subscription_schedules/"+s.ScheduleID, f, &ss); err != nil {
 		return Phase{}, nil, err
@@ -385,7 +386,8 @@ func (c *Client) lookupPhases(ctx context.Context, org string, s subscription, n
 
 			AutomaticTax: s.AutomaticTax,
 
-			Coupon: p.Coupon,
+			Coupon:     p.Coupon.ID,
+			CouponData: stripeCouponToCoupon(p.Coupon),
 		}
 		all = append(all, p)
 		if p.Current {

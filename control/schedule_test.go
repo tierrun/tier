@@ -904,7 +904,13 @@ func TestLookupPhases(t *testing.T) {
 
 	s := newScheduleTester(t)
 	s.push(fs0)
-	s.schedule("org:example", 0, "", FeaturePlans(fs0)...)
+
+	p := ScheduleParams{
+		Phases: []Phase{{Features: FeaturePlans(fs0)}},
+	}
+	if err := s.cc.Schedule(s.ctx, "org:example", p); err != nil {
+		s.t.Fatalf("error subscribing: %v", err)
+	}
 
 	got, err := s.cc.LookupPhases(s.ctx, "org:example")
 	if err != nil {
