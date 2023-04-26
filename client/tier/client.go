@@ -128,6 +128,13 @@ func (c *Client) LookupPhase(ctx context.Context, org string) (apitypes.PhaseRes
 	return fetchOK[apitypes.PhaseResponse, *apitypes.Error](ctx, c, "GET", "/v1/phase?org="+org, nil)
 }
 
+// LookupPhases reports information about all recent, current, and future phases for org.
+//
+// EXPERIMENTAL: This API is subject to change.
+func (c *Client) LookupPhases(ctx context.Context, org string) (apitypes.PhasesResponse, error) {
+	return fetchOK[apitypes.PhasesResponse, *apitypes.Error](ctx, c, "GET", "/v1/phases?org="+org, nil)
+}
+
 // LookupLimits reports the current usage and limits for the provided org.
 func (c *Client) LookupLimits(ctx context.Context, org string) (apitypes.UsageResponse, error) {
 	return fetchOK[apitypes.UsageResponse, *apitypes.Error](ctx, c, "GET", "/v1/limits?org="+org, nil)
