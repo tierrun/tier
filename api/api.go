@@ -181,6 +181,8 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) error {
 		return h.serveSubscribe(w, r)
 	case "/v1/checkout":
 		return h.serveCheckout(w, r)
+	case "/v1/phases":
+		return h.servePhases(w, r)
 	case "/v1/phase":
 		return h.servePhase(w, r)
 	case "/v1/pull":
@@ -321,6 +323,41 @@ func (h *Handler) serveWhoAmI(w http.ResponseWriter, r *http.Request) error {
 		Isolated:   who.Isolated,
 		URL:        who.URL(),
 	})
+}
+
+func (h *Handler) servePhases(w http.ResponseWriter, r *http.Request) error {
+	org := r.FormValue("org")
+	s, err := h.c.LookupPhases(r.Context(), org)
+	if err != nil {
+		return err
+	}
+
+	var pr apitypes.PhasesResponse
+	ps := s.Phases
+	for i, p := range ps {
+		if p.Current {
+			pr.Current = apitypes.Period(s.Current)
+		}
+		var end time.Time
+		if i+1 < len(ps) {
+			end = ps[i+1].Effective
+		}
+		pr.Phases = append(pr.Phases, apitypes.PhaseResponse{
+			Effective: p.Effective,
+			End:       end,
+			Features:  p.Features,
+			Plans:     p.Plans,
+			Fragments: p.Fragments(),
+			Trial:     p.Trial,
+			Tax: apitypes.Taxation{
+				Automatic: p.AutomaticTax,
+			},
+			Current: apitypes.Period(s.Current),
+			Coupon:  p.Coupon,
+		})
+	}
+
+	return httpJSON(w, pr)
 }
 
 func (h *Handler) servePhase(w http.ResponseWriter, r *http.Request) error {
