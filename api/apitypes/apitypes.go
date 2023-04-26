@@ -24,16 +24,16 @@ type Coupon struct {
 	ID               string `json:"id"`
 	Metadata         map[string]string
 	Created          time.Time
-	AmountOff        int     `json:"amount_off"`
-	Currency         string  `json:"currency"`
-	Duration         string  `json:"duration"`
-	DurationInMonths int     `json:"duration_in_months"`
-	MaxRedemptions   int     `json:"max_redemptions"`
-	Name             string  `json:"name"`
-	PercentOff       float64 `json:"percent_off"`
+	AmountOff        int     `json:"amount_off,omitempty"`
+	Currency         string  `json:"currency,omitempty"`
+	Duration         string  `json:"duration,omitempty"`
+	DurationInMonths int     `json:"duration_in_months,omitempty"`
+	MaxRedemptions   int     `json:"max_redemptions,omitempty"`
+	Name             string  `json:"name,omitempty"`
+	PercentOff       float64 `json:"percent_off,omitempty"`
 	RedeemBy         time.Time
-	TimesRedeemed    int  `json:"times_redeemed"`
-	Valid            bool `json:"valid"`
+	TimesRedeemed    int  `json:"times_redeemed,omitempty"`
+	Valid            bool `json:"valid,omitempty"`
 }
 
 type Phase struct {
