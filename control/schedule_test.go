@@ -166,6 +166,39 @@ func TestScheduleTrial(t *testing.T) {
 	})
 }
 
+func TestScheduleFromSubscription(t *testing.T) {
+	s := newScheduleTester(t)
+
+	model := []Feature{{
+		FeaturePlan: mpf("feature:x@plan:free@0"),
+		Interval:    "@monthly",
+		Currency:    "usd",
+	}}
+	s.push(model)
+
+	fps := FeaturePlans(model)
+	s.schedule("org:example", 0, "", fps...)
+
+	release := func() {
+		x, err := s.cc.lookupSubscription(s.ctx, "org:example", "default")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x.ScheduleID == "" {
+			t.Fatal("no schedule ID")
+		}
+		// https://api.stripe.com/v1/subscription_schedules/sub_sched_1N9DI0CdYGloJaDMz4mVsbIY/release
+		urlStr := fmt.Sprintf("/v1/subscription_schedules/%s/release", x.ScheduleID)
+		if err := s.cc.Stripe.Do(s.ctx, "POST", urlStr, stripe.Form{}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	release()
+	s.advanceTo(t1)
+	s.schedule("org:example", 0, "", fps...)
+}
+
 type scheduleTester struct {
 	ctx   context.Context
 	t     *testing.T

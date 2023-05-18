@@ -220,27 +220,45 @@ func (c *Client) lookupSubscription(ctx context.Context, org, name string) (sub 
 func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub string, p ScheduleParams) (err error) {
 	defer errorfmt.Handlef("stripe: createSchedule: %q: %w", org, &err)
 
-	create := func(f stripe.Form) (string, error) {
-		var v struct {
-			ID string
+	c.Logf("creating schedule for %q from subscription %q: %v", org, fromSub, p.Phases)
+
+	create := func(f stripe.Form) (id string, currentEffective time.Time, err error) {
+		var ss struct {
+			stripe.ID
+			Current struct {
+				Start int64 `json:"start_date"`
+			} `json:"current_phase"`
 		}
-		if err := c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules", f, &v); err != nil {
-			return "", err
+		if err := c.Stripe.Do(ctx, "POST", "/v1/subscription_schedules", f, &ss); err != nil {
+			return "", time.Time{}, err
 		}
-		return v.ID, nil
+		return ss.ProviderID(), timeUnix(ss.Current.Start), nil
 	}
 
 	if fromSub != "" {
 		defer errorfmt.Handlef("fromSub: %w", &err)
 		var f stripe.Form
 		f.Set("from_subscription", fromSub)
-		sid, err := create(f)
+		id, currentEffective, err := create(f)
 		if err != nil {
 			return err
 		}
+
+		c.Logf("created schedule %q for %q from subscription %q: %v", id, org, fromSub, p.Phases)
+
+		// IMPORTANT: If the caller wants to start the first phase
+		// immediately, then we need to update the schedule to set the
+		// effective date of the first phase to the current start time
+		// of the new first phase.
+		if len(p.Phases) > 0 && p.Phases[0].Effective.IsZero() {
+			c.Logf("updating schedule %q for %q to set effective date of first phase to %v", id, org, currentEffective)
+			p.Phases = slices.Clone(p.Phases) // don't mutate caller's slice
+			p.Phases[0].Effective = currentEffective
+		}
+
 		// We can only update phases after the schedule is created from
 		// the subscription.
-		return c.updateSchedule(ctx, sid, name, p)
+		return c.updateSchedule(ctx, id, name, p)
 	} else {
 		defer errorfmt.Handlef("newSub: %w", &err)
 		cid, err := c.WhoIs(ctx, org)
@@ -255,7 +273,7 @@ func (c *Client) createSchedule(ctx context.Context, org, name string, fromSub s
 		if err := addPhases(ctx, c, &f, false, name, p.Phases); err != nil {
 			return err
 		}
-		_, err = create(f)
+		_, _, err = create(f)
 		return err
 	}
 }
