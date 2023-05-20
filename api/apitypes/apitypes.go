@@ -20,11 +20,28 @@ func (e *Error) Error() string {
 		e.Status, e.Code, e.Message)
 }
 
+type Coupon struct {
+	ID               string `json:"id"`
+	Metadata         map[string]string
+	Created          time.Time
+	AmountOff        int     `json:"amount_off,omitempty"`
+	Currency         string  `json:"currency,omitempty"`
+	Duration         string  `json:"duration,omitempty"`
+	DurationInMonths int     `json:"duration_in_months,omitempty"`
+	MaxRedemptions   int     `json:"max_redemptions,omitempty"`
+	Name             string  `json:"name,omitempty"`
+	PercentOff       float64 `json:"percent_off,omitempty"`
+	RedeemBy         time.Time
+	TimesRedeemed    int  `json:"times_redeemed,omitempty"`
+	Valid            bool `json:"valid,omitempty"`
+}
+
 type Phase struct {
-	Trial     bool      `json:"trial,omitempty"`
-	Effective time.Time `json:"effective,omitempty"`
-	Features  []string  `json:"features,omitempty"`
-	Coupon    string    `json:"coupon,omitempty"`
+	Trial      bool      `json:"trial,omitempty"`
+	Effective  time.Time `json:"effective,omitempty"`
+	Features   []string  `json:"features,omitempty"`
+	Coupon     string    `json:"coupon,omitempty"`
+	CouponData *Coupon   `json:"coupon_data,omitempty"`
 }
 
 type Taxation struct {
@@ -41,16 +58,25 @@ func (p *Period) IsZero() bool {
 	return p.Effective.IsZero() && p.End.IsZero()
 }
 
+type PhasesResponse struct {
+	Current Period          `json:"current,omitempty"`
+	Phases  []PhaseResponse `json:"phases"`
+}
+
+// The PhaseResponse is a response with all current phase fields exposed as
+// top-level fields. Clients that need all phase data should use the Phases
+// field.
 type PhaseResponse struct {
-	Effective time.Time          `json:"effective,omitempty"`
-	End       time.Time          `json:"end,omitempty"`
-	Features  []refs.FeaturePlan `json:"features,omitempty"`
-	Plans     []refs.Plan        `json:"plans,omitempty"`
-	Fragments []refs.FeaturePlan `json:"fragments,omitempty"`
-	Trial     bool               `json:"trial,omitempty"`
-	Tax       Taxation           `json:"tax,omitempty"`
-	Current   Period             `json:"current,omitempty"`
-	Coupon    string             `json:"coupon,omitempty"`
+	Effective  time.Time          `json:"effective,omitempty"`
+	End        time.Time          `json:"end,omitempty"`
+	Features   []refs.FeaturePlan `json:"features,omitempty"`
+	Plans      []refs.Plan        `json:"plans,omitempty"`
+	Fragments  []refs.FeaturePlan `json:"fragments,omitempty"`
+	Trial      bool               `json:"trial,omitempty"`
+	Tax        Taxation           `json:"tax,omitempty"`
+	Current    Period             `json:"current,omitempty"` // not set on PhasesResponse
+	Coupon     string             `json:"coupon,omitempty"`
+	CouponData *Coupon            `json:"coupon_data,omitempty"`
 }
 
 func (pr PhaseResponse) MarshalJSON() ([]byte, error) {

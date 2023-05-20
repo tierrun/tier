@@ -447,6 +447,9 @@ func TestPhase(t *testing.T) {
 				Trial:    true,
 				Features: []string{"plan:test@0"},
 				Coupon:   "coupon_test",
+				CouponData: &apitypes.Coupon{
+					ID: "coupon_test",
+				},
 			}, {
 				Effective: now.AddDate(0, 0, 14),
 				Trial:     false,
@@ -459,6 +462,9 @@ func TestPhase(t *testing.T) {
 				Plans:     mpps("plan:test@0"),
 				Trial:     true,
 				Coupon:    "coupon_test",
+				CouponData: &apitypes.Coupon{
+					ID: "coupon_test",
+				},
 			},
 		},
 		{
@@ -508,7 +514,7 @@ func TestPhase(t *testing.T) {
 			}
 
 			got.Current = apitypes.Period{}
-			diff.Test(t, t.Errorf, got, tt.want)
+			diff.Test(t, t.Errorf, got, tt.want, diff.KeepFields[apitypes.Coupon]("ID"))
 		})
 	}
 }

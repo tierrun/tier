@@ -904,7 +904,13 @@ func TestLookupPhases(t *testing.T) {
 
 	s := newScheduleTester(t)
 	s.push(fs0)
-	s.schedule("org:example", 0, "", FeaturePlans(fs0)...)
+
+	p := ScheduleParams{
+		Phases: []Phase{{Features: FeaturePlans(fs0)}},
+	}
+	if err := s.cc.Schedule(s.ctx, "org:example", p); err != nil {
+		s.t.Fatalf("error subscribing: %v", err)
+	}
 
 	got, err := s.cc.LookupPhases(s.ctx, "org:example")
 	if err != nil {
@@ -1145,6 +1151,48 @@ func TestLookupPhasesNoSchedule(t *testing.T) {
 				Trial:     false,
 				Features:  fs,
 				Plans:     []refs.Plan{mpp("plan:test@0")},
+			}},
+		},
+		{
+			s: `
+				"start_date": 123123123,
+				"discount": {
+					"coupon": {
+						"id": "coupon:test",
+						"created": 123123123,
+						"percent_off": 50,
+						"metadata": {"test": "meta"},
+						"redeem_by": 123123123,
+						"max_redemptions": 1,
+						"times_redeemed": 1,
+						"amount_off": 1,
+						"currency": "usd",
+						"duration": "forever",
+						"duration_in_months": 1,
+					}
+				},
+			`,
+			want: []Phase{{
+				Org:       "org:test",
+				Effective: time.Unix(123123123, 0),
+				Current:   true,
+				Trial:     false,
+				Features:  fs,
+				Plans:     []refs.Plan{mpp("plan:test@0")},
+				Coupon:    "coupon:test",
+				CouponData: &Coupon{
+					ID:               "coupon:test",
+					Created:          time.Unix(123123123, 0),
+					PercentOff:       50,
+					AmountOff:        1,
+					Currency:         "usd",
+					RedeemBy:         time.Unix(123123123, 0),
+					MaxRedemptions:   1,
+					TimesRedeemed:    1,
+					Metadata:         map[string]string{"test": "meta"},
+					Duration:         "forever",
+					DurationInMonths: 1,
+				},
 			}},
 		},
 		{
