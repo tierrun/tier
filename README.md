@@ -10,11 +10,7 @@
 Tier will handle setting up and managing Stripe in a way that is much more friendly for SaaS and consumption based billing models. Tier's SDK can then be implemented for access checking, metering/reporting, and more.
 
   [![GPLv3 License](https://img.shields.io/github/license/tierrun/tier?style=for-the-badge)](https://opensource.org/licenses/)
-  [![Commit Activity](https://img.shields.io/github/commit-activity/m/tierrun/tier?style=for-the-badge)]()
-  [![Discussions](https://img.shields.io/github/discussions/tierrun/tier?style=for-the-badge
-  )](https://github.com/tierrun/tier/discussions)
-  [![](https://img.shields.io/github/go-mod/go-version/tierrun/tier?style=for-the-badge
-  )]()
+
 
 
 ## Docs and Community
