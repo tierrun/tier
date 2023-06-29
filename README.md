@@ -14,7 +14,7 @@ Tier will handle setting up and managing Stripe in a way that is much more frien
 
 
 ## Docs and Community
-- [Documentation is available here](https://docs.tier.run/)
+- [Documentation is available here](https://tier.run/tier)
 - Join our Slack here: [<img src="https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white" />](https://join.slack.com/t/tier-community/shared_invite/zt-1blotqjb9-wvkYMo8QkhaEWziprdjnIA)
 
 # Key Features and Capabilities
