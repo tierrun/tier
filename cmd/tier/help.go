@@ -183,6 +183,10 @@ Flags:
     --clobber
 	Clobber any existing usage for the provided feature. If false, the
 	usage will be incremeneted by n.
+    --at
+	At specifies the time at which the usage occurred. If not provided,
+	the current time will be used. The time must be in seconds since the
+	epoch.
 `,
 	"whois": `Usage:
 
