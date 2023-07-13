@@ -402,6 +402,7 @@ func runTier(cmd string, args []string) (err error) {
 	case "report":
 		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 		clobber := fs.Bool("clobber", false, "clobber existing value")
+		fat := fs.String("at", "", "sets the time of the usage event (unix seconds)")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -417,7 +418,16 @@ func runTier(cmd string, args []string) (err error) {
 		if err != nil {
 			return err
 		}
+		var at time.Time
+		if *fat != "" {
+			nsecs, err := strconv.ParseInt(*fat, 10, 64)
+			if err != nil {
+				return err
+			}
+			at = time.Unix(nsecs, 0)
+		}
 		return tc().ReportUsage(ctx, org, feature, n, &tier.ReportParams{
+			At:      at,
 			Clobber: *clobber,
 		})
 	case "whoami":
