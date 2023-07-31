@@ -537,6 +537,7 @@ type CheckoutParams struct {
 	Features              []Feature
 	CancelURL             string
 	RequireBillingAddress bool
+	UpdateCustomerAddress bool // if true, update customer address to the address entered at checkout
 	AutomaticTax          bool
 	CollectTaxID          bool
 }
@@ -567,6 +568,9 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 	}
 	if p.RequireBillingAddress {
 		f.Set("billing_address_collection", "required")
+	}
+	if p.UpdateCustomerAddress {
+		f.Set("customer_update", "address", "auto")
 	}
 	if len(p.Features) == 0 {
 		f.Set("mode", "setup")
