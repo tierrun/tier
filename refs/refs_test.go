@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"testing"
 
-	"golang.org/x/exp/slices"
 	"kr.dev/diff"
+	"tier.run/mirror/x/exp/slices"
 )
 
 func TestParsePlan(t *testing.T) {

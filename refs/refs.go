@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/exp/slices"
+	"tier.run/mirror/x/exp/slices"
 )
 
 // marshlers

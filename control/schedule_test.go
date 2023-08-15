@@ -16,10 +16,10 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/tailscale/hujson"
-	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 	"kr.dev/diff"
 	"kr.dev/errorfmt"
+	"tier.run/mirror/x/exp/slices"
 	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/types/they"

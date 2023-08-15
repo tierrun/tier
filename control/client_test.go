@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"golang.org/x/exp/slices"
 	"kr.dev/diff"
+	"tier.run/mirror/x/exp/slices"
 	"tier.run/refs"
 	"tier.run/stripe/stroke"
 )

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slices"
 	"kr.dev/errorfmt"
+	"tier.run/mirror/x/exp/slices"
 	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/types/payment"

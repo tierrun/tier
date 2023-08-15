@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"golang.org/x/exp/slices"
+	"tier.run/mirror/x/exp/slices"
 	"tier.run/stripe"
 )
 

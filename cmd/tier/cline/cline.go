@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/exp/slices"
+	"tier.run/mirror/x/exp/slices"
 )
 
 var testTier string
