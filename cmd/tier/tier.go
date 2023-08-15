@@ -21,12 +21,12 @@ import (
 	"time"
 
 	"go4.org/types"
-	"golang.org/x/exp/slices"
 	"tier.run/api"
 	"tier.run/api/apitypes"
 	"tier.run/api/materialize"
 	"tier.run/client/tier"
 	"tier.run/control"
+	"tier.run/mirror/x/exp/slices"
 	"tier.run/profile"
 	"tier.run/stripe"
 	"tier.run/version"

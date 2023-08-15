@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/cmd/tier/cline"
+	"tier.run/mirror/x/exp/slices"
 	"tier.run/profile"
 	"tier.run/stripe"
 	"tier.run/stripe/stroke"

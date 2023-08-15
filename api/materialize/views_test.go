@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/tailscale/hujson"
-	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/client/tier"
 	"tier.run/control"
+	"tier.run/mirror/x/exp/slices"
 	"tier.run/refs"
 )
 

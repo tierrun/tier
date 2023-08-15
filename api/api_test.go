@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/kr/pretty"
-	"golang.org/x/exp/slices"
 	"kr.dev/diff"
 	"tier.run/api/apitypes"
 	"tier.run/client/tier"
 	"tier.run/control"
+	"tier.run/mirror/x/exp/slices"
 	"tier.run/refs"
 	"tier.run/stripe"
 	"tier.run/stripe/stroke"
