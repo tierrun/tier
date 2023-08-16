@@ -1076,7 +1076,7 @@ func TestCheckoutRequiredAddress(t *testing.T) {
 								bac:          bac,
 								trialDays:    values.ReturnIf(withTrial && withFeatures, strconv.Itoa(trialDays)),
 								automaticTax: fmt.Sprintf("%v", withTax),
-								taxID:        fmt.Sprintf("%v", withTaxID),
+								taxID:        fmt.Sprintf("%v", blankIfFalse(withTaxID)),
 							}})
 						}
 					}
@@ -1622,4 +1622,11 @@ func (l *List[T]) Slice() []T {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return slices.Clone(l.a)
+}
+
+func blankIfFalse(b bool) string {
+	if b {
+		return "true"
+	}
+	return ""
 }
