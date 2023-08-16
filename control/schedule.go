@@ -564,6 +564,7 @@ func (c *Client) Checkout(ctx context.Context, org string, successURL string, p 
 	if p.CollectTaxID {
 		f.Set("tax_id_collection[enabled]", true)
 		f.Set("customer_update[name]", "auto")
+		f.Set("customer_update[address]", "auto")
 	}
 	if p.CancelURL != "" {
 		f.Set("cancel_url", p.CancelURL)
