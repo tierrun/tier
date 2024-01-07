@@ -126,6 +126,7 @@ type CheckoutRequest struct {
 	SuccessURL            string   `json:"success_url"`
 	CancelURL             string   `json:"cancel_url"`
 	RequireBillingAddress bool     `json:"require_billing_address"`
+	UpdateCustomerAddress bool     `json:"update_customer_address"`
 	Tax                   Taxation `json:"tax"`
 }
 
